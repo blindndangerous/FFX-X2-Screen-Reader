@@ -7,7 +7,13 @@ if ([IntPtr]::Size -ne 4 -or $PSVersionTable.PSEdition -eq 'Core') {
 }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $env:FFX_PRISM_TEST_LOCK = Join-Path $repo 'prism.lock.json'
-$env:FFX_PRISM_TEST_PACKAGE = 'D:\Games\Dev\codex\prism\packages\prism-0.18.3-b68e9c9-windows-x86-msvc-c17-1aa76c88\runtime'
+$prismRoot = if ($env:PRISM_ROOT) { $env:PRISM_ROOT } else { Join-Path $repo 'third_party\prism' }
+$prismPackageId = (Get-Content -LiteralPath $env:FFX_PRISM_TEST_LOCK -Raw | ConvertFrom-Json).package_id
+$env:FFX_PRISM_TEST_PACKAGE = Join-Path $prismRoot (Join-Path 'packages' (Join-Path $prismPackageId 'runtime'))
+if (-not (Test-Path -LiteralPath $env:FFX_PRISM_TEST_PACKAGE -PathType Container)) {
+    Write-Output "SKIP: installer tests need the locked PRISM runtime at '$($env:FFX_PRISM_TEST_PACKAGE)'. Set PRISM_ROOT to a PRISM tree that contains packages\${prismPackageId}\runtime."
+    return
+}
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $fixture = Join-Path $repo ('install\windows-installer-tests-' + [guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($fixture)

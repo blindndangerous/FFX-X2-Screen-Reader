@@ -1,5 +1,8 @@
 @echo off
 setlocal
+rem The suite starts the executables it just built by bare name from the working
+rem directory. Hardened shells set this variable, which stops that lookup.
+set "NoDefaultCurrentDirectoryInExePath="
 set "TEST_SRC=%~dp0"
 set "REPO_ROOT=%~dp0..\..\.."
 call "%REPO_ROOT%\tools\env.bat"
@@ -10,6 +13,8 @@ if /I "%~1"=="--sdl-owner" goto sdlowner
 if not defined VCVARSALL exit /b 1
 call "%VCVARSALL%" x86 >nul
 if not "%errorlevel%"=="0" exit /b 1
+if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" call "%TEST_SRC%..\build_sdl3.bat"
+if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" exit /b 1
 set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
