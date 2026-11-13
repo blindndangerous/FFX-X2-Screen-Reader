@@ -70,6 +70,18 @@ Release 1.0.1 verifies each temple’s Baaj prerequisite flag after its destruct
 - Full mod UI localization and HRTF coverage remain incomplete.
 - FFX-2 and Last Mission support are not included.
 
+## Building from source
+
+Requires Visual Studio with the C++ x86 tools. Run from the repository root:
+
+```
+powershell -File tools\fetch_deps.ps1
+src\proxy\build_dinput8.bat
+src\proxy\build_dinput8.bat --deploy
+```
+
+The first command downloads and verifies the build dependencies into `third_party\`. The second builds into `install\native` and does not touch the game folder. The third builds and then copies the result into the game folder, which it finds through `FFX_GAME_DIR` or your Steam libraries. To check which folder that is without deploying, run `src\proxy\deploy.bat --dry-run`.
+
 ## Credits
 
 - PRISM.
