@@ -12,8 +12,8 @@ if /I "%~1"=="--test-build" set "DEV_DEFINE="
 shift /1
 goto arguments
 :configured
-call "%~dp0..\..\..\..\..\dev_env.bat"
-if not defined DEV_ROOT exit /b 1
+call "%REPO_ROOT%\tools\env.bat"
+if errorlevel 1 exit /b 1
 
 :: Production is entirely native. JavaScript remains an offline RE reference.
 call "%VCVARSALL%" x86 >nul
