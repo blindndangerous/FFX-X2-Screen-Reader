@@ -14,6 +14,7 @@ tests use the PRISM headers kept in the source tree.
 [CmdletBinding()]
 param([switch]$Force)
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $lock = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'deps.lock.json') -Raw | ConvertFrom-Json
 Add-Type -AssemblyName System.IO.Compression.FileSystem

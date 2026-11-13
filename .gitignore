@@ -54,5 +54,5 @@ archived/
 lib/frida-gadget.dll
 
 # Local build inputs and output
-third_party/
-build/
+/third_party/
+/build/
