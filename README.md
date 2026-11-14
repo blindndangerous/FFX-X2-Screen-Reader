@@ -72,7 +72,7 @@ Release 1.0.1 verifies each temple’s Baaj prerequisite flag after its destruct
 
 ## Building from source
 
-Requires Visual Studio with the C++ x86 tools. Run from the repository root:
+Requires Visual Studio 2022 with the C++ desktop workload (x86 tools and CMake) and Python 3. Run from the repository root:
 
 ```
 powershell -File tools\fetch_deps.ps1
@@ -80,7 +80,7 @@ src\proxy\build_dinput8.bat
 src\proxy\build_dinput8.bat --deploy
 ```
 
-The first command downloads and verifies the build dependencies into `third_party\`. The second builds into `install\native` and does not touch the game folder. The third builds and then copies the result into the game folder, which it finds through `FFX_GAME_DIR` or your Steam libraries. To check which folder that is without deploying, run `src\proxy\deploy.bat --dry-run`.
+The first command downloads and verifies the build dependencies into `third_party\`. The second builds into `install\native` and does not touch the game folder. The third builds and then copies the result into the game folder, which it finds through `FFX_GAME_DIR` or your Steam libraries. Deploying first backs up the game’s existing DLLs. To check which folder that is without deploying, run `src\proxy\deploy.bat --dry-run`.
 
 ## Credits
 

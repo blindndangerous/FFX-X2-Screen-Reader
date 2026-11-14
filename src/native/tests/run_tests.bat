@@ -14,7 +14,10 @@ if not defined VCVARSALL exit /b 1
 call "%VCVARSALL%" x86 >nul
 if not "%errorlevel%"=="0" exit /b 1
 if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" call "%TEST_SRC%..\build_sdl3.bat"
-if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" exit /b 1
+if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" (
+    echo ERROR: SDL3 build failed; see the output above.
+    exit /b 1
+)
 set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
@@ -118,7 +121,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--native-actions" goto success
 :jecht
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files" goto jecht_have
-echo SKIP: jecht needs %FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files
+echo SKIP: jecht needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files"
 if "%~1"=="" goto lightning
 goto success
 :jecht_have
@@ -129,7 +132,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--jecht" goto success
 :lightning
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files" goto lightning_have
-echo SKIP: lightning needs %FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files
+echo SKIP: lightning needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files"
 if "%~1"=="" goto console
 goto success
 :lightning_have
@@ -196,7 +199,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--navigation-audio" goto success
 :butterflies
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files" goto butterflies_have
-echo SKIP: butterflies needs %FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files
+echo SKIP: butterflies needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files"
 if "%~1"=="" goto minigames
 goto success
 :butterflies_have
@@ -212,7 +215,7 @@ if /I "%~1"=="--butterflies" goto success
 
 :minigames
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files" goto minigames_have
-echo SKIP: minigames needs %FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files
+echo SKIP: minigames needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files"
 if "%~1"=="" goto readers
 goto success
 :minigames_have
@@ -225,7 +228,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--minigames" goto success
 :readers
 if exist "%FFX_EVIDENCE_ROOT%\native\hudTextureClipBody.bin" goto readers_have
-echo SKIP: readers needs %FFX_EVIDENCE_ROOT%\native\hudTextureClipBody.bin
+echo SKIP: readers needs "%FFX_EVIDENCE_ROOT%\native\hudTextureClipBody.bin"
 if "%~1"=="" goto reachability
 goto success
 :readers_have
@@ -238,7 +241,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--readers" goto success
 :reachability
 if exist "%FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin" goto reachability_have
-echo SKIP: reachability needs %FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin
+echo SKIP: reachability needs "%FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin"
 if "%~1"=="" goto sinroutes
 goto success
 :reachability_have
@@ -256,7 +259,7 @@ if /I "%~1"=="--reachability" goto success
 :sinroutes
 if /I not "%~1"=="--sin-routes" goto navigationgeometry
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\sin_routes_20261020\triangles.bin" goto sinroutes_have
-echo SKIP: sinroutes needs %FFX_EVIDENCE_ROOT%\offline-output\sin_routes_20261020\triangles.bin
+echo SKIP: sinroutes needs "%FFX_EVIDENCE_ROOT%\offline-output\sin_routes_20261020\triangles.bin"
 goto success
 :sinroutes_have
 cl /nologo /W4 /WX /O2 /EHsc /std:c++17 /MT /Fe:sin_route_fixture.exe "%TEST_SRC%sin_route_fixture.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp"
@@ -266,7 +269,7 @@ if not "%errorlevel%"=="0" goto failed
 goto success
 :sinlatermaps
 if exist "%FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin" goto sinlatermaps_have
-echo SKIP: sinlatermaps needs %FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin
+echo SKIP: sinlatermaps needs "%FFX_EVIDENCE_ROOT%\native\collisionReplayBody.bin"
 goto success
 :sinlatermaps_have
 cl /nologo /W4 /WX /O2 /EHsc /std:c++17 /MT /Fe:sin_later_maps_fixture.exe "%TEST_SRC%sin_later_maps_fixture.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp"
@@ -277,7 +280,7 @@ goto success
 :minigamecompletion
 if /I not "%~1"=="--minigame-completion" goto sincollection
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\minigames_20261007_104142\manifest.json" goto minigamecompletion_have
-echo SKIP: minigamecompletion needs %FFX_EVIDENCE_ROOT%\offline-output\minigames_20261007_104142\manifest.json
+echo SKIP: minigamecompletion needs "%FFX_EVIDENCE_ROOT%\offline-output\minigames_20261007_104142\manifest.json"
 goto success
 :minigamecompletion_have
 python "%TEST_SRC%prepare_minigame_completion.py"
@@ -290,7 +293,7 @@ goto success
 :sincollection
 if /I not "%~1"=="--sin-collection" goto navigationgeometry
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\sin_collection_20261020\floatGet-table.bin" goto sincollection_have
-echo SKIP: sincollection needs %FFX_EVIDENCE_ROOT%\offline-output\sin_collection_20261020\floatGet-table.bin
+echo SKIP: sincollection needs "%FFX_EVIDENCE_ROOT%\offline-output\sin_collection_20261020\floatGet-table.bin"
 goto success
 :sincollection_have
 cl /nologo /W4 /WX /O2 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:sin_collection_fixture.exe "%TEST_SRC%sin_collection_fixture.cpp" "%TEST_SRC%..\sin_collection.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\navigation_targets.cpp" /link user32.lib
@@ -306,7 +309,7 @@ if not "%errorlevel%"=="0" goto failed
 goto success
 :navigationgeometry
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\gagazet_cross_water_20261016" goto navigationgeometry_have
-echo SKIP: navigationgeometry needs %FFX_EVIDENCE_ROOT%\offline-output\gagazet_cross_water_20261016
+echo SKIP: navigationgeometry needs "%FFX_EVIDENCE_ROOT%\offline-output\gagazet_cross_water_20261016"
 if "%~1"=="" goto pedestal
 goto success
 :navigationgeometry_have
@@ -358,9 +361,8 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--input-adapter" goto success
 if /I "%~1"=="--input" goto success
 if exist "%REPO_ROOT%\install\native\dinput8.dll" goto proxy_have
-echo SKIP: proxy-forwarding needs %REPO_ROOT%\install\native\dinput8.dll (run src\proxy\build_dinput8.bat)
-if "%~1"=="" goto utilities
-goto success
+echo SKIP: proxy-forwarding needs "%REPO_ROOT%\install\native\dinput8.dll" (run src\proxy\build_dinput8.bat)
+goto utilities
 :proxy_have
 cl /nologo /W4 /EHsc /MT /Fe:proxy_forwarding.exe "%TEST_SRC%proxy_forwarding.cpp" /link dxguid.lib
 if not "%errorlevel%"=="0" goto failed
@@ -372,7 +374,7 @@ proxy_forwarding.exe
 if not "%errorlevel%"=="0" goto failed
 :utilities
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\maps_v3.json" goto utilities_have
-echo SKIP: utilities needs %FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\maps_v3.json
+echo SKIP: utilities needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\maps_v3.json"
 goto success
 :utilities_have
 python "%TEST_SRC%prepare_utilities.py"
