@@ -40,6 +40,12 @@ FieldControlsSnapshot messageGuard;
 std::array<unsigned,4> scans{0xc8,0xcb,0xd0,0xcd};
 unsigned diveScan=0; int diveButton=-1;
 std::array<unsigned,8> swimManualScans{};
+// Screen-reader modifiers: DIK_INSERT, DIK_NUMPAD0 (Numpad Insert) and DIK_CAPITAL.
+// A key first pressed while one is held belongs to the reader until released.
+constexpr unsigned readerModifierScans[]={0xd2,0x52,0x3a};
+constexpr unsigned cancelScans[]={0x11,0x1e,0x1f,0x20,0xc8,0xd0,0xcb,0xcd,0x1c,0x01};
+std::atomic<bool> readerModifier{false};
+std::array<bool,256> readerOwned{},physicalDown{}; // DirectInput poll owner only
 constexpr unsigned octMasks[]={1,9,8,12,4,6,2,3}; // forward, left, backward, right
 uint64_t nowMs() {
 #ifdef FFX_READER_TEST
@@ -262,9 +268,10 @@ void updateAutoWalk() {
     if(now<unstickUntil) desired=(desired+(unstickRight?2:6))&7;
     mask=octMasks[desired] | (leg.target.swimDepth?16u:0u); stamp=now;
 }
+void autoWalkReaderModifier(bool held) {readerModifier=held;}
 void autoWalkPlayerInput(unsigned vk) {
     pedestalPlayerInput(vk);
-    if(pedestalConsentVk(vk)) return;
+    if(pedestalConsentVk(vk) || readerModifier) return;
     if(vk=='W' || vk=='A' || vk=='S' || vk=='D' || vk==VK_UP || vk==VK_DOWN || vk==VK_LEFT || vk==VK_RIGHT || vk==VK_ESCAPE || vk==VK_RETURN) {
         manualRevision.fetch_add(1,std::memory_order_acq_rel);
         cancel=true; mask=0;
@@ -272,20 +279,33 @@ void autoWalkPlayerInput(unsigned vk) {
 }
 void autoWalkKeyboard(uint8_t* keys) {
     pedestalKeyboardInput(keys);
+    bool modifier=false;
+    for(unsigned scan:readerModifierScans) if(keys[scan]&0x80) modifier=true;
+    readerModifier=modifier;
+    for(unsigned i=0;i<256;++i) {
+        const bool down=(keys[i]&0x80)!=0;
+        readerOwned[i]=down && (readerOwned[i] || (modifier && !physicalDown[i]));
+        physicalDown[i]=down;
+    }
+    const auto player=[&](unsigned scan) {return (keys[scan]&0x80) && !readerOwned[scan];};
     bool physical=false;
-    for(unsigned scan:{0x11u,0x1eu,0x1fu,0x20u,0xc8u,0xd0u,0xcbu,0xcdu,0x1cu,0x01u})
-        if((keys[scan]&0x80) && !pedestalConsentKey(scan)) physical=true;
-    for(unsigned scan:scans) if((keys[scan]&0x80) && !pedestalConsentKey(scan)) physical=true;
+    for(unsigned scan:cancelScans) if(player(scan) && !pedestalConsentKey(scan)) physical=true;
+    for(unsigned scan:scans) if(player(scan) && !pedestalConsentKey(scan)) physical=true;
     if(physical) manualRevision.fetch_add(1,std::memory_order_acq_rel);
     if(const auto assist=keyboardAssist.load()) assist(keys);
     if(!engaged) return;
     // Raw physical buffer is checked before adding configured movement bits. Held-state
     // edge tracking must retain this original buffer, never injected keys.
-    for(unsigned scan: {0x11u,0x1eu,0x1fu,0x20u,0xc8u,0xd0u,0xcbu,0xcdu,0x1cu,0x01u})
-        if((keys[scan]&0x80) && !pedestalConsentKey(scan)) { cancel=true; mask=0; return; }
+    for(unsigned scan:cancelScans)
+        if(player(scan) && !pedestalConsentKey(scan)) { cancel=true; mask=0; return; }
     const auto bits=command();
-    for(unsigned i=0;i<scans.size();++i) if(keys[scans[i]]&0x80) { cancel=true; mask=0; return; }
-    if(mask.load()&16) for(auto scan:swimManualScans) if(scan && (keys[scan]&0x80)) { cancel=true; mask=0; return; }
+    for(unsigned i=0;i<scans.size();++i) if(player(scans[i])) { cancel=true; mask=0; return; }
+    if(mask.load()&16) for(auto scan:swimManualScans) if(scan && player(scan)) { cancel=true; mask=0; return; }
+    // A reader chord such as Insert+Down must not steer the character either.
+    const auto strip=[&](unsigned scan) {if(scan && readerOwned[scan]) keys[scan]=0;};
+    for(unsigned scan:cancelScans) strip(scan);
+    for(unsigned scan:scans) strip(scan);
+    for(unsigned scan:swimManualScans) strip(scan);
     if(bits&16) {
         if(diveScan) keys[diveScan]|=0x80; else { cancel=true; mask=0; }
     }

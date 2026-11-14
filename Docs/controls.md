@@ -469,7 +469,10 @@ next leg using the new camera direction. Slow camera pans do not repeat guidance
 
 **Auto walk** in **F8 → Navigation** defaults **Off**. Turn it **On**, select a
 destination, then press **Backslash** to walk its current collision route.
-The field controller route command (right trigger) also starts walking. Movement input or Escape cancels immediately. Dialogue, scripted
+The field controller route command (right trigger) also starts walking. Movement input or Escape cancels immediately.
+Screen-reader commands do not cancel it: an arrow, Enter or Escape pressed while
+**Insert**, **Numpad Insert** or **Caps Lock** is held is left to the screen reader
+until that key is released, and does not steer the character. Dialogue, scripted
 scenes, menus, battle, lost focus and a map change stop it; press Backslash
 again to start a new walk. On arrival, Auto walk walks in toward an
 interactible for up to one more step (stopping when its collision blocks the

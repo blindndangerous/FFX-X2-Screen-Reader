@@ -185,6 +185,25 @@ int main() {
     begin(); std::array<uint8_t,256> keys{}; keys[0xcd]=0x80; autoWalkKeyboard(keys.data());
     check(keys[0xcd]==0x80 && !keys[0xc8],"same-poll manual movement wins without an extra auto key");
     updateAutoWalk(); check(!keyboard()[0xc8],"manual cancellation never resumes itself");
+    // Screen-reader modifiers: Insert 0xD2, Numpad Insert/0 0x52, Caps Lock 0x3A.
+    begin(); keys={}; keys[0xd2]=0x80; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0xd0] && keys[0xc8]==0x80,"Insert+Down reader command neither cancels nor steers auto walk");
+    keys={}; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0xd0],"reader-owned Down stays exempt after Insert is released first");
+    keyboard(); keys={}; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(!autoWalkActive() && keys[0xd0]==0x80,"a fresh Down press without a reader modifier still cancels");
+    begin(); keys={}; keys[0x3a]=0x80; keys[0x1c]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0x1c],"Caps Lock+Enter reader command does not cancel");
+    begin(); keys={}; keys[0x52]=0x80; keys[0xc8]=0x80; keys[0x01]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0x01],"Numpad Insert+Up+Escape reader command does not cancel");
+    keyboard(); updateAutoWalk(); check(autoWalkActive(),"reader command leaves the walk running on the next tick");
+    begin(); autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkPlayerInput(VK_RETURN); updateAutoWalk();
+    check(autoWalkActive(),"message-path arrow and Enter with a reader modifier held do not cancel");
+    autoWalkReaderModifier(false); autoWalkPlayerInput(VK_DOWN); updateAutoWalk();
+    check(!autoWalkActive(),"message-path arrow without a reader modifier still cancels");
+    stopAutoWalk(); keyboard(); revision=autoWalkInputRevision(); keys={}; keys[0xd2]=0x80; keys[0x11]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkInputRevision()==revision && keys[0x11]==0x80,"stopped reader command is not counted as manual movement and is left to the game");
+    keys={}; autoWalkKeyboard(keys.data());
     begin(); pad::State state; autoWalkController(state); check(state.ly==24000 && !state.lx,"physical controller receives forward left-stick input");
     state={}; state.lx=18000; autoWalkController(state); check(state.lx==18000 && !state.ly,"manual stick remains intact and cancels auto walk");
     begin(); clockValue+=251; check(!keyboard()[0xc8],"stale input expires after 250 ms");
