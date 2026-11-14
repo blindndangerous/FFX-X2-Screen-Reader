@@ -4,6 +4,13 @@
 namespace ffx {
 void startAutoWalk();
 void stopAutoWalk();
+// Stops like stopAutoWalk but keeps a pending battle resume. For field resets only.
+void suspendAutoWalk();
+// Called once on the native thread when a walk stopped by a battle may resume.
+// The handler re-requests a route to the copied destination; it returns false
+// when no request could be queued.
+using AutoWalkResume=bool(*)(const NativeRouteTarget&);
+void setAutoWalkResume(AutoWalkResume);
 bool autoWalkActive();
 void updateAutoWalk();
 void autoWalkKeyboard(uint8_t* keys);
