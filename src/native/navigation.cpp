@@ -349,6 +349,8 @@ void enqueue(nav::Query query,bool shift=false,bool cancel=false) {
 }
 void pathKey(bool shift) {
     if(inBattle()) output(L"Field navigation is unavailable in battle",true,"navigation-path");
+    // Backslash again during a walk stops it rather than re-reading and restarting the route.
+    else if(!shift && toggleAutoWalkOff()) return;
     else if(!interested.load(std::memory_order_acquire) && !nav::navigationDataPending()) output(L"No entity selected",true,"navigation-path");
     else enqueue(nav::Query::Path,shift,true);
 }

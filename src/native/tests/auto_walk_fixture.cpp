@@ -158,6 +158,10 @@ int main() {
     begin();speech.clear();++epoch;updateAutoWalk();updateAutoWalk();
     check(speech.empty(),"map transition leaves speech to the map announcement");
     begin();speech.clear();stopAutoWalk();updateAutoWalk();check(speech.empty(),"explicit toggle cancellation stays silent");
+    // Backslash during a walk stops it and says so, without reading or restarting the route.
+    begin();speech.clear();check(toggleAutoWalkOff(),"Backslash during a walk is taken as the stop toggle");updateAutoWalk();updateAutoWalk();
+    check(!autoWalkActive() && !keyboard()[0xc8] && speech.size()==1 && speech.back()==L"Auto walk stopped","the toggle stops the walk once and says Auto walk stopped");
+    speech.clear();check(!toggleAutoWalkOff() && speech.empty(),"with no walk active Backslash keeps its route command");
     begin();speech.clear();autoWalkPlayerInput(VK_ESCAPE);updateAutoWalk();
     check(speech.empty() && !autoWalkActive(),"manual player-input cancellation stays silent");
     begin();speech.clear();known=false;updateAutoWalk();updateAutoWalk();
