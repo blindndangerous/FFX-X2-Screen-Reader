@@ -289,8 +289,8 @@ if not "%errorlevel%"=="0" goto failed
 goto success
 :sincollection
 if /I not "%~1"=="--sin-collection" goto navigationgeometry
-if exist "%FFX_EVIDENCE_ROOT%\offline-output\minigame_completion_20261020" goto sincollection_have
-echo SKIP: sincollection needs %FFX_EVIDENCE_ROOT%\offline-output\minigame_completion_20261020
+if exist "%FFX_EVIDENCE_ROOT%\offline-output\sin_collection_20261020\floatGet-table.bin" goto sincollection_have
+echo SKIP: sincollection needs %FFX_EVIDENCE_ROOT%\offline-output\sin_collection_20261020\floatGet-table.bin
 goto success
 :sincollection_have
 cl /nologo /W4 /WX /O2 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:sin_collection_fixture.exe "%TEST_SRC%sin_collection_fixture.cpp" "%TEST_SRC%..\sin_collection.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\navigation_targets.cpp" /link user32.lib
