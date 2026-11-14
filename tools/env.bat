@@ -16,7 +16,7 @@ if defined VCVARSALL goto vs_resolved
 if not defined FFX_VS_PATH goto vs_resolved
 if exist "%FFX_VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" set "VCVARSALL=%FFX_VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat"
 :vs_resolved
-if not defined VCVARSALL goto missing_vcvarsall
+if not exist "%VCVARSALL%" goto missing_vcvarsall
 
 if defined CMAKE_EXE goto cmake_resolved
 if not defined FFX_VS_PATH goto cmake_path
@@ -25,7 +25,7 @@ if defined CMAKE_EXE goto cmake_resolved
 :cmake_path
 for /f "delims=" %%I in ('where cmake.exe 2^>nul') do if not defined CMAKE_EXE set "CMAKE_EXE=%%I"
 :cmake_resolved
-if not defined CMAKE_EXE goto missing_cmake
+if not exist "%CMAKE_EXE%" goto missing_cmake
 
 if not defined MINHOOK_ROOT set "MINHOOK_ROOT=%FFX_REPO%\third_party\minhook"
 if not exist "%MINHOOK_ROOT%\bin\MinHook.x86.lib" goto missing_minhook
@@ -44,16 +44,19 @@ set "FFX_REPO="
 exit /b 0
 
 :missing_vcvarsall
-echo ERROR: VCVARSALL not found. Run: powershell -File tools\fetch_deps.ps1
+echo ERROR: VCVARSALL not found. Install Visual Studio 2022 with the C++ desktop workload, or set VCVARSALL.
 goto failed
 :missing_cmake
-echo ERROR: CMAKE_EXE not found. Run: powershell -File tools\fetch_deps.ps1
+echo ERROR: CMAKE_EXE not found. Install the Visual Studio CMake tools, or set CMAKE_EXE.
 goto failed
 :missing_minhook
-echo ERROR: MINHOOK_ROOT not found. Run: powershell -File tools\fetch_deps.ps1
+echo ERROR: MINHOOK_ROOT not found. Run: powershell -ExecutionPolicy Bypass -File tools\fetch_deps.ps1
 goto failed
 :missing_sdl3
-echo ERROR: SDL3_SOURCE not found. Run: powershell -File tools\fetch_deps.ps1
+echo ERROR: SDL3_SOURCE not found. Run: powershell -ExecutionPolicy Bypass -File tools\fetch_deps.ps1
 goto failed
 :failed
+set "FFX_VS_PATH="
+set "FFX_VSWHERE="
+set "FFX_REPO="
 exit /b 1

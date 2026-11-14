@@ -2,10 +2,8 @@
 setlocal
 set "GAME_ROOT="
 for /f "usebackq delims=" %%G in (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\find_game.ps1"`) do set "GAME_ROOT=%%G"
-if not exist "%GAME_ROOT%\FFX.exe" (
-    echo ERROR: game folder not found. Set FFX_GAME_DIR.
-    exit /b 1
-)
+:: find_game.ps1 has already printed the reason.
+if not exist "%GAME_ROOT%\FFX.exe" exit /b 1
 if not exist "%GAME_ROOT%\dinput8.dll.ffx_sr_before_native" (
     echo ERROR: No proxy backup from native deployment exists.
     exit /b 1
