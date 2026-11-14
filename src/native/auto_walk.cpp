@@ -163,6 +163,10 @@ void stopAutoWalk() {
     if(resumePhase.load()==ResumeAfter) resumeCancel=true;
     manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) {takeover={};stop("cancelled");}else {engaged=false;cancel=true;mask=0;stamp=0;}
 }
+bool toggleAutoWalkOff() {
+    if(!autoWalkActive()) return false;
+    stopAutoWalk();output(L"Auto walk stopped",true,"auto-walk");return true;
+}
 void releaseAutoWalk() {manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
 bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}

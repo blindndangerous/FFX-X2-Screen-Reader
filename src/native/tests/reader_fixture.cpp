@@ -104,6 +104,7 @@ void prepareNavRetirement() {}
 void resetNavAudio() {fixtureRoute=false;}
 void clearNavRoute() {fixtureRoute=false;}
 void stopAutoWalk() {}
+bool toggleAutoWalkOff() {return false;}
 void suspendAutoWalk() {}
 void setAutoWalkResume(AutoWalkResume) {}
 unsigned autoStarts=0;

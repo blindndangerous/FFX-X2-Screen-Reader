@@ -7,6 +7,8 @@ void stopAutoWalk();
 // Stops for a lost route. Unlike stopAutoWalk it is not a player command, so a
 // pending battle resume survives; a walk it ends is never resumed.
 void releaseAutoWalk();
+// Backslash toggle: stops an active walk and says so. False when no walk is active.
+bool toggleAutoWalkOff();
 // True while a walk stopped by a battle is waiting to resume.
 bool autoWalkResumePending();
 // Stops like stopAutoWalk but keeps a pending battle resume. For field resets only.
