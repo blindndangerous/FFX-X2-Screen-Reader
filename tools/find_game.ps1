@@ -14,7 +14,7 @@ if ($env:FFX_GAME_DIR) {
         Write-Output $env:FFX_GAME_DIR
         exit 0
     }
-    Write-Output "ERROR: FFX_GAME_DIR has no FFX.exe: $($env:FFX_GAME_DIR)"
+    [Console]::Error.WriteLine("ERROR: FFX_GAME_DIR has no FFX.exe: $($env:FFX_GAME_DIR)")
     exit 1
 }
 
@@ -37,7 +37,7 @@ foreach ($steam in $steamRoots) {
     $vdf = Join-Path $steam 'steamapps\libraryfolders.vdf'
     if (Test-Path -LiteralPath $vdf) {
         foreach ($m in [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"')) {
-            $libraries += $m.Groups[1].Value.Replace('\', '\')
+            $libraries += $m.Groups[1].Value.Replace('\\', '\')
         }
     }
 }
@@ -50,5 +50,5 @@ foreach ($lib in ($libraries | Select-Object -Unique)) {
     }
 }
 
-Write-Output 'ERROR: game folder not found. Set FFX_GAME_DIR.'
+[Console]::Error.WriteLine('ERROR: game folder not found. Set FFX_GAME_DIR.')
 exit 1

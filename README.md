@@ -75,7 +75,7 @@ Release 1.0.1 verifies each temple’s Baaj prerequisite flag after its destruct
 Requires Visual Studio 2022 with the C++ desktop workload (x86 tools and CMake) and Python 3. Run from the repository root:
 
 ```
-powershell -File tools\fetch_deps.ps1
+powershell -ExecutionPolicy Bypass -File tools\fetch_deps.ps1
 src\proxy\build_dinput8.bat
 src\proxy\build_dinput8.bat --deploy
 ```
