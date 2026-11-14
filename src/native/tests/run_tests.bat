@@ -172,6 +172,10 @@ cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:navigation_order_fixture.exe "%TEST_
 if not "%errorlevel%"=="0" goto failed
 navigation_order_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:route_format_fixture.exe "%TEST_SRC%route_format_fixture.cpp"
+if not "%errorlevel%"=="0" goto failed
+route_format_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:reachability_cache_fixture.exe "%TEST_SRC%reachability_cache_fixture.cpp" "%TEST_SRC%..\reachability_worker.cpp"
 if not "%errorlevel%"=="0" goto failed
 reachability_cache_fixture.exe
