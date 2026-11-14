@@ -71,11 +71,12 @@ bool copy(uintptr_t source,void* target,size_t bytes) {
     if(source==reinterpret_cast<uintptr_t>(&configAddress) && bytes==sizeof(configAddress)) {
         std::memcpy(target,&configAddress,bytes);return true;
     }
-    if(source==reinterpret_cast<uintptr_t>(keyboardConfig.ids.data()) && bytes==sizeof(keyboardConfig.ids)) {
-        std::memcpy(target,keyboardConfig.ids.data(),bytes);return true;
-    }
-    if(source==reinterpret_cast<uintptr_t>(configScans.data()) && bytes==configScans.size()) {
-        std::memcpy(target,configScans.data(),bytes);return true;
+    const auto inside=[&](const void* base,size_t size) {
+        const auto start=reinterpret_cast<uintptr_t>(base);
+        return source>=start && bytes<=size && source-start<=size-bytes;
+    };
+    if(inside(keyboardConfig.ids.data(),sizeof(keyboardConfig.ids)) || inside(configScans.data(),configScans.size())) {
+        std::memcpy(target,reinterpret_cast<const void*>(source),bytes);return true;
     }
     return false;
 }
@@ -542,6 +543,14 @@ int main() {
     check(repeats==beforeRepeat,"F11 is handed back on the ordinary field after leaving a trial");
     fixtureEsc=true;pressForTest(VK_F11,false);fixtureEsc=false;
     check(repeats==beforeRepeat+1,"F11 retains repeat in the native Escape menu");
+    check(keys.count('L')!=0,"L is registered as the repeat-last-speech key");
+    pressForTest('L',false);
+    check(repeats==beforeRepeat+2,"L repeats the last speech on the ordinary field");
+    fixtureEsc=true;pressForTest('L',false);fixtureEsc=false;
+    check(repeats==beforeRepeat+3,"L repeats the last speech in the native Escape menu");
+    const auto priorScan=configScans[0];configScans[0]=0x26;keyboardConfig.ids[0]=28;
+    pressForTest('L',false);keyboardConfig.ids[0]=0;configScans[0]=priorScan;
+    check(repeats==beforeRepeat+3,"L is handed back when a game keyboard action uses it");
     check(settingInfo(Setting::MenuIndex).initial==0 && settingInfo(Setting::AutoWalkPath).initial==0,"new accessibility defaults are off");
     pressForTest(VK_F8,false); selectRow(L"Miscellaneous, submenu"); menuKeyForTest(VK_RETURN);
     selectRow(L"Menu indexing:"); setSetting(Setting::MenuIndex,1); menuKeyForTest(VK_LEFT);
