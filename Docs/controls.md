@@ -85,7 +85,7 @@ characters say Unknown character. F7 toggles Autodetail.
 
 - **Navigation audio:** beacon, wall and arrival sounds, their volumes, wall
   range, race pickup cues, Jecht Shot cues, Lightning warning and sound previews.
-- **Navigation:** Auto walk, Speak auto walk path, Hide unreachable destinations and Partial steps.
+- **Navigation:** Auto walk, Speak auto walk path, Hide unreachable destinations, Partial steps and Clock directions.
 - **Miscellaneous:** Autodetail, Automatically read extra info, voiced dialogue output, combat detail, Menu indexing, Overdrive assistance, Overdrive cues, Jecht Shot auto-success, Lightning auto dodge, Show maximum HP, Chocobo training auto-success, Remiem race auto-success, Butterfly hunt auto-success and Blitzball auto-win. Extra info and the four minigame assists default Off. Controller bindings and supported Cloister of Trials controls are submenus here.
 
 ### Optional minigame completion assistance
@@ -553,6 +553,10 @@ Paths use concise numbers and directions: `1 south, 2 west, 2 north`.
 distances to whole numbers, with a minimum of **1**. Turn it **On** for
 `0.6 south, 1.4 west, 2.3 north`.
 The setting changes spoken distances; routes and audio keep their exact geometry.
+**Clock directions** in **F8 → Navigation** defaults **Off**. Turn it **On** to hear
+the destination's direction as a clock position from the camera, such as `12.4 steps at 2 o'clock, above`:
+12 o'clock is ahead, 3 o'clock is right. **Above** or **below** is added when the destination is at
+least two steps higher or lower. Route directions keep compass words.
 
 Beacon guidance follows the selected reachable route immediately when enabled.
 Wall tones also begin on the current map when enabled, even without a selected
