@@ -103,5 +103,16 @@ int main() {
         check(message!=changed && message.find(L"message")!=std::wstring::npos,"a cancel caused by an open message says a message is open");
         check(intentCancelText(IntentRejection::Context)==nullptr,"a cancel caused by focus, menus, console or battle stays silent");
     }
+    // Battle resume: the fresh scan finds the walked destination again by its facts.
+    {
+        const auto named=[](unsigned id,const wchar_t* name,double x,unsigned push=0) {Entity e;e.id=id;e.name=name;e.position={x,0,0};e.pushControl=push;return e;};
+        const std::vector<Entity> rows{named(7,L"Save Sphere",100),named(9,L"Chest",10),named(9,L"Chest",30),named(9,L"Chest",200)};
+        const auto label=[](const Entity& e){return e.name;};
+        check(nav::resumeRow(rows,9,0,L"Chest",{32,0,0},label)==2,"resume picks the nearest matching destination to where it was");
+        check(nav::resumeRow(rows,7,0,L"Save Sphere",{105,0,0},label)==0,"resume finds the same Save Sphere");
+        check(nav::resumeRow(rows,9,0,L"Chest",{120,0,0},label)==-1,"a destination that is no longer near its old position is not resumed");
+        check(nav::resumeRow(rows,9,0,L"Door",{10,0,0},label)==-1,"a destination with another name is not resumed");
+        check(nav::resumeRow(rows,9,3,L"Chest",{10,0,0},label)==-1,"a push target matches only the same push control");
+    }
     std::puts("PASS: synthetic navigation order, insertion/removal, explicit refresh, unreachable selection skip and normalized camera-cut threshold.");
 }

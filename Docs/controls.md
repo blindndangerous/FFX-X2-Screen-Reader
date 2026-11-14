@@ -472,7 +472,11 @@ Screen-reader commands do not cancel it: an arrow, Enter or Escape pressed while
 **Insert**, **Numpad Insert** or **Caps Lock** is held is left to the screen reader
 until that key is released, and does not steer the character. Dialogue, scripted
 scenes, menus, battle, lost focus and a map change stop it; press Backslash
-again to start a new walk. On arrival, Auto walk faces an interactible; confirm
+again to start a new walk. When a battle interrupts a walk, Auto walk resumes
+toward the same destination about a second after you have control of the field
+again. Walking yourself before or after the battle, any navigation command after
+it, or turning Auto walk off cancels the resume; it is dropped if the destination
+is gone or a minute passes after the battle. On arrival, Auto walk faces an interactible; confirm
 the interaction yourself.
 Blocked routes get bounded recovery attempts and stop if progress stalls.
 Automatic stops and lost routes announce a short reason once. Explicit stop

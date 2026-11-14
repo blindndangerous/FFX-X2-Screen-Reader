@@ -30,6 +30,7 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <mutex>
 #include <optional>
 namespace ffx {
 namespace nav {
@@ -108,6 +109,15 @@ std::wstring destinationDirection(Point from,Point to,bool height=true,const wch
     return text.rfind(L"here",0)==0 || text==L"unknown"?text:clockPrefix+text;
 }
 void emit(const Pending& event,std::wstring text,const char* producer,bool interrupt=true) {speechq::emitOwned(std::move(text),event.header,producer,false,interrupt);}
+// The destination auto walk was heading to when a battle stopped it. Written by the
+// native input owner when the resume fires, read by the preparation owner.
+struct ResumeTarget {std::wstring name;unsigned id=0,pushControl=0;Point position;};
+std::mutex resumeLock;ResumeTarget resumeTarget;
+bool resumeAutoWalk(const NativeRouteTarget& target) {
+    {std::lock_guard<std::mutex> lock(resumeLock);resumeTarget={target.name.data(),target.id,target.pushControl,target.position};}
+    interested.store(true,std::memory_order_release);
+    return nav::submitNavigationQuery(nav::Query::Resume);
+}
 void lockSelected() {
     auto& s=owned();const auto rows=filtered();s.selection=s.selected<rows.size()?key(*rows[s.selected]):EntityKey{};interested.store(true,std::memory_order_release);
 }
@@ -208,6 +218,14 @@ void execute(const Pending& event) {
     }
     case nav::Query::Distance:announce(event,true,false);break;
     case nav::Query::Path:pathfind(event);break;
+    case nav::Query::Resume: {
+        ResumeTarget wanted;{std::lock_guard<std::mutex> lock(resumeLock);wanted=resumeTarget;}
+        const int found=nav::resumeRow(s.entities,wanted.id,wanted.pushControl,wanted.name,wanted.position,label);
+        const auto rows=filtered();unsigned row=0;
+        while(found>=0 && row<rows.size() && rows[row]!=&s.entities[found]) ++row;
+        if(found<0 || row==rows.size()) {emit(event,L"Auto walk not resumed: "+wanted.name+L" not found","navigation-path",false);break;}
+        s.selected=row;pathfind(event);break;
+    }
     case nav::Query::Filter:
         adjustSetting(Setting::HideUnreachable,1);requestOwnedReachability(s.observation,s.entities);
         // The row index counts visible rows only; find the selected destination again so "N of M"
@@ -372,10 +390,10 @@ void refreshNavigation() {enqueue(nav::Query::Refresh);}
 void refreshSelectedBeacon() {enqueue(nav::Query::Beacon);}
 bool requestNavigationAssistRoute() {return nav::submitNavigationQuery(nav::Query::AssistRoute);}
 void requestNavigationAssistInstruction() {enqueue(nav::Query::AssistInstruction);}
-void resetNavigation() {nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();stopAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
+void resetNavigation() {nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
 void prepareNavigationScriptRetirement();void prepareNavRetirement();
 void installNavigation() {
-    storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();installPedestal();nav::startNavigationIntents();
+    storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();setAutoWalkResume(resumeAutoWalk);installPedestal();nav::startNavigationIntents();
     nav::startNavigationObservations(receiveQuery,receiveScene,resetOwned);speechq::registerDomainMaintenance(12,maintenance);onReachabilityPrepared(speechq::notifyPreparation);
     hotkey('U',[](bool shift) {enqueue(nav::Query::Filter,shift);});hotkey('G',gilKey);hotkey('M',[](bool) {announceCurrentMap();});
     hook(map_transition::EnableControl,nullptr,actorEvent);hook(0x225930,nullptr,capture);
