@@ -359,6 +359,16 @@ int main() {
     check(!resumes,"a navigation command after the battle cancels the resume");
     battleStop();battle=false;frames(1);suspendAutoWalk();frames(15);
     check(resumes==1,"a field reset after the battle keeps the resume");
+    battleStop();battle=false;frames(1);releaseAutoWalk();frames(15);
+    check(resumes==1,"losing the route at the end of a battle keeps the resume");
+    battleStop();releaseAutoWalk();battle=false;frames(15);
+    check(resumes==1,"losing the route during a battle keeps the resume");
+    begin();resumes=0;releaseAutoWalk();battle=true;frames(5);battle=false;frames(15);
+    check(!resumes,"a walk ended by route loss is not resumed after a later battle");
+    // In game the encounter disables control first; the battle flag follows after the
+    // transition, which can take longer than the arm window while the field is not ours.
+    begin();resumes=0;Event disabled;hooks.at(0x471980)(disabled);dialogue=1;frames(50);battle=true;dialogue=0;frames(20);battle=false;frames(15);
+    check(resumes==1,"a walk stopped by control loss resumes after a slow battle transition");
     battleStop();enabled=false;frames(1);enabled=true;battle=false;frames(15);
     check(!resumes,"turning auto walk off during the battle cancels the resume");
     begin();resumes=0;autoWalkPlayerInput(VK_ESCAPE);updateAutoWalk();battle=true;frames(5);battle=false;frames(15);

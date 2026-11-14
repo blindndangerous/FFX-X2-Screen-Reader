@@ -95,7 +95,7 @@ void announceStop(const wchar_t* spokenReason) {
 }
 // Stops the player chose, or that finish the walk, never resume after a battle.
 bool resumable(const char* reason) {
-    for(const char* final:{"player input","new route","arrived","destination inactive","cancelled"}) if(!std::strcmp(reason,final)) return false;
+    for(const char* final:{"player input","new route","arrived","destination inactive","cancelled","route lost"}) if(!std::strcmp(reason,final)) return false;
     return true;
 }
 void stop(const char* reason,const wchar_t* spokenReason=nullptr,bool routeFailure=false) {
@@ -163,6 +163,8 @@ void stopAutoWalk() {
     if(resumePhase.load()==ResumeAfter) resumeCancel=true;
     manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) {takeover={};stop("cancelled");}else {engaged=false;cancel=true;mask=0;stamp=0;}
 }
+void releaseAutoWalk() {manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
+bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}
 unsigned autoWalkInputRevision() {return manualRevision.load(std::memory_order_acquire);}
 bool autoWalkActive() { return engaged && !cancel; }
@@ -200,7 +202,9 @@ void serviceResume() {
     const auto now=nowMs();
     if(resumeCancel.exchange(false) || !setting(Setting::AutoWalk)) {resumePhase=ResumeNone;return;}
     if(inBattle()) {resumePhase=ResumeBattle;return;}
-    if(phase==ResumeArmed) {if(now-resumeSince>ArmMs) resumePhase=ResumeNone;return;}
+    // The encounter takes control before the battle flag is set. Wait while the
+    // field is not the player's; expire only after ArmMs of free field control.
+    if(phase==ResumeArmed) {if(!safe()) resumeSince=now;else if(now-resumeSince>ArmMs) resumePhase=ResumeNone;return;}
     if(phase==ResumeBattle) {resumePhase=ResumeAfter;resumeSince=resumeSettled=now;resumeEpoch=generation();return;}
     if(now-resumeSince>ExpireMs) {resumePhase=ResumeNone;recordLog("auto walk resume expired");return;}
     if(!safe() || resumeEpoch!=generation()) {resumeEpoch=generation();resumeSettled=now;return;}

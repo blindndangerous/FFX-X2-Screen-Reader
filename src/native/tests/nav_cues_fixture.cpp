@@ -23,6 +23,9 @@ unsigned floorReads=0;
 unsigned autoWalkStops=0;
 unsigned previewStops=0;
 void stopAutoWalk() {++autoWalkStops;}
+void releaseAutoWalk() {++autoWalkStops;}
+bool resumePending=false;
+bool autoWalkResumePending() {return resumePending;}
 unsigned wallCaptures=0,fixtureWallMask=0;
 std::atomic<int> scene{0};
 bool focused=true,menu=false,battle=false,beacon=true,arrival=true,autoWalk=false;
@@ -157,6 +160,12 @@ void feedbackFixtures() {
     sceneFacts.capturedAt=2500;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");
     sceneFacts.capturedAt=2516;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");sceneFacts.capturedAt=0;
     check(said.size()==1 && said.back()==L"Route lost: destination gone" && autoWalkStops==stops+1,"missing destination speaks once and cancels Auto walk");
+    // A destination still missing when a battle ends is lost, but a pending
+    // battle resume reports its own outcome, so the loss stays silent.
+    fixtureRouteNavAudio({player,target.position},target);said.clear();const auto pendingStops=autoWalkStops;resumePending=true;nativeOwner=true;routeNavAudio({player,target.position},target);nativeOwner=false;
+    sceneFacts.capturedAt=5000;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");sceneFacts.capturedAt=5600;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");sceneFacts.capturedAt=0;resumePending=false;
+    check(said.empty() && autoWalkStops==pendingStops+1,"a pending battle resume keeps route loss silent but still retires the route");
+    said={L"Route lost: destination gone"};
     drainSpeechDomainsForTest();NavLeg retired;
     check(previewStops>previews && !navRouteKnown() && !navLeg(retired),"route loss cancels preview and invalidates previously queued route captures");
     fixtureRouteNavAudio({player,target.position},target);said.clear();
