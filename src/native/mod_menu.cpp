@@ -49,7 +49,7 @@ constexpr unsigned mainItems[]={option(Setting::Speech),SpeechOptionsMenu,AudioM
 constexpr unsigned audioItems[]={option(Setting::Beacon),option(Setting::BeaconVolume),option(Setting::Walls),
     option(Setting::WallVolume),option(Setting::WallRange),option(Setting::Arrival),option(Setting::ArrivalVolume),
     option(Setting::RaceCues),option(Setting::ButterflyCues),option(Setting::LightningWarning),option(Setting::JechtCues),BeaconPreview,WallPreview,Back};
-constexpr unsigned navigationItems[]={option(Setting::AutoWalk),option(Setting::AutoWalkPath),option(Setting::HideUnreachable),option(Setting::PartialSteps),option(Setting::HiddenAirshipDestinations),HiddenAirshipMenu,Back};
+constexpr unsigned navigationItems[]={option(Setting::AutoWalk),option(Setting::AutoWalkPath),option(Setting::HideUnreachable),option(Setting::PartialSteps),option(Setting::HiddenAirshipDestinations),option(Setting::ClockDirections),HiddenAirshipMenu,Back};
 constexpr unsigned miscItems[]={option(Setting::AutoDetail),option(Setting::AutoExtraInfo),option(Setting::VoicedDialogue),option(Setting::CombatDetail),
     option(Setting::MenuIndex),option(Setting::SphereNodeNumbers),option(Setting::UnavailableCue),option(Setting::OverdriveAssist),option(Setting::OverdriveCues),option(Setting::LightningAutoDodge),option(Setting::JechtAssist),option(Setting::ShowMaximumHp),option(Setting::ShowMaximumMp),option(Setting::PolishText),option(Setting::ChocoboAssist),option(Setting::RemiemAssist),option(Setting::ButterflyAssist),option(Setting::BlitzAssist),SpeechBackendMenu,BindingsMenu,TrialMenu,GagazetMenu,SinMenu,Back};
 constexpr unsigned gagazetItems[]={option(Setting::GagazetAssist),option(Setting::GagazetCues),GagazetGuide,GagazetSelected,GagazetStatus,Back};
@@ -217,7 +217,7 @@ void description() {
         else if(item==SpeechBackendMenu) emitReady(L"Choose Automatic or an available Prism speech backend. Voice and speed remain controlled by that backend.");
         else if(item==SpeechOptionsMenu) emitReady(L"Open speech settings for naming glyphs.");
         else if(item==AudioMenu) emitReady(L"Open beacon, wall and arrival sounds, volumes, wall range, race pickup cues, lightning warnings and sound previews.");
-        else if(item==NavigationMenu) emitReady(L"Open Auto walk, path announcements, the unreachable destination filter and Partial steps.");
+        else if(item==NavigationMenu) emitReady(L"Open Auto walk, path announcements, the unreachable destination filter, Partial steps and Clock directions.");
         else if(item==MiscMenu) emitReady(L"Open speech detail, voiced dialogue, menu indexing, translation text, timing assistance, Chocobo and Remiem races, butterfly hunts and Blitzball when available, controller bindings, trial controls, Gagazet cave puzzles and Sin object collection when available.");
         else if(item==Help) speakHelp(true);
         else if(item==Back) emitReady(L"Return to the parent menu and its selected submenu entry. Settings remain open.");

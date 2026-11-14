@@ -53,3 +53,4 @@ older setting string still says H. [Controls](../../controls.md) is authoritativ
 | Automatically read extra info / `auto_extra_info` | 0; 0..1; 1 | Read the visible extra-information pane automatically. Independent of Autodetail. U repeats extra information; I repeats the selected description. |
 | Unavailable cue / `unavailable_cue` | 0; 0..1; 1 | Speak when the Items or Abilities grid or a supported manual battle menu rejects an action. Field row labels are independent of this cue. |
 | Sphere Grid node numbers / `sphere_node_numbers` | 1; 0..1; 1 | Say node numbers after Sphere Grid node names. Directions that require F6 always give the number to enter. |
+| Clock directions / `clock_directions` | 0; 0..1; 1 | Give destination directions as a clock position relative to the camera, such as 2 o'clock, and say above or below when the destination is at least two steps higher or lower. Off keeps compass words. Route directions always use compass words. |
