@@ -97,6 +97,16 @@ std::vector<const Entity*> filtered() {
 }
 std::wstring label(const Entity& e) {return e.name.empty()?e.category:e.name;}
 std::wstring decimal(double value) {wchar_t text[40]{};swprintf_s(text,L"%.1f",value);return text;}
+// Destination readouts use compass words, or a camera clock position with height
+// when Clock directions is on. Route legs always keep compass words. After a
+// distance the clock reads "at 2 o'clock" so the hour is not heard as a number.
+std::wstring destinationDirection(Point from,Point to,bool height=true,const wchar_t* clockPrefix=L"at ") {
+    const Point delta{to.x-from.x,height?to.y-from.y:0,to.z-from.z};
+    if(!setting(Setting::ClockDirections)) return direction({delta.x,0,delta.z});
+    Point forward,right;const bool valid=cameraBasis(forward,right);
+    auto text=destinationClockText(delta,forward,valid);
+    return text.rfind(L"here",0)==0 || text==L"unknown"?text:clockPrefix+text;
+}
 void emit(const Pending& event,std::wstring text,const char* producer,bool interrupt=true) {speechq::emitOwned(std::move(text),event.header,producer,false,interrupt);}
 void lockSelected() {
     auto& s=owned();const auto rows=filtered();s.selection=s.selected<rows.size()?key(*rows[s.selected]):EntityKey{};interested.store(true,std::memory_order_release);
@@ -117,7 +127,7 @@ std::wstring instruction(const Entity& target) {
 void announce(const Pending& event,bool interrupt=true,bool index=true) {
     auto& s=owned();const auto rows=filtered();if(rows.empty()) return;if(s.selected>=rows.size()) s.selected=0;
     const auto& target=*rows[s.selected];const auto player=s.observation.player;
-    auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+direction({target.position.x-player.x,0,target.position.z-player.z}));
+    auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+destinationDirection(player,target.position));
     if(target.inactive) text+=L", currently inactive";if(target.pushControl) {const auto side=describePedestalSide(target.position,player);if(!side.empty()) text+=L". "+side;}
     if(index) text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));emit(event,std::move(text),"navigation-selection",interrupt);
 }
@@ -150,12 +160,12 @@ void pathfind(const Pending& event,bool assist=false) {
         if(target.butterfly) {emit(event,label(target)+(target.butterflyStart?L": within start range":L": within catching range"),"navigation-facing");return;}
         if(setting(Setting::AutoWalk)) intent(event,target,target.pushControl?nav::Intent::ArmAndFace:nav::Intent::Face);
         if(target.pushControl) {emit(event,label(target)+L": at the push position. "+instruction(target),"navigation-facing");return;}
-        const auto facing=direction({target.zone.center.x-player.x,0,target.zone.center.z-player.z});
+        const auto facing=destinationDirection(player,target.zone.center,false,L"");
         if(facing==L"here" || facing==L"unknown") emit(event,label(target)+L": within interaction range. Facing direction is unavailable at this position","navigation-facing");
         else emit(event,label(target)+L": within interaction range. "+(target.inactive?L"Currently inactive. ":L"")+L"Face "+facing,"navigation-facing");return;
     }
     if(s.mesh.triangles.empty() && !s.mesh.openPlane) {
-        resetNavAudio();emit(event,label(target)+L": collision data unavailable. Direct distance "+routeSegmentText(distanceXZ(player,target.position)/UnitsPerStep,direction({target.position.x-player.x,0,target.position.z-player.z}),setting(Setting::PartialSteps)!=0),"navigation-path");
+        resetNavAudio();emit(event,label(target)+L": collision data unavailable. Direct distance "+routeSegmentText(distanceXZ(player,target.position)/UnitsPerStep,destinationDirection(player,target.position),setting(Setting::PartialSteps)!=0),"navigation-path");
         if(assist) intent(event,target,nav::Intent::AssistFailed);return;
     }
     const int start=findTriangle(s.mesh,player),end=target.zone.valid?start:findTriangle(s.mesh,target.position);
