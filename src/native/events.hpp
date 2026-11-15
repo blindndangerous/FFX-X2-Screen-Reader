@@ -62,6 +62,7 @@ void installSphereGrid();
 void installBattle();
 void installNavigation();
 void installInput();
+void installFfx2Input();
 void installDirectInputKeyboard();
 void observeDirectInput(uintptr_t object);
 void directKeyboard(bool active);

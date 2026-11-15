@@ -112,8 +112,12 @@ unsigned initializeReader(bool& initializedHooks) {
     if(movieOnly!=(nativeProfile==NativeProfile::MovieCaptions) || ffx2!=(nativeProfile==NativeProfile::Ffx2)) {
         recordLog("native readers refused: executable name/profile disagree"); return 0;
     }
-    // FFX-2 stops here: no FFX extension scan, dependency check or hook.
-    if(nativeProfile==NativeProfile::Ffx2) { announceFfx2Boot(); return 0; }
+    // FFX-2 gets keyboard input only: no FFX extension scan, dependency check
+    // or reader hook. features stays 0 because no reader runs.
+    if(nativeProfile==NativeProfile::Ffx2) {
+        if(startFfx2Input(initializedHooks)) announceFfx2Boot();
+        return 0;
+    }
     if (!resolveNativeExtensions()) { recordLog("native readers refused: extension address verification failed"); return 0; }
     if (!validateNativeDependencies()) { recordLog("native readers refused: feature dependency verification failed"); return 0; }
     if (MH_Initialize() != MH_OK) return 0;

@@ -2,6 +2,7 @@
 #include "input_device.hpp"
 #include "events.hpp"
 #include "process_storage.hpp"
+#include "profile.hpp"
 #include <atomic>
 namespace ffx {
 namespace {
@@ -59,6 +60,8 @@ OwnedTextContext copiedControlContext(const CopiedControls& p) {
     return c;
 }
 void prepareCopiedControlSnapshot(CopiedControls& p) {
+    // FFX-2 has no verified button-swap or key-config address: keep defaults.
+    if(nativeProfile==NativeProfile::Ffx2) { p.controller=false;p.swap=false;p.polish=false;p.bindings.fill(128);return; }
     p.controller=nativeInputUsesController();p.swap=read<unsigned>(address(0x859554))==1;
     p.polish=textEncodingSnapshot()==1;p.bindings.fill(128);
     const auto config=read<uintptr_t>(address(0x1efb504));

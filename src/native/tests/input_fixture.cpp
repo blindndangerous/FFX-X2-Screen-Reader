@@ -8,6 +8,7 @@
 #include "../pedestal_rvas.hpp"
 #include "../utility_memory.hpp"
 #include "../settings.hpp"
+#include "../profile.hpp"
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <map>
@@ -538,5 +539,11 @@ int main() {
     keys.fill(0);fire(0xfffe0001,state);keys[DIK_N]=0x80;fire(0xfffe0001,state);drain();
     check(pressed==beforeOff+1,"shortcut rearms after physical release");
     railChecks();
+    // FFX-2 installs only the keyboard path: window messages, the PInput probe
+    // and the DirectInput updaters. No help-page, per-frame field or controller hook.
+    events.clear();ffx::nativeProfile=ffx::NativeProfile::Ffx2;installFfx2Input();
+    for(const unsigned id:{0xffff0000u,0xffff0001u,0xffff0002u,0xffff0003u,0x225930u,0x22d770u,0x22db80u}) check(events.count(id)!=0,"FFX-2 installs the keyboard input path");
+    check(events.size()==7,"FFX-2 installs no other input hook");
+    ffx::nativeProfile=ffx::NativeProfile::Reference;
     std::puts("PASS: native keyboard, Escape PInput manual help/retirement, exclusive Shift-F1 under queue pressure/console focus, plain F1 and NVDA F12 passthrough, modifier/context shortcuts, exclusive menus, buffered Peek, focus, generation and SDL isolation.");
 }
