@@ -36,6 +36,52 @@ template<class Key,class Selection,class Visible> int visibleRowOf(const std::ve
 // While Hide unreachable waits for its first verdicts every row is still visible, so a spoken
 // "N of M" would give the unfiltered count and change on the next press. Omit it until settled.
 inline bool rowCountSettled(bool hideUnreachable,bool checking) {return !hideUnreachable || !checking;}
+// After a room change the destination set fills in over several scans, so early totals
+// ("2 of 11", "5 of 23") are wrong. A total is spoken once the scanned destination count has
+// held for ListSettleMs in the same map generation. Every ] or [ rescans, and a rescan can count
+// one destination more or less or restart the reachability check; once the room has settled, that
+// must not take the totals away again, so settling is latched per map generation and the current
+// count is spoken. Turning Hide unreachable on, by U or the mod menu, waits for its first check again.
+constexpr unsigned long long ListSettleMs=1500;
+// The Destruction Sphere area in Djose lists several "Sphere ... currently inactive" rows at one
+// spot: separate script workers for the same dormant object. An inactive row with the same name
+// and category as an earlier inactive row within half a unit (and two units of height) adds
+// nothing to walk to, so only the first is kept. Active rows and pedestals are never merged.
+inline void collapseInactiveDuplicates(std::vector<Entity>& entities) {
+    std::vector<Entity> kept;kept.reserve(entities.size());
+    for(auto& e:entities) {
+        const bool duplicate=e.inactive && !e.pushControl && std::any_of(kept.begin(),kept.end(),[&](const Entity& k) {
+            return k.inactive && !k.pushControl && k.name==e.name && k.category==e.category &&
+                std::hypot(k.position.x-e.position.x,k.position.z-e.position.z)<=.5 && std::abs(k.position.y-e.position.y)<=2;
+        });
+        if(!duplicate) kept.push_back(std::move(e));
+    }
+    entities=std::move(kept);
+}
+// Whether losing the selected row (hidden as unreachable, or gone from a rescan) is handled and
+// spoken now. While a scene, window or scripted animation holds the field (a pedestal dropping,
+// a lift riding), verdicts describe a moving player, so the selection is kept and nothing is said;
+// the first command after control returns rescans and reports any real loss.
+inline bool selectionLossSpoken(bool fieldOpen,bool control) {return fieldOpen && control;}
+// Whether a rescan may start a new reachability check. A choice prompt freezes the player, and
+// a check taken then hid 11 of 19 Djose rows until the prompt closed. While a message, scene or
+// scripted freeze holds the field, the rows keep their last verdicts and no check starts.
+inline bool reachabilityRefreshAllowed(bool fieldOpen,bool control,bool message) {return fieldOpen && control && !message;}
+struct ListStability {
+    unsigned epoch=0;size_t count=0;unsigned long long since=0;bool counted=false,checked=false,hidden=false;
+    void observe(unsigned scanEpoch,size_t found,unsigned long long at) {
+        if(since && scanEpoch==epoch && settled(at)) counted=true;
+        if(!since || scanEpoch!=epoch) {epoch=scanEpoch;count=found;since=at;counted=checked=false;}
+        else if(found!=count) {count=found;since=at;}
+    }
+    bool settled(unsigned long long at) const {return since && at>=since && at-since>=ListSettleMs;}
+    bool totals(unsigned long long at,bool hideUnreachable,bool checking) {
+        if(settled(at)) counted=true;
+        if(hideUnreachable!=hidden) {hidden=hideUnreachable;checked=false;}
+        if(rowCountSettled(hideUnreachable,checking)) checked=true;
+        return counted && (!hideUnreachable || checked);
+    }
+};
 // Row to select when a reachability verdict hides the selected entity. The list keeps its order:
 // verdicts are matched to targets by position, so reordering would drop them and the hidden row
 // would come back. A negative step picks the visible row before the lost one, otherwise the row after.

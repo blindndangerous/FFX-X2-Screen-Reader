@@ -7,6 +7,7 @@
 #include "navigation_intents.hpp"
 #include "navigation_cancel.hpp"
 #include "intent_cancel_text.hpp"
+#include "route_text_cap.hpp"
 #include "camera_direction.hpp"
 #include "process_storage.hpp"
 #include "reachability.hpp"
@@ -85,7 +86,7 @@ struct Owned {
     speechq::Header header{};
     nav::Scene observation;Mesh mesh;std::vector<Entity> entities;std::deque<Pending> pending;
     std::map<int,std::wstring> areas;nav::AreaNameDemand names;
-    EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;int step=1;bool ready=false,haveMesh=false;
+    nav::ListStability list;EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;int step=1;bool ready=false,haveMesh=false;
     nav::NativeGeometryContext meshContext;
 };
 ProcessStorage<Owned> storage;
@@ -140,7 +141,10 @@ void announce(const Pending& event,bool interrupt=true,bool index=true) {
     const auto& target=*rows[s.selected];const auto player=s.observation.player;
     auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+destinationDirection(player,target.position));
     if(target.inactive) text+=L", currently inactive";if(target.pushControl) {const auto side=describePedestalSide(target.position,player);if(!side.empty()) text+=L". "+side;}
-    if(index) text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));emit(event,std::move(text),"navigation-selection",interrupt);
+    // Totals wait until the room's destination set and reachability verdicts have settled.
+    if(index && s.list.totals(GetTickCount64(),setting(Setting::HideUnreachable)!=0,ownedReachabilityChecking()))
+        text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));
+    emit(event,std::move(text),"navigation-selection",interrupt);
 }
 void intent(const Pending& event,const Entity& target,nav::Intent kind) {
     const auto refusal=nav::intentRefusalText(owned().observation.controlled);
@@ -160,6 +164,13 @@ void pathfind(const Pending& event,bool assist=false) {
     if(!selected) {if(!assist) emit(event,L"No entity selected","navigation-path");return;}
     const auto target=*selected;const auto player=s.observation.player;
     if(!s.mesh.events.ready) {resetNavAudio();emit(event,L"Navigation data is unavailable. Waiting for the field to become ready.","navigation-data-unavailable");return;}
+    if(!assist) {
+        const auto& o=s.observation;
+        if(const auto refusal=nav::routeStartRefusal(setting(Setting::AutoWalk)!=0,o.allowed,o.control,o.controlled,o.message)) {
+            recordLog("auto walk refused before route: window=%d message=%d allowed=%d control=%d controlled=%d battle=%d age-ms=%llu",o.window,o.message?1:0,o.allowed?1:0,o.control?1:0,o.controlled?1:0,inBattle()?1:0,GetTickCount64()-o.capturedAt);
+            emit(event,refusal,"navigation-action-refused");return;
+        }
+    }
     if(!assist) lockSelected();if(target.hazardous) {emit(event,label(target)+L": avoid this butterfly","navigation-path");return;}
     if(target.swimDepth) {
         const auto points=navigationRouteOwned(s.mesh,player,target,s.entities);auto text=nav::sceneSwimmingInstruction(s.observation);
@@ -186,7 +197,12 @@ void pathfind(const Pending& event,bool assist=false) {
     const auto points=navigationRouteOwned(s.mesh,player,target,s.entities);
     if(points.empty()) {resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;}
     routeNavAudio(points,target);
-    if(!assist && (target.butterfly || !setting(Setting::AutoWalk) || setting(Setting::AutoWalkPath))) {const auto directions=routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0);emit(event,directions.empty()?L"Inside the trigger zone":directions,"navigation-path");}
+    if(!assist && target.inactive && setting(Setting::AutoWalk)) {
+        recordLog("auto walk refused: destination inactive worker=%d id=%u",target.worker,target.id);
+        emit(event,nav::inactiveRouteText(label(target),routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0)),"navigation-action-refused");return;
+    }
+    if(!assist && (target.butterfly || !setting(Setting::AutoWalk) || setting(Setting::AutoWalkPath))) {auto directions=routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0);
+        if(setting(Setting::AutoWalk) && !target.butterfly) directions=nav::capRouteText(directions);emit(event,directions.empty()?L"Inside the trigger zone":directions,"navigation-path");}
     if(setting(Setting::AutoWalk)) intent(event,target,assist?nav::Intent::AssistStart:target.pushControl?nav::Intent::ArmAndStart:nav::Intent::Start);
 }
 void execute(const Pending& event) {
@@ -209,7 +225,8 @@ void execute(const Pending& event) {
     switch(query) {
     case nav::Query::Scan: {
         s.selection={};s.selected=0;clearNavRoute();nav::orderEntities(s.entities,{},key,false);
-        requestOwnedReachability(s.observation,s.entities,true);const auto rows=filtered();
+        if(nav::reachabilityRefreshAllowed(s.observation.allowed,s.observation.control,s.observation.message)) requestOwnedReachability(s.observation,s.entities,true);
+        const auto rows=filtered();
         emit(event,std::to_wstring(rows.size())+L" "+categories[s.category]+(s.category?L"s":L""),"navigation-scan");
         if(!rows.empty()) {announce(event,false);lockSelected();beacon(event);}break;
     }
@@ -239,7 +256,7 @@ void execute(const Pending& event) {
             s.selected=row<0?0u:static_cast<unsigned>(row);
         }else if(s.selected>=filtered().size()) s.selected=0;
         emit(event,L"Hide unreachable destinations: "+settingValue(Setting::HideUnreachable)+(setting(Setting::HideUnreachable)?(ownedReachabilityChecking()?L". Checking reachability":L". Reachability unavailable; destinations remain listed"):L". "+std::to_wstring(filtered().size())+L" destinations"),"navigation-filter");
-        if(!filtered().empty()) {announce(event,false,nav::rowCountSettled(setting(Setting::HideUnreachable)!=0,ownedReachabilityChecking()));lockSelected();}break;
+        if(!filtered().empty()) {announce(event,false);lockSelected();}break;
     case nav::Query::Beacon:beacon(event);break;
     case nav::Query::AssistRoute:pathfind(event,true);break;
     case nav::Query::AssistInstruction: {
@@ -312,12 +329,14 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
         s.meshContext.collision.remaps==geometry.collision.remaps && (!geometry.swimming || (s.meshContext.floor==geometry.floor && s.meshContext.player.y==geometry.player.y));
     if(!sameMesh) {s.mesh=nav::decodeNavigationSceneMesh(observation);s.haveMesh=true;}
     s.mesh.player=geometry.player;s.mesh.playerTriangle=geometry.floor;
-    nav::stageAirshipPassages(observation,s.mesh,found);
+    nav::stageAirshipPassages(observation,s.mesh,found);nav::collapseInactiveDuplicates(found);
     nav::orderEntities(found,s.entities,key,s.selection.valid);nav::keepVerdicts(found,s.entities,key);
-    s.entities=std::move(found);s.selected=0;
-    s.meshContext=geometry;requestOwnedReachability(observation,s.entities,true);
+    s.entities=std::move(found);s.selected=0;s.list.observe(generation(),s.entities.size(),GetTickCount64());
+    s.meshContext=geometry;
+    if(nav::reachabilityRefreshAllowed(observation.allowed,observation.control,observation.message)) requestOwnedReachability(observation,s.entities,true);
+    else retireOwnedReachability();
     auto rows=filtered();bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
-    const bool lostSelection=s.selection.valid && !kept;
+    const bool lostSelection=s.selection.valid && !kept && nav::selectionLossSpoken(observation.allowed,observation.control);
     if(lostSelection) {
         s.selection={};nav::orderEntities(s.entities,{},key,false);requestOwnedReachability(observation,s.entities,true);rows=filtered();
     }
@@ -336,7 +355,8 @@ void maintenance() {
     if(!storage.ready()) return;auto& s=owned();if(s.revision && s.revision!=nav::navigationObservationRevision()) {resetOwned(generation());return;}
     if(s.ready && applyOwnedReachability(s.observation,s.entities)) {
         const auto rows=filtered();s.selected=0;bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
-        if(s.selection.valid && !kept) {
+        if(s.selection.valid && !kept && !nav::selectionLossSpoken(s.observation.allowed,s.observation.control)) recordLog("navigation selection hidden while the game holds the field; kept until control returns");
+        else if(s.selection.valid && !kept) {
             // Keep the list order so the verdict stays matched to its row, and move to the neighbour in the direction of travel.
             std::wstring name;for(const auto& e:s.entities) if(key(e)==s.selection) {name=label(e);break;}
             const int next=nav::rowAfterLoss(s.entities,s.selection,key,visible,s.step);s.selection={};

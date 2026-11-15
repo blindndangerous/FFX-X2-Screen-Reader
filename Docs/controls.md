@@ -468,7 +468,10 @@ NPCs keep their browsing order. Selection follows the same native worker.
 **` (backtick)** — rescan nearby entities and announce the count.
 
 **]** — cycle to the next entity in the current category and announce it with
-distance and direction.
+distance, direction and its position such as "6 of 10". Just after entering a
+room, or while Hide unreachable destinations is still checking, the position is
+left out until the list has settled; after that it is read on every press in
+that room.
 
 **[** — cycle to the previous entity.
 
@@ -492,7 +495,8 @@ them, such as **7 north, bear left, 4 north**.
 Once in range,
 Backslash says which way to face, such as **Face west**.
 North means ahead relative to the camera. With Auto walk off, turn and confirm
-manually. Inactive trial controls are identified as inactive.
+manually. Inactive trial controls are identified as inactive. Several inactive
+rows with the same name at the same spot are listed once.
 During an active route, a camera cut of more than 45 degrees re-announces the
 next leg using the new camera direction. Slow camera pans do not repeat guidance.
 
@@ -509,8 +513,18 @@ again to start a new walk. When a battle interrupts a walk, Auto walk resumes
 toward the same destination about a second after you have control of the field
 again. Walking yourself before or after the battle, any navigation command after
 it, or turning Auto walk off cancels the resume; it is dropped if the destination
-is gone or a minute passes after the battle. On arrival, Auto walk faces an interactible; confirm
-the interaction yourself.
+is gone or a minute passes after the battle. On arrival, Auto walk walks in
+toward an interactible for up to one more step (stopping when its collision
+blocks the way; pedestals are never walked into), then stands still facing it;
+confirm the interaction yourself. If the walk ends without reaching the
+interaction range, it says **Auto walk stopped: not in interaction range**. A
+destination listed as currently inactive is not walked to: Backslash says
+**Auto walk unavailable: [destination] is currently inactive** and reads the
+route so you can walk it yourself.
+Backslash with a message box open says **Auto walk unavailable while a message
+is open**; during a scene it says **Auto walk unavailable during a scene**; and
+while a scripted event still holds player control it says **Auto walk
+unavailable: the game is controlling the player**. No route is read first.
 Blocked routes get bounded recovery attempts and stop if progress stalls.
 Automatic stops and lost routes announce a short reason once. Explicit stop
 commands stay silent; map transitions use the map announcement instead.
@@ -548,7 +562,9 @@ Off restores ordinary pickup. The option is hidden outside Sin. Offline
 verified; gameplay confirmation is pending.
 
 **Speak auto walk path**, also in Navigation, defaults **Off**. Off announces
-only “Auto walking to [destination]” when starting. On reads the route first.
+only “Auto walking to [destination]” when starting. On reads the route first;
+a route with more than three legs reads the first three and then “then N more
+turns”. With Auto walk Off, the full route is read.
 
 For a trial pedestal, Backslash gives the push direction and remaining distance,
 or says to push once for an animation. Selection and P announce your current
@@ -594,7 +610,12 @@ The announcement queues behind existing speech.
 
 **U** — toggle the saved unreachable-destination filter. It hides destinations
 with no connected collision route or reachable interaction zone. Destinations
-with unknown collision data remain listed. This option is also in F8.
+with unknown collision data remain listed. This option is also in F8. While a
+scene, message or scripted movement such as a pedestal dropping or a lift ride
+holds the field, a selected destination that becomes unreachable stays selected
+and nothing is announced; the next navigation command reports it. During such a
+pause, including a choice prompt that freezes the player, the list keeps its
+last reachability results and is checked again once you can move.
 
 ### FFX Makalania butterfly hunt
 
