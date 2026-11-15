@@ -85,7 +85,7 @@ characters say Unknown character. F7 toggles Autodetail.
 
 - **Navigation audio:** beacon, wall and arrival sounds, their volumes, wall
   range, race pickup cues, Jecht Shot cues, Lightning warning and sound previews.
-- **Navigation:** Auto walk, Speak auto walk path, Hide unreachable destinations and Partial steps.
+- **Navigation:** Auto walk, Speak auto walk path, Hide unreachable destinations, Partial steps and Clock directions.
 - **Miscellaneous:** Autodetail, Automatically read extra info, voiced dialogue output, combat detail, Menu indexing, Unavailable cue, Overdrive assistance, Overdrive cues, Jecht Shot auto-success, Lightning auto dodge, Show maximum HP, Chocobo training auto-success, Remiem race auto-success, Butterfly hunt auto-success and Blitzball auto-win. Extra info and the four minigame assists default Off. Controller bindings and supported Cloister of Trials controls are submenus here.
 
 ### Optional minigame completion assistance
@@ -450,6 +450,10 @@ distance and direction.
 
 **[** — cycle to the previous entity.
 
+While an entity is selected, walking keeps the list order stable. New entities
+append after the existing entries; disappearing entities drop out. Backtick
+rescans and sorts by current distance again.
+
 **Shift + ]** — switch to the next category (All → Exit → Event →
 Save Sphere → Treasure Chest → Shop → NPC → Object).
 
@@ -459,18 +463,35 @@ Save Sphere → Treasure Chest → Shop → NPC → Object).
 
 **Backslash** — route into the selected entity's actual interaction zone,
 including the reachable side of a counter. Routes use live native collision
-and retain short final movements. Once in range,
+and retain short final movements. Route directions speak each turn once:
+consecutive legs within 15 degrees of the same heading are read as one distance.
+When two turns in a row share a compass word but bend, the bend is named between
+them, such as **7 north, bear left, 4 north**.
+Once in range,
 Backslash says which way to face, such as **Face west**.
 North means ahead relative to the camera. With Auto walk off, turn and confirm
 manually. Inactive trial controls are identified as inactive.
+During an active route, a camera cut of more than 45 degrees re-announces the
+next leg using the new camera direction. Slow camera pans do not repeat guidance.
 
 **Auto walk** in **F8 → Navigation** defaults **Off**. Turn it **On**, select a
 destination, then press **Backslash** to walk its current collision route.
-The field controller route command (right trigger) also starts walking. Movement input or Escape cancels immediately. Dialogue, scripted
+The field controller route command (right trigger) also starts walking. Movement input or Escape cancels immediately.
+Pressing **Backslash** (or the right trigger) again while walking stops the walk and says **Auto walk stopped**,
+without reading the route again.
+Screen-reader commands do not cancel it: an arrow, Enter or Escape pressed while
+**Insert**, **Numpad Insert** or **Caps Lock** is held is left to the screen reader
+until that key is released, and does not steer the character. Dialogue, scripted
 scenes, menus, battle, lost focus and a map change stop it; press Backslash
-again to start a new walk. On arrival, Auto walk faces an interactible; confirm
+again to start a new walk. When a battle interrupts a walk, Auto walk resumes
+toward the same destination about a second after you have control of the field
+again. Walking yourself before or after the battle, any navigation command after
+it, or turning Auto walk off cancels the resume; it is dropped if the destination
+is gone or a minute passes after the battle. On arrival, Auto walk faces an interactible; confirm
 the interaction yourself.
 Blocked routes get bounded recovery attempts and stop if progress stalls.
+Automatic stops and lost routes announce a short reason once. Explicit stop
+commands stay silent; map transitions use the map announcement instead.
 The nonblocking swimming controls overlay leaves Auto walk active; actual
 dialogue and cutscenes still cancel it.
 
@@ -532,9 +553,14 @@ Paths use concise numbers and directions: `1 south, 2 west, 2 north`.
 distances to whole numbers, with a minimum of **1**. Turn it **On** for
 `0.6 south, 1.4 west, 2.3 north`.
 The setting changes spoken distances; routes and audio keep their exact geometry.
+**Clock directions** in **F8 → Navigation** defaults **Off**. Turn it **On** to hear
+the destination's direction as a clock position from the camera, such as `12.4 steps at 2 o'clock, above`:
+12 o'clock is ahead, 3 o'clock is right. **Above** or **below** is added when the destination is at
+least two steps higher or lower. Route directions keep compass words.
 
 Beacon guidance follows the selected reachable route immediately when enabled.
-Wall tones also begin on the current map when enabled; no map reload is needed.
+Wall tones also begin on the current map when enabled, even without a selected
+route. They pause outside the focused field; no map reload is needed.
 
 **G** — read current gil.
 

@@ -28,6 +28,7 @@ NavLeg leg;
 uintptr_t memory=0;
 std::map<unsigned,Handler> hooks;
 std::vector<std::wstring> speech;
+bool lastInterrupt=false;
 uint64_t autoWalkClock() { return clockValue; }
 int __cdecl mode() { return dialogue; }
 void __cdecl caption(unsigned id,char* out,unsigned size) {
@@ -64,17 +65,21 @@ void pedestalPlayerInput(unsigned) {}
 int setting(Setting s) { return s==Setting::AutoWalk && enabled; }
 unsigned generation() { return epoch; }
 Point playerPosition() { return player; }
+#ifndef FFX_NAV_CUES_INTEGRATION_TEST
 double distanceXZ(Point a,Point b) { return std::hypot(a.x-b.x,a.z-b.z); }
+#endif
 bool relativeBearing(Point delta,double& pan,double& front) {
     const auto length=std::hypot(delta.x,delta.z);
     pan=length?(delta.x*forward.z-delta.z*forward.x)/length:0;
     front=length?(delta.x*forward.x+delta.z*forward.z)/length:1;
     return camera;
 }
+#ifndef FFX_NAV_CUES_INTEGRATION_TEST
 bool navLeg(NavLeg& result) { result=leg;result.pendingCollision=result.collisionSerial!=navCollisionSerial(); return known; }
 void resetNavAudio() {}
 void refreshNavCollision() { ++replans; }
-bool output(const std::wstring& text,bool,const char*) { speech.push_back(text); return true; }
+#endif
+bool output(const std::wstring& text,bool interrupt,const char*) { lastInterrupt=interrupt;speech.push_back(text); return true; }
 // Semantic-only fixture adapter: it checks bounded Literal/Concat recipes and
 // emits synchronously through the fake output. It provides no queue, worker,
 // Native heap, thread, or production latency evidence.
@@ -125,9 +130,14 @@ bool faceNavigationTarget(const NativeRouteTarget&) { ++faceCalls; return true; 
 void log(const char*,...) {}
 }
 using namespace ffx;
+unsigned resumes=0;std::wstring resumedName;
+bool onResume(const NativeRouteTarget& target) {++resumes;resumedName=target.name.data();return true;}
+// Field frames 100 ms apart, as the input owner calls updateAutoWalk every frame.
+void frames(unsigned count) {for(unsigned i=0;i<count;++i) {clockValue+=100;updateAutoWalk();}}
 void check(bool value,const char* reason) { if(!value) { std::fprintf(stderr,"FAIL: %s\n",reason); std::exit(1); } }
 std::array<uint8_t,256> keyboard() { std::array<uint8_t,256> keys{}; autoWalkKeyboard(keys.data()); return keys; }
 void begin(Point destination={0,0,100}) {
+    navRouteStopReported=false;
     stopAutoWalk(); player={}; forward={0,0,1}; known=camera=focused=enabled=true;
     menu=console=battle=false; scene=dialogue=0; clockValue+=1000;
     *reinterpret_cast<uintptr_t*>(address(0xf26ae8))=address(0x1000000);
@@ -141,6 +151,21 @@ int main() {
     memory=reinterpret_cast<uintptr_t>(VirtualAlloc(nullptr,0x2100000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
     check(memory!=0,"isolated native keyboard configuration");
     installAutoWalk();
+    begin();speech.clear();Event stopEvent;hooks.at(0x4b8980)(stopEvent);updateAutoWalk();
+    check(speech.size()==1 && speech.back()==L"Auto walk stopped: dialogue" && !lastInterrupt,"dialogue stop speaks its reason once without interrupting");
+    begin();speech.clear();player={100,0,0};updateAutoWalk();updateAutoWalk();
+    check(speech.size()==1 && speech.back()==L"Auto walk stopped: player relocated","relocation stop speaks once");
+    begin();speech.clear();++epoch;updateAutoWalk();updateAutoWalk();
+    check(speech.empty(),"map transition leaves speech to the map announcement");
+    begin();speech.clear();stopAutoWalk();updateAutoWalk();check(speech.empty(),"explicit toggle cancellation stays silent");
+    // Backslash during a walk stops it and says so, without reading or restarting the route.
+    begin();speech.clear();check(toggleAutoWalkOff(),"Backslash during a walk is taken as the stop toggle");updateAutoWalk();updateAutoWalk();
+    check(!autoWalkActive() && !keyboard()[0xc8] && speech.size()==1 && speech.back()==L"Auto walk stopped","the toggle stops the walk once and says Auto walk stopped");
+    speech.clear();check(!toggleAutoWalkOff() && speech.empty(),"with no walk active Backslash keeps its route command");
+    begin();speech.clear();autoWalkPlayerInput(VK_ESCAPE);updateAutoWalk();
+    check(speech.empty() && !autoWalkActive(),"manual player-input cancellation stays silent");
+    begin();speech.clear();known=false;updateAutoWalk();updateAutoWalk();
+    check(speech.size()==1 && speech.back()==L"Auto walk stopped: route lost" && !claimNavRouteStopSpeech(),"unavailable route speaks one specific stop and claims worker retirement feedback");
     stopAutoWalk(); check(!autoWalkActive(),"manual revision checks start with autowalk stopped");
     auto revision=autoWalkInputRevision(); std::array<uint8_t,256> manualKeys{}; manualKeys[0x11]=0x80;
     autoWalkKeyboard(manualKeys.data());
@@ -167,6 +192,25 @@ int main() {
     begin(); std::array<uint8_t,256> keys{}; keys[0xcd]=0x80; autoWalkKeyboard(keys.data());
     check(keys[0xcd]==0x80 && !keys[0xc8],"same-poll manual movement wins without an extra auto key");
     updateAutoWalk(); check(!keyboard()[0xc8],"manual cancellation never resumes itself");
+    // Screen-reader modifiers: Insert 0xD2, Numpad Insert/0 0x52, Caps Lock 0x3A.
+    begin(); keys={}; keys[0xd2]=0x80; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0xd0] && keys[0xc8]==0x80,"Insert+Down reader command neither cancels nor steers auto walk");
+    keys={}; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0xd0],"reader-owned Down stays exempt after Insert is released first");
+    keyboard(); keys={}; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(!autoWalkActive() && keys[0xd0]==0x80,"a fresh Down press without a reader modifier still cancels");
+    begin(); keys={}; keys[0x3a]=0x80; keys[0x1c]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0x1c],"Caps Lock+Enter reader command does not cancel");
+    begin(); keys={}; keys[0x52]=0x80; keys[0xc8]=0x80; keys[0x01]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0x01],"Numpad Insert+Up+Escape reader command does not cancel");
+    keyboard(); updateAutoWalk(); check(autoWalkActive(),"reader command leaves the walk running on the next tick");
+    begin(); autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkPlayerInput(VK_RETURN); updateAutoWalk();
+    check(autoWalkActive(),"message-path arrow and Enter with a reader modifier held do not cancel");
+    autoWalkReaderModifier(false); autoWalkPlayerInput(VK_DOWN); updateAutoWalk();
+    check(!autoWalkActive(),"message-path arrow without a reader modifier still cancels");
+    stopAutoWalk(); keyboard(); revision=autoWalkInputRevision(); keys={}; keys[0xd2]=0x80; keys[0x11]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkInputRevision()==revision && keys[0x11]==0x80,"stopped reader command is not counted as manual movement and is left to the game");
+    keys={}; autoWalkKeyboard(keys.data());
     begin(); pad::State state; autoWalkController(state); check(state.ly==24000 && !state.lx,"physical controller receives forward left-stick input");
     state={}; state.lx=18000; autoWalkController(state); check(state.lx==18000 && !state.ly,"manual stick remains intact and cancels auto walk");
     begin(); clockValue+=251; check(!keyboard()[0xc8],"stale input expires after 250 ms");
@@ -186,10 +230,11 @@ int main() {
     begin(); *reinterpret_cast<uint8_t*>(address(0x1000000))=0;
     check(!keyboard()[0xc8],"already disabled native field control cannot receive synthetic input");
     for(unsigned context=0;context<7;++context) {
-        begin();
+        begin();speech.clear();
         if(context==0) focused=false; if(context==1) battle=true; if(context==2) menu=true;
         if(context==3) console=true; if(context==4) scene=3; if(context==5) dialogue=1; if(context==6) enabled=false;
         check(!keyboard()[0xc8],"context blocks injection in the same device poll"); updateAutoWalk();
+        if(context==2 || context==3 || context==6) check(speech.empty(),"menu, console and disabled-setting cancellation stay silent");
         focused=enabled=true; menu=console=battle=false; scene=dialogue=0;
         check(!keyboard()[0xc8],"context cancellation requires a fresh destination command");
     }
@@ -209,7 +254,7 @@ int main() {
     for(unsigned i=0;i<19;++i) { clockValue+=100; updateAutoWalk(); }
     check(replans==before+1 && keyboard()[0xcd]==0x80,"blocked player replans and takes a bounded side step");
     for(unsigned i=0;i<133;++i) { clockValue+=100; updateAutoWalk(); }
-    keys=keyboard(); check(!keys[0xc8] && !keys[0xcd] && speech.back()==L"Auto walk stopped","15-second no-progress cap releases all movement");
+    keys=keyboard(); check(!keys[0xc8] && !keys[0xcd] && speech.back()==L"Auto walk stopped: no progress","15-second no-progress cap releases all movement and speaks the reason");
     // Both assigned bindings and the exact native scan table are used.
     std::array<unsigned,100> config; config.fill(128);
     *reinterpret_cast<uintptr_t*>(address(0x1efb504))=reinterpret_cast<uintptr_t>(config.data());
@@ -257,6 +302,51 @@ int main() {
     check(state.lt==255 && state.lx>0,"physical controller combines configured Dive trigger and southward-route steering");
     state={};state.ly=20000;autoWalkController(state);check(!state.lt,"manual swimming still cancels both injected channels in the same poll");padOwned=false;
     std::puts("PASS: swim depth Auto walk, configured keyboard/controller Dive, vertical progress, strict completion and manual cancellation.");
+    // Battle resume: a walk stopped by a battle starts again toward the same destination.
+    setAutoWalkResume(onResume);
+    const auto battleStop=[&] {begin();resumes=0;battle=true;updateAutoWalk();check(!autoWalkActive(),"battle stops auto walk");frames(20);};
+    battleStop();check(!resumes,"no resume while the battle lasts");
+    battle=false;frames(5);check(!resumes,"resume waits for the field to settle after the battle");
+    frames(10);check(resumes==1 && resumedName==L"Save Sphere","auto walk resumes toward the same destination after a battle");
+    frames(700);check(resumes==1,"a resume fires once");
+    battleStop();uint8_t battleKeys[256]{};battleKeys[0xc8]=battleKeys[0x1c]=0x80;autoWalkKeyboard(battleKeys);autoWalkPlayerInput(VK_RETURN);
+    battle=false;frames(1);std::array<uint8_t,256> confirm{};confirm[0x1c]=0x80;autoWalkKeyboard(confirm.data());autoWalkPlayerInput(VK_RETURN);frames(15);
+    check(resumes==1,"battle commands and confirming battle results do not cancel the resume");
+    battleStop();battle=false;frames(1);std::array<uint8_t,256> walk{};walk[0xc8]=0x80;autoWalkKeyboard(walk.data());frames(15);
+    check(!resumes,"walking after the battle cancels the resume");
+    battleStop();battle=false;frames(1);pad::State stick;stick.ly=20000;autoWalkController(stick);frames(15);
+    check(!resumes,"moving the stick after the battle cancels the resume");
+    battleStop();battle=false;frames(1);stopAutoWalk();frames(15);
+    check(!resumes,"a navigation command after the battle cancels the resume");
+    battleStop();battle=false;frames(1);suspendAutoWalk();frames(15);
+    check(resumes==1,"a field reset after the battle keeps the resume");
+    battleStop();battle=false;frames(1);releaseAutoWalk();frames(15);
+    check(resumes==1,"losing the route at the end of a battle keeps the resume");
+    battleStop();releaseAutoWalk();battle=false;frames(15);
+    check(resumes==1,"losing the route during a battle keeps the resume");
+    begin();resumes=0;releaseAutoWalk();battle=true;frames(5);battle=false;frames(15);
+    check(!resumes,"a walk ended by route loss is not resumed after a later battle");
+    // In game the encounter disables control first; the battle flag follows after the
+    // transition, which can take longer than the arm window while the field is not ours.
+    begin();resumes=0;Event disabled;hooks.at(0x471980)(disabled);dialogue=1;frames(50);battle=true;dialogue=0;frames(20);battle=false;frames(15);
+    check(resumes==1,"a walk stopped by control loss resumes after a slow battle transition");
+    battleStop();enabled=false;frames(1);enabled=true;battle=false;frames(15);
+    check(!resumes,"turning auto walk off during the battle cancels the resume");
+    begin();resumes=0;autoWalkPlayerInput(VK_ESCAPE);updateAutoWalk();battle=true;frames(5);battle=false;frames(15);
+    check(!resumes,"a walk the player cancelled is not resumed after a battle");
+    begin();resumes=0;speech.clear();Event opened;hooks.at(0x4b8980)(opened);updateAutoWalk();frames(40);battle=true;frames(5);battle=false;frames(15);
+    check(!resumes,"a stop long before a battle is not resumed");
+    begin();resumes=0;++epoch;updateAutoWalk();frames(1);walk={};walk[0x11]=0x80;autoWalkKeyboard(walk.data());battle=true;frames(5);battle=false;frames(15);
+    check(!resumes,"walking between the stop and the battle cancels the resume");
+    begin();resumes=0;++epoch;updateAutoWalk();frames(2);battle=true;frames(5);battle=false;++epoch;frames(5);++epoch;frames(5);
+    check(!resumes,"resume waits while the field is still loading");
+    frames(12);check(resumes==1,"a battle entered through a resource change resumes after the field loads");
+    battleStop();battle=false;dialogue=1;frames(30);check(!resumes,"resume waits while dialogue holds the field");
+    dialogue=0;frames(12);check(resumes==1,"resume fires once dialogue ends");
+    battleStop();battle=false;dialogue=1;frames(620);dialogue=0;frames(15);check(!resumes,"a resume expires a minute after the battle");
+    setAutoWalkResume(nullptr);
+    std::puts("PASS: auto walk resumes once after a battle and stays cancelled by player movement, commands and the setting.");
     VirtualFree(reinterpret_cast<void*>(memory),0,MEM_RELEASE);
     std::puts("PASS: auto walk steering, native remaps, manual priority, controller, arrival, context cancellation, stale input and bounded recovery.");
+    return 0;
 }

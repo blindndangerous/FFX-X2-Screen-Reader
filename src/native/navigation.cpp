@@ -1,4 +1,5 @@
 #include "navigation.hpp"
+#include "navigation_order.hpp"
 #include "airship_map.hpp"
 #include "navigation_scene.hpp"
 #include "navigation_targets.hpp"
@@ -29,6 +30,7 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <mutex>
 #include <optional>
 namespace ffx {
 namespace nav {
@@ -79,23 +81,43 @@ EntityKey key(const Entity& e) {
 }
 struct Pending {speechq::Header header;nav::QueryObservation query;std::optional<QueuedPuzzleTarget> direct;};
 struct Owned {
+    speechq::Header header{};
     nav::Scene observation;Mesh mesh;std::vector<Entity> entities;std::deque<Pending> pending;
     std::map<int,std::wstring> areas;nav::AreaNameDemand names;
-    EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;bool ready=false,haveMesh=false;
+    EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;int step=1;bool ready=false,haveMesh=false;
     nav::NativeGeometryContext meshContext;
 };
 ProcessStorage<Owned> storage;
 std::atomic<bool> interested{false};
 bool blocked=false;
 Owned& owned() {return storage.get();}
+bool visible(const Entity& e) {const auto& s=owned();return (!setting(Setting::HideUnreachable) || !e.unreachable) && (!s.category || e.category==categories[s.category]);}
 std::vector<const Entity*> filtered() {
-    std::vector<const Entity*> rows;const auto& s=owned();
-    for(const auto& e:s.entities) if((!setting(Setting::HideUnreachable) || !e.unreachable) && (!s.category || e.category==categories[s.category])) rows.push_back(&e);
+    std::vector<const Entity*> rows;for(const auto& e:owned().entities) if(visible(e)) rows.push_back(&e);
     return rows;
 }
 std::wstring label(const Entity& e) {return e.name.empty()?e.category:e.name;}
 std::wstring decimal(double value) {wchar_t text[40]{};swprintf_s(text,L"%.1f",value);return text;}
+// Destination readouts use compass words, or a camera clock position with height
+// when Clock directions is on. Route legs always keep compass words. After a
+// distance the clock reads "at 2 o'clock" so the hour is not heard as a number.
+std::wstring destinationDirection(Point from,Point to,bool height=true,const wchar_t* clockPrefix=L"at ") {
+    const Point delta{to.x-from.x,height?to.y-from.y:0,to.z-from.z};
+    if(!setting(Setting::ClockDirections)) return direction({delta.x,0,delta.z});
+    Point forward,right;const bool valid=cameraBasis(forward,right);
+    auto text=destinationClockText(delta,forward,valid);
+    return text.rfind(L"here",0)==0 || text==L"unknown"?text:clockPrefix+text;
+}
 void emit(const Pending& event,std::wstring text,const char* producer,bool interrupt=true) {speechq::emitOwned(std::move(text),event.header,producer,false,interrupt);}
+// The destination auto walk was heading to when a battle stopped it. Written by the
+// native input owner when the resume fires, read by the preparation owner.
+struct ResumeTarget {std::wstring name;unsigned id=0,pushControl=0;Point position;};
+std::mutex resumeLock;ResumeTarget resumeTarget;
+bool resumeAutoWalk(const NativeRouteTarget& target) {
+    {std::lock_guard<std::mutex> lock(resumeLock);resumeTarget={target.name.data(),target.id,target.pushControl,target.position};}
+    interested.store(true,std::memory_order_release);
+    return nav::submitNavigationQuery(nav::Query::Resume);
+}
 void lockSelected() {
     auto& s=owned();const auto rows=filtered();s.selection=s.selected<rows.size()?key(*rows[s.selected]):EntityKey{};interested.store(true,std::memory_order_release);
 }
@@ -115,7 +137,7 @@ std::wstring instruction(const Entity& target) {
 void announce(const Pending& event,bool interrupt=true,bool index=true) {
     auto& s=owned();const auto rows=filtered();if(rows.empty()) return;if(s.selected>=rows.size()) s.selected=0;
     const auto& target=*rows[s.selected];const auto player=s.observation.player;
-    auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+direction({target.position.x-player.x,0,target.position.z-player.z}));
+    auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+destinationDirection(player,target.position));
     if(target.inactive) text+=L", currently inactive";if(target.pushControl) {const auto side=describePedestalSide(target.position,player);if(!side.empty()) text+=L". "+side;}
     if(index) text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));emit(event,std::move(text),"navigation-selection",interrupt);
 }
@@ -148,12 +170,12 @@ void pathfind(const Pending& event,bool assist=false) {
         if(target.butterfly) {emit(event,label(target)+(target.butterflyStart?L": within start range":L": within catching range"),"navigation-facing");return;}
         if(setting(Setting::AutoWalk)) intent(event,target,target.pushControl?nav::Intent::ArmAndFace:nav::Intent::Face);
         if(target.pushControl) {emit(event,label(target)+L": at the push position. "+instruction(target),"navigation-facing");return;}
-        const auto facing=direction({target.zone.center.x-player.x,0,target.zone.center.z-player.z});
+        const auto facing=destinationDirection(player,target.zone.center,false,L"");
         if(facing==L"here" || facing==L"unknown") emit(event,label(target)+L": within interaction range. Facing direction is unavailable at this position","navigation-facing");
         else emit(event,label(target)+L": within interaction range. "+(target.inactive?L"Currently inactive. ":L"")+L"Face "+facing,"navigation-facing");return;
     }
     if(s.mesh.triangles.empty() && !s.mesh.openPlane) {
-        resetNavAudio();emit(event,label(target)+L": collision data unavailable. Direct distance "+routeSegmentText(distanceXZ(player,target.position)/UnitsPerStep,direction({target.position.x-player.x,0,target.position.z-player.z}),setting(Setting::PartialSteps)!=0),"navigation-path");
+        resetNavAudio();emit(event,label(target)+L": collision data unavailable. Direct distance "+routeSegmentText(distanceXZ(player,target.position)/UnitsPerStep,destinationDirection(player,target.position),setting(Setting::PartialSteps)!=0),"navigation-path");
         if(assist) intent(event,target,nav::Intent::AssistFailed);return;
     }
     const int start=findTriangle(s.mesh,player),end=target.zone.valid?start:findTriangle(s.mesh,target.position);
@@ -183,20 +205,36 @@ void execute(const Pending& event) {
     }
     switch(query) {
     case nav::Query::Scan: {
-        s.selection={};s.selected=0;clearNavRoute();const auto rows=filtered();
+        s.selection={};s.selected=0;clearNavRoute();nav::orderEntities(s.entities,{},key,false);
+        requestOwnedReachability(s.observation,s.entities,true);const auto rows=filtered();
         emit(event,std::to_wstring(rows.size())+L" "+categories[s.category]+(s.category?L"s":L""),"navigation-scan");
         if(!rows.empty()) {announce(event,false);lockSelected();beacon(event);}break;
     }
     case nav::Query::Next:case nav::Query::Previous: {
         const int delta=event.query.query==nav::Query::Next?1:-1;clearNavRoute();
         if(event.query.shift) {s.category=(s.category+delta+_countof(categories))%_countof(categories);s.selected=0;const auto rows=filtered();emit(event,L"category: "+std::wstring(categories[s.category])+L", "+std::to_wstring(rows.size()),"navigation-category");if(!rows.empty()) announce(event,false);}
-        else {const auto rows=filtered();if(rows.empty()) break;s.selected=(s.selected+delta+rows.size())%rows.size();announce(event);}
+        else {const auto rows=filtered();if(rows.empty()) break;s.step=delta;s.selected=(s.selected+delta+rows.size())%rows.size();announce(event);}
         lockSelected();beacon(event);break;
     }
     case nav::Query::Distance:announce(event,true,false);break;
     case nav::Query::Path:pathfind(event);break;
+    case nav::Query::Resume: {
+        ResumeTarget wanted;{std::lock_guard<std::mutex> lock(resumeLock);wanted=resumeTarget;}
+        const int found=nav::resumeRow(s.entities,wanted.id,wanted.pushControl,wanted.name,wanted.position,label);
+        const auto rows=filtered();unsigned row=0;
+        while(found>=0 && row<rows.size() && rows[row]!=&s.entities[found]) ++row;
+        if(found<0 || row==rows.size()) {emit(event,L"Auto walk not resumed: "+wanted.name+L" not found","navigation-path",false);break;}
+        s.selected=row;pathfind(event);break;
+    }
     case nav::Query::Filter:
         adjustSetting(Setting::HideUnreachable,1);requestOwnedReachability(s.observation,s.entities);
+        // The row index counts visible rows only; find the selected destination again so "N of M"
+        // and the locked selection follow it rather than whatever row now has its old number.
+        if(s.selection.valid) {
+            int row=nav::visibleRowOf(s.entities,s.selection,key,visible);
+            if(row<0) row=nav::rowAfterLoss(s.entities,s.selection,key,visible,s.step);
+            s.selected=row<0?0u:static_cast<unsigned>(row);
+        }else if(s.selected>=filtered().size()) s.selected=0;
         emit(event,L"Hide unreachable destinations: "+settingValue(Setting::HideUnreachable)+(setting(Setting::HideUnreachable)?(ownedReachabilityChecking()?L". Checking reachability":L". Reachability unavailable; destinations remain listed"):L". "+std::to_wstring(filtered().size())+L" destinations"),"navigation-filter");
         if(!filtered().empty()) {announce(event,false);lockSelected();}break;
     case nav::Query::Beacon:beacon(event);break;
@@ -247,7 +285,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     auto& s=owned();const auto& observation=captured.scene;
     if(observation.collisionSerial!=navCollisionSerial()) {nav::requestNavigationScene();return;}
     if((s.revision && s.revision!=observation.revision) || (s.epoch && s.epoch!=observation.epoch)) resetOwned(observation.epoch);
-    s.observation=observation;s.epoch=observation.epoch;s.revision=observation.revision;s.requested=captured.requested;s.ready=false;
+    s.header=header;s.observation=observation;s.epoch=observation.epoch;s.revision=observation.revision;s.requested=captured.requested;s.ready=false;
     for(unsigned part=0;part<observation.partCount;++part) {
         const auto& fact=observation.parts[part];AtelIdentity identity;
         if(fact.bindingsExpected && !fact.identityReady && readyAtelIdentity(fact.span.chunk,identity) && identity.span.serial==fact.span.serial) {nav::requestNavigationScene();nav::navigationWaitingForData(true);return;}
@@ -272,17 +310,21 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     if(!sameMesh) {s.mesh=nav::decodeNavigationSceneMesh(observation);s.haveMesh=true;}
     s.mesh.player=geometry.player;s.mesh.playerTriangle=geometry.floor;
     nav::stageAirshipPassages(observation,s.mesh,found);
-    bool same=s.entities.size()==found.size() && distanceXZ(s.observation.player,s.meshContext.player)<.1 && std::abs(s.observation.player.y-s.meshContext.player.y)<.1;
-    std::map<EntityKey,unsigned> order;if(same) {for(unsigned i=0;i<s.entities.size();++i) order[key(s.entities[i])]=i;for(const auto& e:found) if(!order.count(key(e))) {same=false;break;}}
-    if(same) std::stable_sort(found.begin(),found.end(),[&](const Entity& a,const Entity& b) {return order.at(key(a))<order.at(key(b));});
-    else std::stable_sort(found.begin(),found.end(),[](const Entity& a,const Entity& b) {return a.distance<b.distance;});
+    nav::orderEntities(found,s.entities,key,s.selection.valid);nav::keepVerdicts(found,s.entities,key);
     s.entities=std::move(found);s.selected=0;
-    s.meshContext=geometry;requestOwnedReachability(observation,s.entities);
-    const auto rows=filtered();bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
-    if(s.selection.valid && !kept) {s.selection={};clearNavRoute();}
+    s.meshContext=geometry;requestOwnedReachability(observation,s.entities,true);
+    auto rows=filtered();bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
+    const bool lostSelection=s.selection.valid && !kept;
+    if(lostSelection) {
+        s.selection={};nav::orderEntities(s.entities,{},key,false);requestOwnedReachability(observation,s.entities,true);rows=filtered();
+    }
     s.ready=true;
     const std::wstring pedestal=s.selected<rows.size() && rows[s.selected]->pushControl?instruction(*rows[s.selected]):std::wstring{};
-    updateOwnedNavAudio(observation,s.mesh,s.entities,header,pedestal);
+    const bool hadRoute=navRouteKnown();updateOwnedNavAudio(observation,s.mesh,s.entities,header,pedestal);
+    if(lostSelection) {
+        if(hadRoute) loseNavRoute(L"destination unavailable");
+        else speechq::emitOwned(L"Target lost: destination unavailable",header,"navigation-target-lost",false,false);
+    }
     if(observation.pedestal.armed && observation.control) for(const auto& e:s.entities) if(e.worker==observation.pedestal.worker && e.id==observation.pedestal.id && e.pushControl==observation.pedestal.control) {nav::submitNavigationIntent(observation,e,nav::Intent::UpdatePedestal,autoWalkInputRevision(),nav::navigationIntentRevision());break;}
     processPending();
 }
@@ -291,7 +333,14 @@ void maintenance() {
     if(!storage.ready()) return;auto& s=owned();if(s.revision && s.revision!=nav::navigationObservationRevision()) {resetOwned(generation());return;}
     if(s.ready && applyOwnedReachability(s.observation,s.entities)) {
         const auto rows=filtered();s.selected=0;bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
-        if(s.selection.valid && !kept) {s.selection={};clearNavRoute();}
+        if(s.selection.valid && !kept) {
+            // Keep the list order so the verdict stays matched to its row, and move to the neighbour in the direction of travel.
+            std::wstring name;for(const auto& e:s.entities) if(key(e)==s.selection) {name=label(e);break;}
+            const int next=nav::rowAfterLoss(s.entities,s.selection,key,visible,s.step);s.selection={};
+            if(navRouteKnown()) loseNavRoute(L"destination unreachable");
+            else speechq::emitOwned(name.empty()?L"Target lost: destination unreachable":name+L" is unreachable",s.header,"navigation-target-lost",false,false);
+            if(next>=0) {const Pending event{s.header,{},{}};s.selected=static_cast<unsigned>(next);announce(event,false);lockSelected();beacon(event);}
+        }
     }
 }
 void enqueue(nav::Query query,bool shift=false,bool cancel=false) {
@@ -300,6 +349,8 @@ void enqueue(nav::Query query,bool shift=false,bool cancel=false) {
 }
 void pathKey(bool shift) {
     if(inBattle()) output(L"Field navigation is unavailable in battle",true,"navigation-path");
+    // Backslash again during a walk stops it rather than re-reading and restarting the route.
+    else if(!shift && toggleAutoWalkOff()) return;
     else if(!interested.load(std::memory_order_acquire) && !nav::navigationDataPending()) output(L"No entity selected",true,"navigation-path");
     else enqueue(nav::Query::Path,shift,true);
 }
@@ -311,6 +362,7 @@ void capture(Event&) {
     const bool now=airshipNavigationUiActive();
     setFieldAudioAllowed(!now);
     if(now) return;
+    captureNavCamera();
     nav::captureRequestedNavigationScene(true);captureWallCues();nav::dispatchNavigationIntents();
 }
 bool observationNeeded() {return interested.load(std::memory_order_acquire) || nav::navigationDataPending() || navRouteKnown();}
@@ -340,15 +392,15 @@ void refreshNavigation() {enqueue(nav::Query::Refresh);}
 void refreshSelectedBeacon() {enqueue(nav::Query::Beacon);}
 bool requestNavigationAssistRoute() {return nav::submitNavigationQuery(nav::Query::AssistRoute);}
 void requestNavigationAssistInstruction() {enqueue(nav::Query::AssistInstruction);}
-void resetNavigation() {nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();stopAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
+void resetNavigation() {nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
 void prepareNavigationScriptRetirement();void prepareNavRetirement();
 void installNavigation() {
-    storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();installPedestal();nav::startNavigationIntents();
+    storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();setAutoWalkResume(resumeAutoWalk);installPedestal();nav::startNavigationIntents();
     nav::startNavigationObservations(receiveQuery,receiveScene,resetOwned);speechq::registerDomainMaintenance(12,maintenance);onReachabilityPrepared(speechq::notifyPreparation);
     hotkey('U',[](bool shift) {enqueue(nav::Query::Filter,shift);});hotkey('G',gilKey);hotkey('M',[](bool) {announceCurrentMap();});
     hook(map_transition::EnableControl,nullptr,actorEvent);hook(0x225930,nullptr,capture);
     for(unsigned rva:{0x425010u,0x42b500u,0x426770u}) hook(rva,nullptr,actorEvent);
-    hook(0x382730,nullptr,[](Event&) {resetBattle();if(interested.load()) nav::requestNavigationScene();});
+    hook(0x382730,nullptr,[](Event&) {setFieldAudioAllowed(!inBattle() && !airshipNavigationUiActive());resetBattle();if(interested.load()) nav::requestNavigationScene();});
     hook(0x43e9e0,wallBefore,wallAfter);hook(0x43d3b0,movementBefore,movementAfter);hook(0x45bf70,interactionBefore,interactionAfter);hook(0x45c140,interactionBefore,interactionAfter);
     hook(0x43ea00,nullptr,collisionChanged);
     hotkey(VK_OEM_3,[](bool shift) {enqueue(nav::Query::Scan,shift,true);});hotkey(VK_OEM_6,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Next,shift,true);});hotkey(VK_OEM_4,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Previous,shift,true);});

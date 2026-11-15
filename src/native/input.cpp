@@ -73,6 +73,7 @@ void received(Event& e) {
     // owner of the original press, so a release whose press reached the game
     // reaches it too, even after a menu has opened while the key was held.
     bool captured=swallowedMessages[vk];
+    if(down && !repeat && !keyboard) autoWalkReaderModifier(((GetKeyState(VK_INSERT) | GetKeyState(VK_CAPITAL) | GetKeyState(VK_NUMPAD0)) & 0x8000) != 0);
     if(down && !repeat) captured=keyboard?capturesKey(vk,shift,control):consumeKey(vk,shift,control);
     if(!up) swallowedMessages[vk]=captured;
     else swallowedMessages[vk]=false;
