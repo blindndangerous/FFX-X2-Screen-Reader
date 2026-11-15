@@ -294,6 +294,18 @@ int main() {
     check(frame()==0x1000,"owned Besaid control disable preserves held movement");
     check(frame(0)==0,"release clears injection during original push animation");
     restore(); check(frame(0x20)==0x20,"released assistance does not resume or hijack a later ordinary Confirm");
+    // Auto walk can touch the pedestal before the push key is held. The
+    // original push script then disables control by itself at 12AB. That
+    // contact must not move the pedestal or end the assistance: a later
+    // held push still has to work.
+    target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1; ready(target);
+    check(frame(0)==0,"Besaid push assistance waits for the push key");
+    write<uint16_t>(address(0xf27080),0x4000); disable(7,4,0x12ab);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0,"contact push without the push key reads no direction");
+    restore(); frame(0); frame();
+    disable(7,4,0x12ab);
+    check(frame()==0x1000,"assistance stays armed after a contact push without the push key");
+    check(frame(0)==0,"release after the later push clears injection"); restore();
     target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1;
     position(playerActor(),{target.position.x,target.position.y,target.position.z+4}); ready(target);
     check(!inInteractionZone(target.zone,playerPosition()) && frame()==0 && walking && distanceXZ(route.back(),target.position)>4.1,
