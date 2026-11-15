@@ -57,13 +57,16 @@ void djoseGuideRouteFixture() {
         {"take left circuit sphere",{{0x0c000094,1},{0x0c00009c,0}},8},
         {"insert charging recess 2 powers charger",{{0x0c00009a,1},{0x0c000094,0},{0x0c0000a1,1}},9},
         {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},0},
-        {"reset tile returns pedestal",{},0},
+        // Reset tile 67 writes only 0xd9=0, which is already 0 here, so the
+        // guide cannot see steps 10 and 11. The charged door recess (0x9b=3)
+        // stays set until step 19 and recovers the route.
+        {"reset tile returns pedestal",{{0x0c0000d9,0}},0},
         {"take charged sphere from east face",{{0x0c000094,3},{0x0c00009d,0}},0},
-        {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},0},
-        {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},0},
-        {"insert west pedestal socket",{{0x0c00009e,1},{0x0c000094,0}},0},
-        {"take charging recess 2",{{0x0c000094,1},{0x0c00009a,0}},0},
-        {"insert east pedestal socket",{{0x0c00009d,1},{0x0c000094,0}},0},
+        {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},13},
+        {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
+        {"insert west pedestal socket",{{0x0c00009e,1},{0x0c000094,0}},15},
+        {"take charging recess 2",{{0x0c000094,1},{0x0c00009a,0}},16},
+        {"insert east pedestal socket",{{0x0c00009d,1},{0x0c000094,0}},17},
         {"push pedestal into gap",{{0x0c0000d9,1}},18},
         {"press gap switch",{{0x0c0000da,1}},19},
         {"take charged door sphere",{{0x0c000094,3},{0x0c00009b,0}},20},
@@ -84,10 +87,49 @@ void djoseGuideRouteFixture() {
     walkGuideRoute("djyt0600",{{"late start after hidden glyph",{{0x0000028e,1},{0x0c000095,1},{0x0c000096,1},{0x0c00009c,3},{0x0c00009f,10},
         {0x0c0000a1,2},{0x0c0000da,1},{0x0c0000db,1},{0x0c0000e5,2}},27}});
     walkGuideRoute("djyt0600",{{"late start after door",{{0x0000028e,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009f,10},{0x0c000094,1}},6}});
+    // Taking from the wrong charging recess first does not count as step 13:
+    // that step waits for recess 1 (0x99) to be emptied.
+    walkGuideRoute("djyt0600",{
+        {"start after the charged door recess",{{0x0000028e,1},{0x0c00009b,3},{0x0c000099,1},{0x0c00009a,1},{0x0c0000a1,2}},13},
+        {"take charging recess 2 first",{{0x0c000094,1},{0x0c00009a,0}},13},
+        {"put it back",{{0x0c00009a,1},{0x0c000094,0}},13},
+        {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
+    });
     // Removing a sphere from a checked socket never moves the guide backward.
     walkGuideRoute("djyt0600",{
         {"insert door recesses",{{0x0c000097,1},{0x0c000098,1},{0x0000028e,1}},5},
         {"take a door sphere back",{{0x0c000097,0},{0x0c000094,1}},6},
+    });
+}
+void besaidGuideRouteFixture() {
+    // bsyt0100: 0xac carried sphere (1 Besaid, 2 Glyph, 3 Destruction);
+    // 0xb0 Glyph source (w39), 0xb4 door recess (w40, w41), 0xb8 hidden
+    // recess (w42), 0xbc Destruction source (w43), 0xc0 Besaid recess (w46)
+    // and 0xcc pedestal socket (w44). The one-shot flags are 0xec entry
+    // glyph, 0xd4 door glyph, 0xd8 door insert, 0xdc hidden insert, 0xe0
+    // pedestal insert, 0xe4 wall symbols and 0xe8 Destruction insert.
+    walkGuideRoute("bsyt0100",{
+        {"enter the trial",{{0x5c0000b0,2},{0x5c0000bc,3},{0x5c0000c0,1}},1},
+        {"touch entry glyph",{{0x5c0000ec,1}},2},
+        {"touch door glyph",{{0x5c0000d4,1}},3},
+        {"take Glyph Sphere",{{0x5c0000ac,2},{0x5c0000b0,0}},4},
+        {"insert door recess",{{0x5c0000ac,0},{0x5c0000b4,2},{0x5c0000d8,1}},5},
+        {"retrieve Glyph from door recess",{{0x5c0000ac,2},{0x5c0000b4,0}},6},
+        {"insert hidden recess",{{0x5c0000ac,0},{0x5c0000b8,2},{0x5c0000dc,1}},7},
+        {"touch wall symbols",{{0x5c0000e4,1}},8},
+        {"take Besaid Sphere",{{0x5c0000ac,1},{0x5c0000c0,0}},9},
+        {"insert pedestal",{{0x5c0000e0,1},{0x5c0000ac,0},{0x5c0000cc,1}},10},
+        {"take Destruction Sphere",{{0x5c0000ac,3},{0x5c0000bc,0}},11},
+        {"insert Destruction in Besaid recess",{{0x5c0000ac,0},{0x5c0000c0,3},{0x5c0000e8,1}},12},
+        {"open Destruction treasure",{{0x01000a70,1}},13},
+    });
+    walkGuideRoute("bsyt0100",{{"late start after treasure",{{0x5c0000ec,1},{0x5c0000e8,1},{0x01000a70,1}},13}});
+    // w44 writes 0xac=1 and 0xcc=0 when the Besaid Sphere is taken back out
+    // of the pedestal, and 0xac=0 and 0xcc=1 when it is put back.
+    walkGuideRoute("bsyt0100",{
+        {"enter after the wall symbols",{{0x5c0000ec,1},{0x5c0000d4,1},{0x5c0000d8,1},{0x5c0000dc,1},{0x5c0000e4,1},{0x5c0000ac,1},{0x5c0000c0,0}},9},
+        {"insert pedestal",{{0x5c0000e0,1},{0x5c0000ac,0},{0x5c0000cc,1}},10},
+        {"take back and put back pedestal sphere",{{0x5c0000ac,1},{0x5c0000cc,0},{0x5c0000ac,0},{0x5c0000cc,1}},10},
     });
 }
 void kilikaGuideRouteFixture() {
@@ -189,7 +231,22 @@ void macalaniaGuideRouteFixture() {
 // Bevelle Spheres, 4 Glyph, 5 Destruction. Place 1 is carried; 4 w30, 5 w31,
 // 6 w32, 7 w33, 8 w34, 9 w36, 10 w37, 11 w35, 2 the rail pedestal.
 GuideWrite bevelleSphere(unsigned sphere,unsigned place,int value) {return {0x0d000032,value,12*sphere+place,0xc0048};}
+// The solver contract binds each recess worker to its Destruction Sphere
+// element 12*5+place, so it names the worker that owns each place.
+unsigned bevellePlaceWorker(unsigned place) {
+    for(const auto& contract:puzzleContracts) if(!std::strcmp(contract.script,"bvyt1100"))
+        for(const auto& recess:contract.interactions) if(recess.sphere.element==60+place) return recess.worker;
+    check(false,"Bevelle recess place has a worker");return 0;
+}
 void bevelleGuideRouteFixture() {
+    // The Glyph Sphere starts in place 7, and w33 writes 0x26 when the
+    // Destruction Sphere goes in. The lower Bevelle Sphere goes into the empty
+    // place 8 (element 44).
+    const auto& bevelle=guideRoute("bvyt1100");
+    check(bevelle.steps[4].worker==bevellePlaceWorker(8),"Bevelle lower power recess step targets place 8");
+    check(bevelle.steps[5].worker==bevellePlaceWorker(7),"Bevelle Glyph Sphere source step targets place 7");
+    check(bevelle.steps[8].worker==bevellePlaceWorker(7),"Bevelle Destruction Sphere destination step targets place 7");
+    check(bevelle.steps[9].worker==bevellePlaceWorker(8),"Bevelle lower power recess retrieval step targets place 8");
     // 0x08 rail pedestal node (1 = pushed onto the entrance track); 0x25
     // Bevelle Sphere in w31; 0x26 Destruction Sphere in w33; 0x29 sphere in
     // w37; 0x2a second chest opened.
@@ -207,16 +264,23 @@ void bevelleGuideRouteFixture() {
         {"insert Destruction Sphere in former Glyph recess",{bevelleSphere(5,1,0),bevelleSphere(5,7,1),{0x0c000026,1}},10},
         {"retrieve lower power recess sphere",{bevelleSphere(3,8,0),bevelleSphere(3,1,1)},11},
         {"open Destruction treasure",{{0x01000a70,16}},12},
-        {"insert upper platform recess",{bevelleSphere(3,1,0),bevelleSphere(3,10,1),{0x0c000029,1}},0},
-        {"push pedestal to upper platform",{{0x0c000008,66}},0},
-        {"open second chest",{{0x0c00002a,1}},15},
+        {"insert upper platform recess",{bevelleSphere(3,1,0),bevelleSphere(3,10,1),{0x0c000029,1}},13},
+        // w53 is the push zone for the emptied pedestal; it alone writes
+        // 0x09=15. w15 then rides to 0x08=66, gives the second chest (w17
+        // entry 7) and sets 0x2a, and only then rests the pedestal at 0x09=17.
+        {"push pedestal to upper platform",{{0x0c000009,15}},14},
+        {"ride reaches the second chest",{{0x0c000008,66}},14},
+        {"ride opens second chest",{{0x0c00002a,1},{0x0c000009,17}},15},
     });
     walkGuideRoute("bvyt1100",{{"late start after Glyph placed",{{0x0c000025,1},bevelleSphere(4,11,1)},8}});
     walkGuideRoute("bvyt1100",{{"late start after Destruction placed",{{0x0c000025,1},bevelleSphere(4,11,1),{0x0c000026,1}},10}});
-    // Taking the sphere back out of w31 keeps the one-shot 0x25 checkpoint.
+    // Taking a Bevelle Sphere back out of w31 clears 0x25 (w31 writes
+    // 0x25=0 at 1685a, 169b0 and 16b06); putting it back sets it again.
+    // After the put-back the guide must expect step 4 again.
     walkGuideRoute("bvyt1100",{
-        {"insert upper rail power recess",{{0x0c000025,1}},4},
-        {"take it back",{bevelleSphere(2,5,0),bevelleSphere(2,1,1)},4},
+        {"insert upper rail power recess",{bevelleSphere(2,1,0),bevelleSphere(2,5,1),{0x0c000025,1}},4},
+        {"take it back and put it in again",{bevelleSphere(2,5,0),bevelleSphere(2,1,1),{0x0c000025,0},
+            bevelleSphere(2,1,0),bevelleSphere(2,5,1),{0x0c000025,1}},4},
     });
 }
 void zanarkandGuideRouteFixture() {
@@ -267,6 +331,7 @@ void zanarkandGuideRouteFixture() {
 }
 void puzzleGuideRouteFixtures() {
     djoseGuideRouteFixture();
+    besaidGuideRouteFixture();
     kilikaGuideRouteFixture();
     macalaniaGuideRouteFixture();
     bevelleGuideRouteFixture();
