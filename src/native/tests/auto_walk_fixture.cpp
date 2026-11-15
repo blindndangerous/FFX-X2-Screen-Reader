@@ -376,6 +376,15 @@ int main() {
     check(resumes==1,"battle commands and confirming battle results do not cancel the resume");
     battleStop();battle=false;frames(1);std::array<uint8_t,256> walk{};walk[0xc8]=0x80;autoWalkKeyboard(walk.data());frames(15);
     check(!resumes,"walking after the battle cancels the resume");
+    // Input in the first frame after the battle, before auto walk has seen it end, counts too.
+    battleStop();battle=false;walk={};walk[0xc8]=0x80;autoWalkKeyboard(walk.data());walk={};autoWalkKeyboard(walk.data());frames(15);
+    check(!resumes,"walking straight after the battle ends cancels the resume");
+    battleStop();battle=false;autoWalkPlayerInput(VK_UP);frames(15);
+    check(!resumes,"a window-message arrow straight after the battle cancels the resume");
+    battleStop();battle=false;stopAutoWalk();frames(15);
+    check(!resumes,"a navigation command straight after the battle cancels the resume");
+    battleStop();walk={};walk[0xc8]=0x80;autoWalkKeyboard(walk.data());walk={};autoWalkKeyboard(walk.data());stopAutoWalk();battle=false;frames(15);
+    check(resumes==1,"input and route teardown while the battle lasts keep the resume");
     battleStop();battle=false;frames(1);pad::State stick;stick.ly=20000;autoWalkController(stick);frames(15);
     check(!resumes,"moving the stick after the battle cancels the resume");
     battleStop();battle=false;frames(1);stopAutoWalk();frames(15);
