@@ -7,12 +7,14 @@
 #include <vector>
 
 namespace {
-int failures=0;
+int checks=0,failures=0;
 void expect(bool ok,const char* what) {
+    ++checks;
     if(!ok) { std::fprintf(stderr,"FAIL: %s\n",what); ++failures; }
 }
 void expectText(const std::vector<unsigned char>& bytes,const ffx::ffx2text::Charset& charset,
                 const std::string& expected,const char* what) {
+    ++checks;
     const auto actual=ffx::ffx2text::decode(bytes.data(),bytes.size(),charset);
     if(actual!=expected) {
         std::fprintf(stderr,"FAIL: %s: got \"%s\", expected \"%s\"\n",what,actual.c_str(),expected.c_str());
@@ -96,6 +98,6 @@ int main() {
     }
 
     if(failures) { std::fprintf(stderr,"FFX-2 text fixture: %d failure(s)\n",failures); return 1; }
-    std::puts("FFX-2 text fixture passed: synthetic charset, controls, pages, bounds.");
+    std::printf("FFX-2 text fixture: %d checks, %d failures.\n",checks,failures);
     return 0;
 }

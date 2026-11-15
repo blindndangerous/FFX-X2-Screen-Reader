@@ -29,21 +29,39 @@ bool readState(TopMenuState& state) {
     return true;
 }
 
+// Copy a terminated encoded string without reading past its terminator. Control
+// parameters may contain NUL; this copies their widths without decoding text.
+unsigned captureHelp(uintptr_t source,std::array<std::uint8_t,256>& bytes) {
+    if(!source || source>UINTPTR_MAX-bytes.size()) return 0;
+    unsigned at=0;
+    while(at<bytes.size()) {
+        std::uint8_t byte=0;
+        if(!copy(source+at,&byte,1)) return 0;
+        bytes[at++]=byte;
+        if(!byte) return at;
+        unsigned parameters=byte>=6 && byte<=0x2f?1u:0u;
+        if(byte==4) {
+            if(at==bytes.size() || !copy(source+at,&byte,1)) return 0;
+            bytes[at++]=byte;parameters=byte<=0x2f?1u:0u;
+        }
+        if(parameters) {
+            if(at==bytes.size() || !copy(source+at,bytes.data()+at,1)) return 0;
+            ++at;
+        }
+    }
+    return 0; // Refuse an incomplete string; retain the known item label.
+}
+
 // The loaded ffx2sjistbl_us.bin. Copy on its native owner; parse only the
 // owned snapshot on preparation. Same-address reloads cannot retain old glyphs.
 void captureText(ffx2menu::MenuSnapshot& snapshot) {
     const auto source=read<uintptr_t>(ffx2Address(Ffx2Only::Charset),0);
-    // The buffer is the file rounded up to 16 bytes plus one NUL; the last
-    // copy sizes keep a short buffer near the end of a mapping readable.
-    if(source) for(const unsigned size:{1024u,512u,336u}) {
-        if(!copy(source,snapshot.charset.data(),size)) continue;
-        snapshot.charsetBytes=size;break;
-    }
+    // The buffer is the file rounded up to 16 bytes plus one NUL. Capture
+    // only the known file extent, never its uninitialised padding or neighbours.
+    if(source && copy(source,snapshot.charset.data(),snapshot.charset.size()))
+        snapshot.charsetBytes=static_cast<unsigned>(snapshot.charset.size());
     const auto text=read<uintptr_t>(ffx2Address(Ffx2Only::HelpText),0);
-    if(text) for(const unsigned size:{256u,96u}) {
-        if(!copy(text,snapshot.help.data(),size)) continue;
-        snapshot.helpBytes=size;break;
-    }
+    snapshot.helpBytes=captureHelp(text,snapshot.help);
 }
 
 void prepareMenu(const speechq::Header& header,const std::wstring& owned) {

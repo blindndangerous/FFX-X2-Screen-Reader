@@ -3,11 +3,12 @@
 #include <cstdint>
 
 namespace ffx::ffx2menu {
-// One native observation. No game pointer survives capture. These are copy
-// ceilings, not inferred allocation sizes; a failed copy leaves the label only.
+// Static archive evidence: the pinned English charset file is 310 bytes.
+// No game pointer survives capture; a failed copy leaves the label only.
+constexpr unsigned EnglishCharsetBytes=310;
 struct MenuSnapshot {
     unsigned id=0,charsetBytes=0,helpBytes=0;
-    std::array<std::uint8_t,1024> charset;
+    std::array<std::uint8_t,EnglishCharsetBytes> charset;
     std::array<std::uint8_t,256> help;
 };
 }
