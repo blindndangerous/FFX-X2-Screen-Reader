@@ -41,16 +41,55 @@ int main() {
         return 1;
     }
     if(std::string(ffx::nativeProfileName(ffx::NativeProfile::Ffx2))!="FFX-2") return 1;
-    // FFX-2 has no verified addresses yet. Every FFX hook, probe and data RVA
-    // must be refused there, including the reference pass-through.
+    // FFX-2 resolves only the input addresses whose whole function body was
+    // matched against FFX (Docs/ffx2-addresses.md). Every other FFX hook,
+    // probe and data RVA must be refused there, including the reference
+    // pass-through.
     ffx::nativeProfile=ffx::NativeProfile::Ffx2;
-    for(const unsigned rva:{0x46fed0u,0x5093b0u,0x471d10u,0x4b6260u,0x4e2e20u,0x225930u,0x1fc44e4u}) {
+    const struct {unsigned ffx,ffx2;} verified[]={
+        {0x225930u,0x6b50a0u},{0x22d770u,0x6bcea0u},{0x22db80u,0x6bd2b0u},{0x471d10u,0x32ce30u}};
+    for(const auto& pair:verified) {
+        unsigned resolved=0;
+        try { resolved=ffx::profileRva(pair.ffx); } catch(const std::out_of_range&) {}
+        if(resolved!=pair.ffx2) {
+            std::fprintf(stderr, "Verified FFX-2 RVA for 0x%x resolved to 0x%x, expected 0x%x.\n", pair.ffx, resolved, pair.ffx2);
+            return 1;
+        }
+    }
+    if(ffx::profileRva(0)!=0) {
+        std::fprintf(stderr, "The FFX-2 image base no longer resolves.\n");
+        return 1;
+    }
+    for(const unsigned rva:{0x46fed0u,0x5093b0u,0x4b6260u,0x4e2e20u,0x376220u,0x22d700u,0x22dd50u,0x48dfe0u,0xd2a8e0u,0x1fc44e4u}) {
         if(!refusesFfxAddress(rva)) {
-            std::fprintf(stderr, "FFX RVA 0x%x resolved under the FFX-2 profile.\n", rva);
+            std::fprintf(stderr, "Unverified FFX RVA 0x%x resolved under the FFX-2 profile.\n", rva);
+            return 1;
+        }
+    }
+    if(ffx::resourceScopeHook(0x46fed0u) || ffx::resourceScopeHook(0x5093b0u) || ffx::resourceScopeHook(0x48dfe0u) ||
+       ffx::gameThreadProbe()!=0x225930u) {
+        std::fprintf(stderr, "FFX-2 kept an FFX resource scope or lost the game-thread probe.\n");
+        return 1;
+    }
+    // FFX tables must not change. Reference passes every RVA through; the
+    // installed FFX.exe keeps its static pairs (probe and DirectInput RVAs are
+    // signature extensions there, resolved at runtime).
+    ffx::nativeProfile=ffx::NativeProfile::Reference;
+    for(const unsigned rva:{0x225930u,0x22d770u,0x22db80u,0x471d10u,0x46fed0u}) if(ffx::profileRva(rva)!=rva) return 1;
+    ffx::nativeProfile=ffx::NativeProfile::Installed;
+    if(ffx::profileRva(0x471d10u)!=0x471d70u || ffx::profileRva(0x46fed0u)!=0x46ff40u) {
+        std::fprintf(stderr, "The installed FFX address table changed.\n");
+        return 1;
+    }
+    for(const auto profile:{ffx::NativeProfile::Reference,ffx::NativeProfile::Installed,ffx::NativeProfile::MovieCaptions}) {
+        ffx::nativeProfile=profile;
+        if(!ffx::resourceScopeHook(0x46fed0u) || !ffx::resourceScopeHook(0x5093b0u) || !ffx::resourceScopeHook(0x48dfe0u) ||
+           ffx::resourceScopeHook(0x225930u) || ffx::gameThreadProbe()!=0x225930u) {
+            std::fprintf(stderr, "An FFX resource scope or the game-thread probe changed for profile %s.\n", ffx::nativeProfileName(profile));
             return 1;
         }
     }
     ffx::nativeProfile=ffx::NativeProfile::Reference;
-    std::puts("Native executable hash guard passed: unsupported fixture refused, FFX-2 selected without FFX addresses.");
+    std::puts("Native executable hash guard passed: unsupported fixture refused, FFX-2 selected with only verified input addresses.");
     return 0;
 }

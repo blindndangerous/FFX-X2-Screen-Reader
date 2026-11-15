@@ -1,5 +1,6 @@
 #include "events.hpp"
 #include "map_transition.hpp"
+#include "profile.hpp"
 #include "native_image.hpp"
 #include "resource_reset.hpp"
 #include "hook_calls.hpp"
@@ -36,7 +37,7 @@ struct NativeErrorState {
     ~NativeErrorState() { SetLastError(value); }
 };
 bool failed = false;
-bool resourceCall(unsigned rva) { return rva==0x46fed0 || rva==0x5093b0 || rva==map_transition::Initialize; }
+bool resourceCall(unsigned rva) { return resourceScopeHook(rva); }
 
 void dispatch(Handler fn, Event& event) {
     if (!fn || (nativeResourceLoading() && !resourceCall(event.rva) && !event.captureOnly)) return;
@@ -99,7 +100,7 @@ extern "C" void __cdecl enterBridge(uintptr_t* r) {
     Hook* h = reinterpret_cast<Hook*>(r[9]);
     r[9] = h->original;
     if (inReader) return;
-    if(h->rva==0x225930) observeGameThread();
+    if(h->rva==gameThreadProbe()) observeGameThread();
     // User32/DirectInput methods are process-wide. SDL and other native
     // workers can enter them while the input owner waits inside a callback.
     // Reject foreign producers before acquiring the shared reader lock.
