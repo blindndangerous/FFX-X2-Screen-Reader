@@ -74,6 +74,27 @@ int main() {
     expect(!parseCharset(overlong,sizeof overlong,bad),"overlong encoding refused");
     expect(!parseCharset(nullptr,0,bad),"empty table refused");
 
+    // The game's loaded copy (0x111120) ends with a NUL after the file padded
+    // to 16 bytes; the padding bytes are not initialised. parseLoadedCharset
+    // keeps entries up to the first NUL or malformed byte, and refuses a
+    // table too short to hold the ASCII range.
+    {
+        auto loaded=tableBytes;
+        loaded.push_back(0x00); loaded.push_back(0x41);
+        Charset game;
+        expect(parseLoadedCharset(loaded.data(),loaded.size(),game) && game.glyphs.size()==0xd1,
+               "loaded table stops at NUL");
+        auto padded=tableBytes;
+        padded.push_back(0xff); padded.push_back(0x41); padded.push_back(0x00);
+        expect(parseLoadedCharset(padded.data(),padded.size(),game) && game.glyphs.size()==0xd1,
+               "loaded table stops at uninitialised padding");
+        expect(parseLoadedCharset(tableBytes.data(),tableBytes.size(),game) && game.glyphs.size()==0xd1,
+               "loaded table stops at the capacity");
+        const unsigned char tiny[]={0x30,0x31,0x32,0x00};
+        expect(!parseLoadedCharset(tiny,sizeof tiny,game) && game.glyphs.empty(),"short loaded table refused");
+        expect(!parseLoadedCharset(nullptr,16,game),"null loaded table refused");
+    }
+
     if(failures) { std::fprintf(stderr,"FFX-2 text fixture: %d failure(s)\n",failures); return 1; }
     std::puts("FFX-2 text fixture passed: synthetic charset, controls, pages, bounds.");
     return 0;
