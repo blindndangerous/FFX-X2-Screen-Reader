@@ -77,8 +77,8 @@ bool producer(uintptr_t worker,unsigned local,unsigned entry) {
     return worker && read<uintptr_t>(worker+4)==active.script.chunk && read<uint16_t>(worker+0x2e,0xffff)==local &&
         read<uint16_t>(read<uintptr_t>(worker+0x90)+8,0xffff)==entry;
 }
-bool ownsDisable(Event& event) {
-    if(!armed || !active.held || active.epoch!=generation() || event.parentRva!=0x464180 || interpreterEpoch!=generation() ||
+bool ownsDisable(Event& event,bool requireHeld=true) {
+    if(!armed || (requireHeld && !active.held) || active.epoch!=generation() || event.parentRva!=0x464180 || interpreterEpoch!=generation() ||
         !producer(interpreter,active.plan.producer,active.plan.entry)) return false;
     const auto at=pc(interpreter);
     switch(active.target.pushControl) {
@@ -126,6 +126,13 @@ void disabled(Event& e) {
         if(active.target.pushControl==7 && pc(interpreter)==0x1c407) {
             active.committed=true; if(published) suppress(published); published=0;
         }
+    }
+    else if(!active.held && !active.owned && ownsDisable(e,false)) {
+        // Auto walk touched the pedestal before the push key was held, and the
+        // original push script took control by itself. Give it no direction so
+        // the pedestal stays put, and stay armed for the real held push.
+        stopAutoWalk(); suppress(pedestalInputMask(0xf000));
+        recordLog("pedestal contact before the push key: waiting for it");
     }
     else stop("unrelated player-control disable");
 }
