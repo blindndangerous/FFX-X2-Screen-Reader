@@ -58,6 +58,8 @@ bool namingContext=false; unsigned nameReads=0;
 bool namingReadbackAvailable() {return namingContext;}
 bool readEnteredName() { if(!namingContext) return false; ++nameReads; return true; }
 void repeatSpeech(bool) { ++repeats; }
+unsigned fixtureGameScan=0;
+bool gameKeyboardUsesScan(unsigned scan) { return scan && scan==fixtureGameScan; }
 void drainController() { ++drains; }
 void pauseNavAudio() { navPaused=true; }
 Point playerPosition() { return {5,0,5}; }
@@ -192,11 +194,22 @@ int main() {
     fixtureEsc=true;check(contextHelpForTest().find(L"Menu keys: I")==0,"Shift+Slash lists Escape menu keys");fixtureEsc=false;
     scene=6;check(contextHelpForTest().find(L"Menu keys: I")==0,"Shift+Slash lists native menu keys");scene=0;
     fixtureBattle=true;check(contextHelpForTest().find(L"Battle keys: T")==0,"Shift+Slash lists battle keys");fixtureBattle=false;
+    {
+        auto listsL=[](const wchar_t* phrase){ return contextHelpForTest().find(phrase)!=std::wstring::npos; };
+        bool all=listsL(L"L repeats last speech");
+        trialPresent=true;all=all&&listsL(L"L last speech");trialPresent=false;
+        fixtureGrid=true;all=all&&listsL(L"L last speech");fixtureGrid=false;
+        fixtureEsc=true;all=all&&listsL(L"L last speech");fixtureEsc=false;
+        scene=6;all=all&&listsL(L"L last speech");scene=0;
+        fixtureBattle=true;all=all&&listsL(L"L last speech");fixtureBattle=false;
+        check(all,"Shift+Slash lists L in every context where L repeats speech");
+    }
     pressForTest(VK_F8,false);
     check(modMenuActive() && captured,"spoken menu captures game narration");
     check(said.back()==L"Accessibility mod menu. Speech: On, 1 of 6","main menu keeps Speech, Speech options and existing grouped submenus plus Close");
     menuKeyForTest(VK_OEM_2,true);
     check(said.back().find(L"Mod menu keys: Up and Down")==0 && modMenuActive(),"Shift+Slash inside the mod menu lists its keys");
+    check(said.back().find(L"last speech")==std::wstring::npos,"mod menu help leaves out L, which the menu does not route");
     menuKeyForTest(VK_F6); menuKeyForTest(VK_F7);
     check(!setting(Setting::Beacon) && !setting(Setting::AutoDetail),"toggles remain available inside settings");
     check(navPaused,"F6 inside settings keeps route audio paused");
@@ -480,6 +493,13 @@ int main() {
     check(repeats==beforeRepeat,"F11 is handed back on the ordinary field after leaving a trial");
     fixtureEsc=true;pressForTest(VK_F11,false);fixtureEsc=false;
     check(repeats==beforeRepeat+1,"F11 retains repeat in the native Escape menu");
+    check(keys.count('L')!=0,"L is registered as the repeat-last-speech key");
+    pressForTest('L',false);
+    check(repeats==beforeRepeat+2,"L repeats the last speech on the ordinary field");
+    fixtureEsc=true;pressForTest('L',false);fixtureEsc=false;
+    check(repeats==beforeRepeat+3,"L repeats the last speech in the native Escape menu");
+    fixtureGameScan=0x26;pressForTest('L',false);fixtureGameScan=0;
+    check(repeats==beforeRepeat+3,"L is handed back when a game keyboard action uses it");
     check(settingInfo(Setting::MenuIndex).initial==0 && settingInfo(Setting::AutoWalkPath).initial==0,"new accessibility defaults are off");
     pressForTest(VK_F8,false); selectRow(L"Miscellaneous, submenu"); menuKeyForTest(VK_RETURN);
     selectRow(L"Menu indexing:"); setSetting(Setting::MenuIndex,1); menuKeyForTest(VK_LEFT);
