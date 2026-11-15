@@ -1,6 +1,5 @@
 #include "ffx2_submenus.hpp"
 #include <algorithm>
-#include <cstring>
 namespace ffx::ffx2menu {
 namespace {
 unsigned word(const std::vector<std::uint8_t>& b,std::size_t at){return b[at]|(unsigned{b[at+1]}<<8);}
@@ -27,20 +26,24 @@ bool parseNativeSelection(NativeList kind,const std::vector<std::uint8_t>& windo
 bool parsePanelSelection(const std::vector<std::uint8_t>& panel,
     const std::vector<std::uint8_t>& ids,Selection& result) {
     result={};
-    if(panel.size()<0x20) return false;
+    if(panel.size()<0x20 || word(panel,0x18)!=0) return false;
     const unsigned cursor=word(panel,8),count=word(panel,0x1e);
     if(!count || count>=0x8000 || cursor>=count || ids.size()<count) return false;
     result={cursor,ids[cursor],true};return true;
 }
-bool parseConfigSelection(int cursor,const std::vector<std::uint8_t>& labels,
-    const std::vector<std::uint8_t>& values,const std::vector<std::uint8_t>& help,ConfigSelection& result) {
+bool parseGridSelection(const std::vector<std::uint8_t>& panel,
+    const std::vector<std::uint8_t>& nodes,GridSelection& result) {
     result={};
-    if(cursor<0 || cursor>=11) return false;
-    const auto at=static_cast<std::size_t>(cursor)*16;
-    if(labels.size()<at+16 || values.size()<at+16 || help.size()<at+16) return false;
-    result.index=static_cast<unsigned>(cursor);
-    std::memcpy(result.label.data(),labels.data()+at,16);
-    std::memcpy(result.value.data(),values.data()+at,16);
-    std::memcpy(result.help.data(),help.data()+at,16);return true;
+    if(panel.size()<0x20 || word(panel,0x18)!=2 || word(panel,0x1e)!=32) return false;
+    const unsigned node=word(panel,8),grid=word(panel,0xe);
+    if(node>=32 || grid>=0x8000 || grid>=nodes.size()/32) return false;
+    const unsigned id=nodes[grid*32+node];result={grid,node,id,id!=0};return true;
+}
+bool parseConfigRecord(int cursor,const std::vector<std::uint8_t>& record,ConfigRecordSelection& result) {
+    result={};
+    if(cursor<0 || cursor>=9 || record.size()<16) return false;
+    const unsigned count=word(record,4),value=word(record,12);
+    if(!count || count>3 || value>=count) return false;
+    result={static_cast<unsigned>(cursor),word(record,2),word(record,6+value*2),value,count};return true;
 }
 }

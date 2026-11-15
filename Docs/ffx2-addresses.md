@@ -376,20 +376,27 @@ synthetic parser test does not verify which live controller owns those bytes.
   `0x37783c`, `e9 0f e2 fe ff`, forwards to `0x365a50`. The final
   pointer is again `HelpText` RVA `0x12bd97c`.
 
-### Garment Grids. UNVERIFIED, controller binding incomplete
+### Garment Grids. UNVERIFIED
 
 - Route: top ID 3 dispatches slot 6 (`6a 06` at RVA `0x376276`).
   Module VA `0xd631bc`, update `0x37b550`, enters the legacy controller:
   RVA `0x37b586`, `e8 c5 75 e7 ff`, calls `0x1f2b50`; update RVA
   `0x37b59c`, `e8 3f 73 e7 ff`, calls `0x1f28e0`.
-- There are several panels, not one interchangeable menu window. Cursor
-  candidates include signed word RVA `0x16c9a68` (VA `0x1ac9a68`) and
+- There are several panels. The node cursor is signed word RVA
+  `0x16c9a68` (VA `0x1ac9a68`); a separate list/action cursor is
   signed word RVA `0x16c9b88` (VA `0x1ac9b88`). RVA `0x1f2961`,
   `0f bf 05 68 9a ac 01`, reads the first; RVA `0x1f2942`,
   `0f bf 05 88 9b ac 01`, reads the second. The node-edit callback reads
   panel `+8` (`0f b7 47 08` at `0x1f34fa`) and bounds it below 32
   (`66 83 f8 20` at `0x1f3507`). Do not confuse this node cursor with
   a selected Garment Grid ID or the available-dressphere list cursor.
+- The selected grid is signed word `+0xe` in the node panel at VA
+  `0x1ac9a60`, hence RVA `0x16c9a6e`. Constructor RVA `0x1e53ef`,
+  `0f b7 05 78 5d df 00`, reads the current grid at VA `0xdf5d78`;
+  `0x1e53f6`, `66 89 46 0e`, stores it in that field. Constructor
+  `0x1e53d2`, `c7 46 1c 20 00 20 00`, initializes a 32-node bound.
+  Update `0x1f095e`, `0f bf 43 0e`, reads the grid, and `0x1f0962`,
+  `a3 78 5d df 00`, synchronizes the current-grid global after transition.
 - A sorted byte ID list is at RVA `0x9f4fc4`, VA `0xdf4fc4`: getter
   `0x1ea7a6`, `0f b6 80 c4 4f df 00`. Its count is stored at RVA
   `0x9f502c` (`89 3d 2c 50 df 00` at `0x1ea7fa`). The builder at
@@ -408,30 +415,42 @@ synthetic parser test does not verify which live controller owns those bytes.
   RVA `0x1e5970`, `0f b7 40 04`, takes the help offset from a resolved
   record; `0x1e597b`, `e8 20 df 17 00`, calls the same help setter.
   Setter RVA `0x3638b6`, `a3 7c d9 6b 01`, stores the shared help pointer.
-- Remaining proof: bind the focused grid-list phase and its owned catalog
-  to the correct cursor. The offline panel parser requires an explicitly
-  supplied qualified ID list; it does not guess that binding.
+- The node parser selects byte `grid*32+node` from an owned node bank,
+  matching getter `0x1eb9e0`. Zero is empty: the native clearing helper
+  `0x1ebf30` writes zero, and the clear action at `0x1f38d1` tests for a
+  positive getter result. Main-story grid/node parsing has separate tests
+  from the available-dressphere list. Whether node-only focus refreshes the
+  shared help pointer remains UNVERIFIED; another pane's stale help is not usable.
+  It requires panel kind 2 (`66 89 46 18` at `0x1e5401`, following
+  `mov eax,2`) and the constructor's 32-node count, excluding other pane layouts.
 
-### Dresspheres. UNVERIFIED, focused list binding incomplete
+### Dresspheres. UNVERIFIED
 
 - Route: top ID 6 dispatches slot `0x11` (`6a 11` at RVA `0x3762d2`).
   Module VA `0xd636d0`, update `0x385650`, delegates to controller
   `0x75e480`: RVA `0x385671`, `e8 0a 8e 3d 00`.
-- The controller creates a legacy panel at VA `0x1ac9a60` with buffer
-  VA `0x1aca6b0`. RVA `0x75e608`, `68 b0 a6 ac 01`, and `0x75e60d`,
-  `68 60 9a ac 01`, pass them to constructor `0x1e5610`. This constructor
-  resets signed cursor `+8` (`66 89 46 08` at `0x1e561c`) and initializes
-  words `+0x1c/+0x1e` (`c7 46 1c 01 00 01 00` at `0x1e5632`).
-  Constructor `0x1e5550` independently writes a total to `+0x1e`
-  (`66 89 7e 1e` at `0x1e558b`). Those generic panel fields have parser
-  coverage, but their role as the player-focused Dressphere list is not proven.
-- The sorted byte ID list and record help helper above are candidates for
-  this controller family. The ownership/phase path from this panel to that
-  list and its displayed help remains incomplete. Do not hook this inference.
-- Globals VA `0x1a65b94`, `0x1a65b98` and `0x1a65ba0` are **not verified
-  cursor addresses**. For example `0x75e8e5`, `89 0d 94 5b a6 01`, and
+- The parent selection panel is VA `0x1ac9a00`: RVA `0x75e554`,
+  `68 00 9a ac 01`, passes it to constructor `0x1e5470`. The signed
+  cursor is `+8`, RVA `0x16c9a08`; constructor `0x1e54b6`,
+  `66 89 47 08`, resets it, and `0x1e54c6`, `66 89 77 1e`, stores
+  its count at `+0x1e`.
+  The parser requires parent kind 0 (`66 89 47 18` at `0x1e54f9`,
+  following `xor eax,eax`), excluding the node and text-display panes.
+- Selection callback `0x75e6b0` proves the list binding: `0x75e6b7`,
+  `0f bf 46 08`, reads the cursor; `0x75e6bc`, `e8 df c0 a8 ff`,
+  calls byte-ID getter `0x1ea7a0` over VA `0xdf4fc4`. Its return is the
+  selected dressphere ID, stored at RVA `0x1665ba0` (VA `0x1a65ba0`)
+  by `0x75e6c8`, `a3 a0 5b a6 01`.
+- Help: `0x75e6d9`, `e9 42 72 a8 ff`, forwards that ID to `0x1e5920`,
+  then to help setter `0x3638a0`. The help line is the shared pointer at
+  RVA `0x12bd97c`.
+- The child display at VA `0x1ac9a60` mirrors the parent cursor:
+  `0x75e6cd`, `66 89 0d 68 9a ac 01`. It is not the primary input owner.
+- Globals VA `0x1a65b94` and `0x1a65b98` are **not cursor addresses**.
+  For example `0x75e8e5`, `89 0d 94 5b a6 01`, and
   `0x75eb3f`, `ff 0d 94 5b a6 01`, change the first inside rendering.
-  A draw iterator is not evidence of player focus.
+  These control display animation. The selected ID at VA `0x1a65ba0`
+  is also distinct from the parent cursor.
 
 ### Config. UNVERIFIED
 
@@ -442,21 +461,34 @@ synthetic parser test does not verify which live controller owns those bytes.
   at `0x388d30`, `8b 15 38 5f 6d 01`, and stores at `0x388d40`,
   `89 15 38 5f 6d 01`; Down stores at `0x388d97` with the same bytes.
   The scroll origin at VA `0x16d5f30` is separate from this cursor.
-- Eleven label/value/help descriptors, 16 bytes each: RVAs `0x12d5f50`,
-  `0x12d6000`, `0x12d60b0` (VAs `0x16d5f50`, `0x16d6000`,
-  `0x16d60b0`). Builder `0x388ab0` visits eleven rows; updater
-  `0x389213`, `8d 87 50 5f 6d 01`, addresses labels;
-  `0x389221`, `8d 87 00 60 6d 01`, values; `0x38922f`,
-  `8d 87 b0 60 6d 01`, help. It advances by 16 (`83 c7 10` at
-  `0x38923b`) until `0xb0` bytes (`81 ff b0 00 00 00` at `0x389243`).
-- These descriptors are not encoded character arrays. Constructor
-  `0x373020` writes fields and state; `0x37304c`, `89 42 08`, clears
-  the `+8` dword. Do not dereference it as a ready string. Value choices
-  use a separate pointer table at VA `0x16d5f40` (`a1 40 5f 6d 01`
-  at `0x389833`); the chosen list's word `+4` is a bound
-  (`66 3b 48 04` at `0x389842`).
-- The parser selects exact owned descriptors by cursor. Resolving their
-  rendered text requires further native getter/reveal evidence before a hook.
+- Item list: pointer RVA `0x12d5f40` (VA `0x16d5f40`) selects a table of
+  setting-record pointers. Main-story mode zero takes the default branch:
+  `0x3889fd`, `c7 05 40 5f 6d 01 b4 38 d6 00`, selects table RVA
+  `0x9638b4` (VA `0xd638b4`). `0x388a07`, `c6 05 48 5f 6d 01 09`,
+  sets count RVA `0x12d5f48` to nine. The mode lookup uses the same
+  `0x392ee0` getter as the top-menu story guard. Other mode branches are
+  outside this main-story parser.
+- Record prefix: word `+2` is the setting label ID (`0f bf 40 02` at
+  `0x389b29`); word `+4` is the choice count; words `+6/+8/+0xa` are
+  choice label IDs (`0f bf 04 13` at `0x3897a2`, with EBX initially 6).
+  Signed word `+0xc` is the current choice (`0f bf 41 0c` at `0x3891bc`).
+  The parser copies only this 16-byte prefix and never follows record callbacks.
+- Label/value strings use resolver `0x379170`, which calls `0x21d840`
+  with space 1 (`e8 c1 46 ea ff` at `0x37917a`). Unlike `0x21d7c0`,
+  this resolver returns the name offset, word `+0` of the kernel record:
+  `0x21d881`, `0f b7 00`. Selection speech must use that distinction.
+- Help line: no separate ready help-string producer is confirmed for native
+  Config. The nine main-story setting records name Spherechanges, ATB Mode,
+  ATB Speed, Cursor, Battle Help, Vibration, Subtitles, Subtitle Names and
+  Guide Map. Their `menu_txt.bin` help fields contain the literal `UNUSED`.
+  That placeholder and the previous top-menu Config help are not submenu help.
+  Visible-help absence still needs gameplay confirmation; no address is invented.
+- Correction to the initial descriptor hypothesis: the 16-byte arrays at
+  RVAs `0x12d5f50`, `0x12d6000`, `0x12d60b0` are animation state,
+  not label/value/help text objects. Their consumer `0x372eb0` decrements
+  a delay (`fe c8` at `0x372ebd`) and advances an interpolation frame
+  (`66 89 47 08` at `0x372f35`). The old descriptor-copy parser was
+  removed after tracing this consumer; it did not identify text.
 
 ## What runs under FFX-2
 
