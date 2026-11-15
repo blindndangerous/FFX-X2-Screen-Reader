@@ -84,17 +84,60 @@ images directly. The Ghidra FFX2 project can confirm the same facts later.
 - Verified and in the table, but not hooked yet. The FFX handler on this
   address reads battle and scene state that FFX-2 does not have verified.
 
+## Verified by call graph
+
+FFX-2 grew these two functions, so a whole masked body cannot match. They are
+verified by a second method instead:
+
+1. The prologue matches up to the cookie global and argument registers.
+2. A log string or flag write ties the body to the FFX function.
+3. The callers match two levels up. Each caller pair has identical masked
+   bodies, and each function has the same number of callers in each game.
+
+The mod hooks these two only as resource scopes: on entry it starts a new
+speech generation, and while the call runs it suppresses other readers. It
+reads no argument or structure, so the changed bodies do not matter to it.
+
+### 0x5093b0: map load (load-finished boundary)
+
+- Installed FFX: 0x5093b0. FFX-2: 0x3ba3b0.
+- Prologue: `push ebp; mov ebp,esp; sub esp,0x34`, then the stack cookie.
+  Only the cookie global (0xc613d8 in FFX, 0xd6fab8 in FFX-2) and the
+  argument registers differ.
+- Strings: FFX refers to "RAM Inuse : %d u:%d" at 0x50947f. FFX-2 refers to
+  "RAM Inuse : %d" at 0x3ba4a2, and also to "FFX2 Loading: loading map %s"
+  and "load yn guidemap".
+- Tail: both set bits 0x11 in a status global (FFX 0x18ded08, FFX-2
+  0x172508c) and call the same-shaped finisher (FFX 0x514250, FFX-2
+  0x3bfdb0).
+- Body: FFX 217 instructions, FFX-2 256. Instruction similarity 0.66.
+- Callers: FFX 0x508370 and 0x5085d0 only; FFX-2 0x3b9060 and 0x3b93d0
+  only. Both pairs have identical masked bodies (15 instructions).
+- Their callers: FFX 0x46dca0, 0x46dcd0, 0x46dd00, 0x46dd30; FFX-2 0x328670,
+  0x3286a0, 0x3286d0, 0x328700. All four pairs have identical masked bodies,
+  and each pair calls the same wrapper.
+
+### 0x46fed0: map request (event map jump)
+
+- Installed FFX: 0x46ff40. FFX-2: 0x32a970.
+- Prologue: both test bit 0x80 of a flag byte (FFX 0x1326b28, FFX-2
+  0x11924d4), call a gate and stop if it returns 0. Both then push
+  `[ebp+0xc]` and `[ebp+8]` and call the map jump (FFX 0x48ea60, FFX-2
+  0x34c5b0).
+- Body: FFX 195 bytes, FFX-2 237. Instruction similarity 0.72. FFX-2 adds a
+  log line "svp->LastEventJumpId: %d" and a branch on `[ebp+8]` against
+  0x164. FFX compares the word at `[eax+2]` with 0x109; FFX-2 compares it with
+  0x17. These are game-specific map numbers.
+- Callers: FFX 0x4581c0, 0x458330, 0x458460, 0x458610 (event opcode
+  handlers). FFX-2 0x314050, 0x3141b0, 0x314350, 0x314560, and a wrapper
+  0x32a950 that FFX-2 adds. Three handler pairs have identical masked bodies.
+  The 0x458460 and 0x314350 pair differs (similarity 0.42).
+
 ## Not verified
 
 These scope-report candidates are related functions, not the same function.
 They stay out of the table.
 
-- 0x46fed0 (installed 0x46ff40) and FFX-2 0x32a970. No masked match.
-  Instruction similarity 0.72. FFX-2 adds a logging block (it pushes the word
-  at `[esi+2]` and calls an import) and a branch on `[ebp+8]` against 0x164.
-  FFX compares the word at `[eax+2]` with 0x109; FFX-2 compares it with 0x17.
-  This is the FFX resource-load call, so under FFX-2 no hook opens a
-  resource scope (`resourceScopeHook()` returns false).
 - 0x4b6260 (installed 0x4b62b0) and FFX-2 0x392490. No masked match.
   Similarity 0.69. Structure offsets differ (+0xc becomes +0x150, +2 becomes
   +0x148) and one FFX block is missing.
@@ -104,7 +147,8 @@ They stay out of the table.
   probably the same function on a changed structure. The FFX handlers read
   the old offsets, so the address is not usable until those reads are ported.
 - 0x376220 (help-page input). No FFX-2 match. FFX-2 does not hook it.
-- 0x5093b0 (load finished). The scope report found no match.
+- 0x48dfe0 (field initialize, the third FFX resource scope). Not searched
+  yet. Under FFX-2 `resourceScopeHook()` returns false for it.
 
 ## What runs under FFX-2
 
@@ -117,6 +161,9 @@ They stay out of the table.
   mod input dialog has focus, because the controller owner is not installed.
 - Hotkeys: F8 opens a speech-settings mod menu (Speech, Speech options with
   punctuation names, Close). F11 repeats the last speech.
+- 0x46fed0 and 0x5093b0: resource scopes. Each call logs "native reader
+  resource scope begin" and "end" and invalidates pending speech. The return
+  logs "native load return".
 - No reader, menu, battle, field, controller, beacon or minigame hook. The
   input code skips the ESC menu, Blitzball, field, battle-sensor and minigame
   predicates under FFX-2, because they read FFX memory.
