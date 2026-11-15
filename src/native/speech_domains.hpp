@@ -3,7 +3,7 @@
 #include <type_traits>
 namespace ffx::speechq {
 constexpr unsigned DomainBase=256,DomainLimit=32;
-enum Domain : unsigned {DialogueVoiceDomain=0,MovieVoiceDomain=1,NamingDomain=2,SelectionDetailDomain=3,SystemMenuDomain=4,EscMenuDomain=5,TextPlanDomain=6,BattleStatusDomain=7,MinigameDomain=8,ButterflyDomain=9};
+enum Domain : unsigned {DialogueVoiceDomain=0,MovieVoiceDomain=1,NamingDomain=2,SelectionDetailDomain=3,SystemMenuDomain=4,EscMenuDomain=5,TextPlanDomain=6,BattleStatusDomain=7,MinigameDomain=8,ButterflyDomain=9,Ffx2MenuDomain=10};
 enum ContextFlags : unsigned {SpeechEnabled=1,QueueProtected=2,ModalOpen=4,TutorialOpen=8};
 using DomainHandler=void(*)(const Header&,const std::wstring&);
 using DomainReset=void(*)(unsigned);
