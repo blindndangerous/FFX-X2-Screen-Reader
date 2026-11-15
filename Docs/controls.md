@@ -514,7 +514,9 @@ again to start a new walk. When a battle interrupts a walk, Auto walk resumes
 toward the same destination about a second after you have control of the field
 again. Walking yourself before or after the battle, any navigation command after
 it, or turning Auto walk off cancels the resume; it is dropped if the destination
-is gone or a minute passes after the battle. On arrival, Auto walk walks in
+is gone, a minute passes after the battle, or you are back in a different room
+or more than two steps from where the battle started (for example after a
+cutscene moves you). On arrival, Auto walk walks in
 toward an interactible for up to one more step (stopping when its collision
 blocks the way; pedestals are never walked into), then stands still facing it;
 confirm the interaction yourself. If the walk ends without reaching the

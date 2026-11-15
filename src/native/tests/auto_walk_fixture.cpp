@@ -379,6 +379,16 @@ int main() {
     // Input in the first frame after the battle, before auto walk has seen it end, counts too.
     battleStop();battle=false;walk={};walk[0xc8]=0x80;autoWalkKeyboard(walk.data());walk={};autoWalkKeyboard(walk.data());frames(15);
     check(!resumes,"walking straight after the battle ends cancels the resume");
+    // The resume belongs to the field the walk was interrupted in.
+    auto& room=*reinterpret_cast<uint16_t*>(address(0xd2ca90));room=70;
+    battleStop();room=71;battle=false;frames(15);room=70;
+    check(!resumes,"a battle that returns to another room drops the resume");
+    battleStop();battle=false;player={100,0,0};frames(15);
+    check(!resumes,"a scripted relocation after the battle drops the resume");
+    battleStop();battle=false;frames(3);++epoch;room=71;frames(15);room=70;
+    check(!resumes,"a map change after the field is back drops the resume");
+    battleStop();++epoch;battle=false;frames(15);
+    check(resumes==1,"a field reload while the battle closes keeps the resume");
     battleStop();battle=false;autoWalkPlayerInput(VK_UP);frames(15);
     check(!resumes,"a window-message arrow straight after the battle cancels the resume");
     battleStop();battle=false;stopAutoWalk();frames(15);

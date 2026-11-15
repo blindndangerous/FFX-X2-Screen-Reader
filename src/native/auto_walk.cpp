@@ -59,6 +59,16 @@ std::atomic<int> resumePhase{ResumeNone};
 std::atomic<bool> resumeCancel{false};
 std::atomic<AutoWalkResume> resumeHandler{nullptr};
 uint64_t resumeSince=0,resumeSettled=0;unsigned resumeEpoch=0;
+// Field identity when the walk was interrupted: room id and player position. A
+// battle returns the player to the same room and spot; anything else (another
+// map, a cutscene or script that moved the player) drops the resume.
+uint16_t resumeRoom=0;Point resumeWhere;
+constexpr double ResumeDriftUnits=22.26; // two steps
+uint16_t currentRoom() {return read<uint16_t>(address(0xd2ca90),0xffff);}
+bool sameResumeField() {
+    const auto p=playerPosition();
+    return currentRoom()==resumeRoom && std::isfinite(p.x) && std::isfinite(p.z) && std::hypot(p.x-resumeWhere.x,p.z-resumeWhere.z)<=ResumeDriftUnits;
+}
 NativeRouteTarget walking; // native thread only: the destination of the current walk
 constexpr unsigned octMasks[]={1,9,8,12,4,6,2,3}; // forward, left, backward, right
 uint64_t nowMs() {
@@ -102,7 +112,7 @@ void stop(const char* reason,const wchar_t* spokenReason=nullptr,bool routeFailu
     const bool was=engaged.exchange(false); mask=0; cancel=false; stamp=0;messageGuard={};arrival={};
     if(was) {
         recordLog("auto walk stopped: %s",reason);
-        if(resumable(reason)) {resumeCancel=false;resumeSince=nowMs();resumePhase=inBattle()?ResumeBattle:ResumeArmed;}
+        if(resumable(reason)) {resumeCancel=false;resumeSince=nowMs();resumeRoom=currentRoom();resumeWhere=playerPosition();resumePhase=inBattle()?ResumeBattle:ResumeArmed;}
         else resumePhase=ResumeNone;
         if(spokenReason && epoch==generation() && (!routeFailure || claimNavRouteStopSpeech())) announceStop(spokenReason);
     }
@@ -216,6 +226,9 @@ void serviceResume() {
     if(phase==ResumeBattle) {resumePhase=ResumeAfter;resumeSince=resumeSettled=now;resumeEpoch=generation();return;}
     if(now-resumeSince>ExpireMs) {resumePhase=ResumeNone;recordLog("auto walk resume expired");return;}
     if(!safe() || resumeEpoch!=generation()) {resumeEpoch=generation();resumeSettled=now;return;}
+    // The field can reload more than once while the battle closes, so a new map
+    // generation alone is not a new place; the room id and position decide that.
+    if(!sameResumeField()) {resumePhase=ResumeNone;recordLog("auto walk resume dropped: room or position changed");return;}
     if(now-resumeSettled<SettleMs) return;
     resumePhase=ResumeNone;
     const auto handler=resumeHandler.load();
