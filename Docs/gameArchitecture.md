@@ -1,3 +1,31 @@
+## FFX-2 main-story checkpoint
+
+November 15. The existing FFX-2 input/top-menu scope captures the 310-byte English charset
+and terminated help bytes on the native owner. The speech preparation worker
+owns charset parsing, decoding, formatting and logging; capture refusal drops
+the observation without waiting or native fallback. Same-address table reloads
+cannot reuse cached glyphs. Profile, top-list phase and speech generation guard
+the observation. No worker reads a native text pointer.
+
+Items/Abilities and Config have offline selection parsers. Separate legacy panel
+parsers cover Grid nodes and the Dressphere parent/list binding. Config uses nine
+main-story label/value records; its per-row arrays hold animation state. Separate
+Config help and node-only Grid help refresh still need producer evidence.
+The worker-only battle-ready design emits the displayed character name once per
+native ready edge, with no sound; native ready/name sources remain unresolved.
+No new submenu or battle hook exists. Every FFX-2 address/offset is UNVERIFIED in
+game. Main-story-only scope excludes Last Mission and minigames.
+
+Static bytes, provenance and limits: [addresses](ffx2-addresses.md).
+Ready transitions and future transport contract: [battle cue](ffx2-battle-ready.md).
+The sole nonvisual gameplay procedure is [the checklist](ffx2-ingame-checklist.md).
+The full native suite is not green: the reader links but requires separately
+supplied external replay inputs, first `native/hudTextureClipBody.bin`.
+Offline verification: 580 checks across the five FFX-2 native fixtures, two
+Python runner regressions and 74 documented instruction-byte comparisons pass.
+These totals do not substitute for the missing replay suite or gameplay proof.
+This worktree task authorizes no game launch, attachment, deployment or push.
+
 ## October20 optional minigame completion
 
 The new0.6 producer enters original ATEL finish paths for all four Calm Lands
@@ -2853,7 +2881,6 @@ The physical asset format alone does not tell us who owns input or text.
 | Shops | No shop reader installed | Buy/sell/equipment lists, prices, quantities, comparisons and confirms |
 | Battle | Main commands/targets implemented | Summon/party swap end-to-end unverified; Wakka Slots missing; partial Overdrive support |
 | Blitzball | No reader installed | Team/league/player/technique and in-match selection menus |
-| FFX-2 / Last Mission | Keyboard input only: hash-selected `NativeProfile::Ffx2` speaks one startup line and hooks PInput::Update, the DirectInput updaters and window messages for F8 (speech settings) and F11 (repeat); only the RVAs in Docs/ffx2-addresses.md resolve | All menus, dialogue, battle and field; current FFX RVAs cannot be reused blindly |
 | Steam launcher | Original-action event adapter + native Tolk DLL built | Actual launcher validation; English image labels only; mute icon/credits content remain gaps |
 
 This is a source coverage inventory, not a claim that every listed menu was opened

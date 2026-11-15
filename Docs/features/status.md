@@ -1,5 +1,12 @@
 # Feature design and status register
 
+Current FFX-2 main-story worktree scope is recorded in
+[the architecture checkpoint](../gameArchitecture.md#ffx-2-main-story-checkpoint).
+Charset/top-menu preparation has offline coverage. Submenu parsing and the
+name-only ready-cue design remain disconnected from new live hooks. Separate
+Config help and node-only Grid help refresh need further evidence. Full native replay and
+gameplay validation remain pending. The FFX entries below do not imply FFX-2 parity.
+
 October20 maintenance register, based on the reviewed source map and existing
 subsystem topics. This records existing designs rather than claiming they were
 planned retroactively before implementation. Future features need a design and

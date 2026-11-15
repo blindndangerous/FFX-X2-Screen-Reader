@@ -1,5 +1,20 @@
 # FFX current memory — November17
 
+[FFX-2 main-story offline work](Docs/ffx2-addresses.md) in `feat/ffx2-menus`
+keeps game launch, debugger attachment, deployment, Steam writes, push and PRs
+prohibited for this task. F8/F11 and the existing top-menu hook remain the live
+scope. Charset/help capture now uses owned preparation-worker packets, the
+measured 310-byte English charset extent and terminated help copies. Pure
+submenu parsers and a [name-only battle-ready state machine](Docs/ffx2-battle-ready.md)
+have no new live hook. Grid nodes, Dressphere parent/list/help and nine Config
+label/value records have static bindings. Config's 16-byte arrays are animation,
+not text. Separate Config help and node-only Grid help refresh remain unresolved;
+every FFX-2 address/offset remains UNVERIFIED in game.
+The native reader links, but the full suite stops at missing external replay
+input `native/hudTextureClipBody.bin`; a complete green suite is not claimed.
+Use the single [in-game checklist](Docs/ffx2-ingame-checklist.md) after the current
+FFX test ends. No gameplay or audible confirmation was performed here.
+
 November 17, step 4. Zanarkand guide Path can submit a requested walk around
 qualified active floor rectangles. A changed or unavailable panel observation
 stops steering. Touching only the chosen panel counts as arrival. From rest,
