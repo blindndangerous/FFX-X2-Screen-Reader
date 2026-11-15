@@ -366,14 +366,18 @@ void maintenance() {
         }
     }
 }
+// The cancel a navigation command runs before acting: pending movement intents,
+// pedestal assistance, the spoken route and the walk itself. Backslash toggling a
+// walk off runs the same sequence, so pedestal assistance cannot restart it.
+void cancelNavigationCommand() {nav::invalidateNavigationIntents();cancelPedestal();clearNavRoute();stopAutoWalk();}
 void enqueue(nav::Query query,bool shift=false,bool cancel=false) {
-    if(cancel) {nav::invalidateNavigationIntents();cancelPedestal();clearNavRoute();stopAutoWalk();}
+    if(cancel) cancelNavigationCommand();
     nav::submitNavigationQuery(query,shift);
 }
 void pathKey(bool shift) {
     if(inBattle()) output(L"Field navigation is unavailable in battle",true,"navigation-path");
     // Backslash again during a walk stops it rather than re-reading and restarting the route.
-    else if(!shift && toggleAutoWalkOff()) return;
+    else if(!shift && toggleAutoWalkOff(cancelNavigationCommand)) return;
     else if(!interested.load(std::memory_order_acquire) && !nav::navigationDataPending()) output(L"No entity selected",true,"navigation-path");
     else enqueue(nav::Query::Path,shift,true);
 }

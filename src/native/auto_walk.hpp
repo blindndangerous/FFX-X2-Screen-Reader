@@ -8,7 +8,9 @@ void stopAutoWalk();
 // pending battle resume survives; a walk it ends is never resumed.
 void releaseAutoWalk();
 // Backslash toggle: stops an active walk and says so. False when no walk is active.
-bool toggleAutoWalkOff();
+// Backslash during a walk: runs cancelCommand (the navigation command's full cancel
+// sequence, which stops the walk) or, without one, stopAutoWalk, then says so.
+bool toggleAutoWalkOff(void (*cancelCommand)()=nullptr);
 // True while a walk stopped by a battle is waiting to resume.
 bool autoWalkResumePending();
 // Stops like stopAutoWalk but keeps a pending battle resume. For field resets only.

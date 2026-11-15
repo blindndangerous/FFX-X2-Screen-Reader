@@ -134,6 +134,8 @@ void log(const char*,...) {}
 }
 using namespace ffx;
 unsigned resumes=0;std::wstring resumedName;
+unsigned toggleCancels=0;
+void countToggleCancel() {++toggleCancels;stopAutoWalk();}
 bool onResume(const NativeRouteTarget& target) {++resumes;resumedName=target.name.data();return true;}
 // Field frames 100 ms apart, as the input owner calls updateAutoWalk every frame.
 void frames(unsigned count) {for(unsigned i=0;i<count;++i) {clockValue+=100;updateAutoWalk();}}
@@ -165,6 +167,10 @@ int main() {
     begin();speech.clear();check(toggleAutoWalkOff(),"Backslash during a walk is taken as the stop toggle");updateAutoWalk();updateAutoWalk();
     check(!autoWalkActive() && !keyboard()[0xc8] && speech.size()==1 && speech.back()==L"Auto walk stopped","the toggle stops the walk once and says Auto walk stopped");
     speech.clear();check(!toggleAutoWalkOff() && speech.empty(),"with no walk active Backslash keeps its route command");
+    // The toggle runs the navigation command's full cancel (intents, pedestal, route) once.
+    toggleCancels=0;begin();speech.clear();check(toggleAutoWalkOff(countToggleCancel),"Backslash with a cancel sequence still stops the walk");updateAutoWalk();
+    check(toggleCancels==1 && !autoWalkActive() && speech.size()==1 && speech.back()==L"Auto walk stopped","the toggle runs the full navigation cancel once and says Auto walk stopped");
+    toggleCancels=0;check(!toggleAutoWalkOff(countToggleCancel) && !toggleCancels,"with no walk active the toggle cancels nothing");
     begin();speech.clear();autoWalkPlayerInput(VK_ESCAPE);updateAutoWalk();
     check(speech.empty() && !autoWalkActive(),"manual player-input cancellation stays silent");
     begin();speech.clear();known=false;updateAutoWalk();updateAutoWalk();
