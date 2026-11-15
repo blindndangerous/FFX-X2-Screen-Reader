@@ -1,5 +1,6 @@
 #include "navigation.hpp"
 #include "navigation_order.hpp"
+#include "nav_resume.hpp"
 #include "airship_map.hpp"
 #include "navigation_scene.hpp"
 #include "navigation_targets.hpp"
@@ -32,7 +33,6 @@
 #include <cstring>
 #include <deque>
 #include <map>
-#include <mutex>
 #include <optional>
 namespace ffx {
 namespace nav {
@@ -111,12 +111,10 @@ std::wstring destinationDirection(Point from,Point to,bool height=true,const wch
     return text.rfind(L"here",0)==0 || text==L"unknown"?text:clockPrefix+text;
 }
 void emit(const Pending& event,std::wstring text,const char* producer,bool interrupt=true) {speechq::emitOwned(std::move(text),event.header,producer,false,interrupt);}
-// The destination auto walk was heading to when a battle stopped it. Written by the
-// native input owner when the resume fires, read by the preparation owner.
-struct ResumeTarget {std::wstring name;unsigned id=0,pushControl=0;Point position;};
-std::mutex resumeLock;ResumeTarget resumeTarget;
+// Runs on the game thread (updateAutoWalk from native input): no lock, no allocation.
+nav::ResumeMailbox resumeTarget;
 bool resumeAutoWalk(const NativeRouteTarget& target) {
-    {std::lock_guard<std::mutex> lock(resumeLock);resumeTarget={target.name.data(),target.id,target.pushControl,target.position};}
+    resumeTarget.publish(target.name.data(),target.id,target.pushControl,target.position);
     interested.store(true,std::memory_order_release);
     return nav::submitNavigationQuery(nav::Query::Resume);
 }
@@ -239,11 +237,13 @@ void execute(const Pending& event) {
     case nav::Query::Distance:announce(event,true,false);break;
     case nav::Query::Path:pathfind(event);break;
     case nav::Query::Resume: {
-        ResumeTarget wanted;{std::lock_guard<std::mutex> lock(resumeLock);wanted=resumeTarget;}
-        const int found=nav::resumeRow(s.entities,wanted.id,wanted.pushControl,wanted.name,wanted.position,label);
+        nav::ResumeRequest request;
+        if(!resumeTarget.take(request)) {emit(event,L"Auto walk not resumed","navigation-path",false);break;}
+        const std::wstring name=request.name.data();
+        const int found=nav::resumeRow(s.entities,request.id,request.pushControl,name,request.position,label);
         const auto rows=filtered();unsigned row=0;
         while(found>=0 && row<rows.size() && rows[row]!=&s.entities[found]) ++row;
-        if(found<0 || row==rows.size()) {emit(event,L"Auto walk not resumed: "+wanted.name+L" not found","navigation-path",false);break;}
+        if(found<0 || row==rows.size()) {emit(event,L"Auto walk not resumed: "+name+L" not found","navigation-path",false);break;}
         s.selected=row;pathfind(event);break;
     }
     case nav::Query::Filter:
