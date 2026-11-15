@@ -99,6 +99,12 @@ void toggleOnOwner(unsigned requests) {
     protectSpeech(false);
 }
 }
+// FFX-2 map request (0x32a970) and map load (0x3ba3b0). Each call opens a
+// resource scope and starts a new speech generation, as under FFX.
+void installFfx2LoadBoundaries() {
+    hook(0x46fed0, teardown, loadFinished);
+    hook(0x5093b0, teardown, loadFinished);
+}
 unsigned initializeReader(bool& initializedHooks) {
     if (!FfxNative_SpeechReady()) { recordLog("native readers unavailable: speech initialization failed"); return 0; }
     wchar_t exe[MAX_PATH]{}; GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -112,7 +118,7 @@ unsigned initializeReader(bool& initializedHooks) {
     if(movieOnly!=(nativeProfile==NativeProfile::MovieCaptions) || ffx2!=(nativeProfile==NativeProfile::Ffx2)) {
         recordLog("native readers refused: executable name/profile disagree"); return 0;
     }
-    // FFX-2 gets keyboard input only: no FFX extension scan, dependency check
+    // FFX-2 gets keyboard input and map load scopes: no FFX extension scan, dependency check
     // or reader hook. features stays 0 because no reader runs.
     if(nativeProfile==NativeProfile::Ffx2) {
         if(startFfx2Input(initializedHooks)) announceFfx2Boot();

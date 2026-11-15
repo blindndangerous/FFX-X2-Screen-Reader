@@ -213,6 +213,10 @@ inline constexpr Ffx2Rva ffx2Addresses[] = {
     {0x22d770, 0x6bcea0}, // DirectInput keyboard updater
     {0x22db80, 0x6bd2b0}, // DirectInput pad updater
     {0x471d10, 0x32ce30}, // per-frame input event
+    // Matched by prologue, unique caller graph and log strings, not by a whole
+    // masked body: FFX-2 grew these functions. See Docs/ffx2-addresses.md.
+    {0x46fed0, 0x32a970}, // map request: event map jump
+    {0x5093b0, 0x3ba3b0}, // map load ("RAM Inuse"), load-finished boundary
 };
 inline unsigned profileRva(unsigned rva) {
     if(nativeProfile==NativeProfile::Ffx2) {
@@ -237,10 +241,10 @@ inline unsigned profileRva(unsigned rva) {
 }
 // PInput::Update. Its entry marks the game thread for every profile.
 inline unsigned gameThreadProbe() { return 0x225930; }
-// Calls whose dynamic extent loads FFX resources. FFX-2 has no verified
-// equivalents, so no hook opens a resource scope there.
+// Calls whose dynamic extent loads game resources. FFX-2 has verified map
+// request and map load equivalents, but no field-initialize equivalent yet.
 inline bool resourceScopeHook(unsigned rva) {
-    if(nativeProfile==NativeProfile::Ffx2) return false;
+    if(nativeProfile==NativeProfile::Ffx2) return rva==0x46fed0 || rva==0x5093b0;
     return rva==0x46fed0 || rva==0x5093b0 || rva==map_transition::Initialize;
 }
 inline unsigned logicalRva(uintptr_t pointer) {
