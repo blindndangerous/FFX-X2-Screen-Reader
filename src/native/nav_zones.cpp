@@ -160,13 +160,17 @@ bool clearsPedestal(const std::vector<Point>& points,const InteractionZone& zone
     return true;
 }
 std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone,double margin) {
-    const double clear=zone.contactRadius+margin-.1;
+    // A push zone may carry a wider touch radius learned in game (in-game
+    // F27: touches well outside the modelled contact). Walks keep clear of
+    // it; only the final leg to the push position goes inside.
+    const double keep=std::max(zone.contactRadius,zone.obstacleRadius);
+    const double clear=keep+margin-.1;
     // A walk that starts touching the actor first steps straight out, so
     // its first move does not slide along the actor (in-game F25).
     std::vector<Point> prefix;
     const double from=distanceXZ(player,zone.center);
-    if(from>.01 && from<zone.contactRadius+1) {
-        const double scale=(zone.contactRadius+1.2)/from;
+    if(from>.01 && from<keep+1) {
+        const double scale=(keep+1.2)/from;
         const Point out{zone.center.x+(player.x-zone.center.x)*scale,player.y,zone.center.z+(player.z-zone.center.z)*scale};
         auto step=routePoints(mesh,player,out);
         if(step.size()>=2 && clearsPedestal(step,zone,zone.contactRadius+.05)) {prefix=std::move(step);player=prefix.back();prefix.pop_back();}
@@ -181,15 +185,32 @@ std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const I
     // target cylinder, validating each leg against the actual connected floor.
     constexpr unsigned count=16;
     constexpr double turn=6.283185307179586,countAngle=turn/count;
-    const double radius=(zone.contactRadius+margin)/std::cos(countAngle*.5);
+    const double radius=(keep+margin)/std::cos(countAngle*.5);
+    const auto bearing=[&](Point p) {return std::atan2(p.z-zone.center.z,p.x-zone.center.x);};
     const auto index=[&](Point p) {
-        return (static_cast<int>(std::round(std::atan2(p.z-zone.center.z,p.x-zone.center.x)/countAngle))+count)%count;
+        return (static_cast<int>(std::round(bearing(p)/countAngle))+count)%count;
     };
     const int first=index(player),last=index(goal);
+    const double distance=distanceXZ(player,zone.center);
     std::vector<Point> best; double bestLength=std::numeric_limits<double>::infinity();
     for(int side:{-1,1}) {
         std::vector<Point> candidate{player}; bool valid=true;
         int at=first;
+        // From outside the ring, the first leg ends where it touches the
+        // ring tangentially, so a walk that runs on goes past the actor, not
+        // into it (in-game F27: a straight leg at the pedestal ran into it).
+        if(distance>radius*1.01) {
+            const double spread=std::acos(radius/distance),angle=bearing(player)+side*spread;
+            const double steps=angle/countAngle;
+            const int next=((side>0?static_cast<int>(std::floor(steps+1e-9))+1:static_cast<int>(std::ceil(steps-1e-9))-1)%static_cast<int>(count)+count)%count;
+            // Only when the goal's ring point is not between the player and the tangent.
+            const auto ahead=[&](int i) {return ((i-first)*side%static_cast<int>(count)+count)%count;};
+            if(ahead(last)>=ahead(next) || last==next) {
+                const Point tangent{zone.center.x+radius*std::cos(angle),zone.center.y,zone.center.z+radius*std::sin(angle)};
+                const auto leg=routePoints(mesh,player,tangent);
+                if(clearsPedestal(leg,zone,clear)) {candidate.insert(candidate.end(),leg.begin()+1,leg.end());at=next;}
+            }
+        }
         for(unsigned n=0;n<count;++n) {
             nav::checkComputation();
             const double angle=at*countAngle;
@@ -219,7 +240,7 @@ std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const I
     return contactRoute(mesh,player,goal,zone,1.5);
 }
 std::vector<Point> avoidingRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone,int endTriangle=-1) {
-    if(zone.obstacleRadius>0) {
+    if(zone.obstacleRadius>0 && !(zone.contactRadius>0)) {
         auto obstacle=zone; obstacle.center=zone.obstacle; obstacle.contactRadius=zone.obstacleRadius;
         return contactRoute(mesh,player,goal,obstacle,zone.talk);
     }
@@ -279,7 +300,7 @@ static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const Interact
 std::vector<Point> interactionRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
     auto route=zoneRoute(mesh,player,zone,horizontalApproach);
     // A pedestal obstacle added for safety never removes a destination.
-    if(route.empty() && zone.talk && zone.obstacleRadius>0) {
+    if(route.empty() && (zone.talk || zone.contactRadius>0) && zone.obstacleRadius>0) {
         auto plain=zone; plain.obstacleRadius=0; route=zoneRoute(mesh,player,plain,horizontalApproach);
     }
     return route;
