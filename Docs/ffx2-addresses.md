@@ -178,6 +178,71 @@ addresses at the preferred base 0x400000; function addresses are RVAs.
 - Not handled: the meaning of the two-byte controls (FFX uses them for
   button glyphs, colours and name macros). The decoder drops them.
 
+## Menus (findings and plan, nothing hooked)
+
+FFX-2 has two kinds of menu:
+
+- Iggy (Flash) overlays, as in FFX: `flash/escmenu.swf` (PC settings, with
+  the Iggy `EscMenu*` callbacks), `flash/pausemenu.swf`, the save and load
+  screens (`saveloadx2_*.swf`, `saveloadlm_*.swf`) and the speed and
+  auto-battle toasts.
+- The native field menu (Items, Dresspheres, Garment Grid and so on). It
+  uses the same module manager and window objects as FFX, with changed
+  structures. No FFX menu function matches whole (0x4e0340, 0x4b4460,
+  0x4a9ab0, 0x38fd40 and 0x38fc00 have no masked match).
+
+All addresses below come from static analysis only. None is in the table.
+
+### Module manager
+
+- FFX 0x4aaab0 registers a menu module: it clamps the slot to 0..0x18,
+  stores the module in the table at VA 0x1840888 and calls the module's
+  `+8` init. FFX-2 has the same code at 0x3657b0 (slot 0..0x14, table at VA
+  0x16bc590), but FFX-2 inlines it in the dispatcher 0x365280.
+- A module is a callback table: `+0` update, `+4` draw, `+8` init, `+0xc`,
+  `+0x10` exit, `+0x14` release.
+- FFX registers the main menu (table at VA 0xc5b2b0, update 0x4e0350, the
+  installed address of the hooked 0x4e0340) in slot 1. FFX-2 registers the
+  module at VA 0xd62e20 in slot 2, on the dispatcher's default branch.
+
+### Top-level menu (module VA 0xd62e20)
+
+- Callbacks: update 0x373170, draw 0x373650 (a bare `ret`), init 0x373660,
+  0x373690, exit 0x373710, release 0x373730.
+- 0x375900 builds the item list. It sets availability bits for item ids 0
+  to 11, then copies each available item to the array at VA 0x16befe0 (8
+  bytes each: dword id, word available flag at `+4`, word at `+6`). It
+  stores the count at VA 0x16bf040 and resets the cursor at VA 0x16bef0c to
+  0.
+- 0x373170, on up (input bit 0x1000) and down (0x4000): plays the cursor
+  sound (0x344710 with 0x80000001), moves the cursor at VA 0x16bef0c with
+  wrap-around, then sets the help line from `0x379050(id)`.
+- 0x379050 maps the id to a menu-text id (0x1047 + id; ids 7, 8 and 9 have
+  special cases) and calls the text getter 0x21d7c0 with space 1.
+- The item labels are not text. The draw code at 0x3760d9 uses `id * 18`
+  as a row in a 0x70 by 0x12 texture. So there is no game string for an
+  item name, only for its help line.
+
+### Plan
+
+1. In game, confirm the cursor address: log VA 0x16bef0c, the count at VA
+   0x16bf040 and the id at `0x16befe0 + 8 * cursor` on each change, while
+   the user moves through the top-level menu. Write down which id is which
+   label.
+2. Verify the text getter 0x21d7c0 (space, id): its table at VA 0xe103b0
+   (12 bytes per space) and the jump table at VA 0x61d828. Compare it with
+   the FFX getter that `planMenuText` uses.
+3. Read the charset buffer from the pointer at VA 0xdeade0. Its size is
+   not stored next to it, so the loader 0x111120 must be read to find where
+   the size is kept, or the parser must stop at the highest index it needs.
+4. Hook the top-level update 0x373170 behind the FFX-2 profile. This needs
+   a table for FFX-2-only addresses, because `ffx2Addresses` maps FFX
+   addresses and this function has no FFX match. On a cursor change, speak
+   the item.
+5. Product question for the user: the labels are textures, so the item
+   name must come from a fixed id-to-name list in the mod (from step 1), or
+   the mod speaks the help line. Decide before step 4.
+
 ## What runs under FFX-2
 
 - MinHook starts.
