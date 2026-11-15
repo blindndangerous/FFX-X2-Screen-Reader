@@ -6,6 +6,7 @@
 #include "../input_device.hpp"
 #include "../owned_retirement.hpp"
 #include "../owned_nav_target.hpp"
+#include "../navigation_observations.hpp"
 #include "ready_speech_adapter.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -100,10 +101,14 @@ uintptr_t playerActor() { return base+0x1300000; }
 Point playerPosition() { const auto p=playerActor(); return {read<float>(p+0xc),read<float>(p+0x10),read<float>(p+0x14)}; }
 Mesh readMesh() { Mesh mesh; mesh.openPlane=true; mesh.fixedHeight=true; mesh.planeY=playerPosition().y; return mesh; }
 bool faceNavigationTarget(const Entity&) { ++faces; return true; }
-bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return true;}
+bool faceResult=true;
+bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return faceResult;}
 bool autoWalkActive() { return walking; }
-void stopAutoWalk() { walking=false; }
+unsigned walkStops=0;
+bool legValid=false,legArrived=false;
+void stopAutoWalk() { walking=false; ++walkStops; }
 void startAutoWalk() { walking=true; ++starts; }
+bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
 // Semantic immediate handback adapter: production scheduling/data-age is
 // exercised separately by navigation_service_fixture. This host only preserves
@@ -123,7 +128,9 @@ bool requestNavigationAssistRoute() {
     updatePedestalOwnedTarget(target);if(points.empty()) {cancelPedestal();return false;}startAutoWalk();return true;
 }
 void requestNavigationAssistInstruction() {}
-namespace nav {void requestNavigationScene() {}}
+unsigned pathQueries=0;
+namespace nav {void requestNavigationScene() {}
+bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path) ++pathQueries;return true;}}
 bool relativeBearing(Point delta,double& pan,double& front) { pan=delta.x; front=delta.z; return true; }
 bool cameraBasis(Point& forward,Point& right) { forward={0,0,1}; right={1,0,0}; return true; }
 std::wstring direction(Point p) { return std::abs(p.x)>std::abs(p.z)?p.x>0?L"east":L"west":p.z>0?L"north":L"south"; }
@@ -274,6 +281,90 @@ void ruleTests() {
     try { (void)pedestalPlan(1,7,snapshot({},{{0x5c0000cc,1} })); }
     catch(const std::out_of_range&) { missingRejected=true; }
     check(missingRejected,"missing required pedestal binding remains rejected");
+}
+// In-game F25 and F26 (Kilika step 15 and the sphere steps next to it).
+void kilikaWalkFixtures() {
+    const Point at{.2215,-10,144.1042};
+    const auto kilika=[&](Point player) {
+        auto target=setup(2,6,at); values[0x0c00005a]=2;
+        position(playerActor(),player); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
+        return target;
+    };
+    // F26 (b): a push contact after another hook already stopped the walk
+    // must not stop it again. That bumps the manual input revision, which
+    // rejected the mod's own queued route ("manual input revision (612, 613)").
+    auto target=kilika({at.x-3,at.y,at.z}); walking=false;
+    auto stops=walkStops; disable(6,4,0x274b);
+    check(walkStops==stops && (read<uint16_t>(address(0xf27080))&0xf000)==0x2000,
+        "a Kilika push contact does not stop a walk that already stopped");
+    // F26 (c): the push ended with the pedestal still in place. Do not hold
+    // the direction against it; walk back out and in again.
+    restore();
+    check(frame(0)==0 && capturePedestalNavigationState().armed && !capturePedestalNavigationState().contact,
+        "a Kilika push that ended short holds no direction and stays armed");
+    for(unsigned i=0;i<2;++i) {
+        refreshTargetZone(target,worker(6),1); OwnedNavTarget copied{}; captureOwnedNavTarget(target,copied);
+        updatePedestalOwnedTarget(copied.native); frame(0);
+        disable(6,4,0x274b); restore(); frame(0);
+    }
+    check(!capturePedestalNavigationState().armed && !spoken.empty() &&
+        spoken.back()==L"Pedestal push did not start. Walk into the pedestal from the push side by hand.",
+        "three Kilika pushes that do not move the pedestal stop and say so");
+    restore();
+    // F26: a contact near the corner (1.7 across the push axis, inside the
+    // native 2) took control but did not push. Treat it as off the push side.
+    kilika({at.x-3,at.y,at.z+1.7});
+    write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0 && capturePedestalNavigationState().armed,
+        "a Kilika walk-in contact near the corner is not pushed and stays armed");
+    restore();
+    // F26 (a): a walk to the push side that ended short (another hook
+    // stopped it at a touch) is requested again.
+    target=kilika({at.x-14,at.y,at.z+9}); frame(0);
+    const auto asked=routeRequests;
+    check(walking,"a Kilika walk-in push starts its approach walk");
+    walking=false; frame(0);
+    check(routeRequests==asked+1 && walking,"a Kilika approach walk that ended short is requested again");
+    cancelPedestal(); frame(0);
+    // F27: on the reset tile north-east of the pedestal, every approach walk
+    // touched it off the push side, farther out than the modelled contact
+    // radius (nine touches, no move). Learn where the touch happened; the
+    // next walk steps straight out of it and stays out.
+    {
+        const Point touch{at.x+6,at.y,at.z+6};const double out=distanceXZ(touch,at);
+        target=kilika(touch); walking=true; frame(0);
+        disable(6,4,0x274b);
+        check(capturePedestalNavigationState().armed && capturePedestalNavigationState().touch>=out+.2,
+            "a Kilika touch off the push side records how far out it happened");
+        restore(); walking=false; route.clear(); frame(0);
+        const double ox=route.size()>1?route[1].x-route[0].x:0,oz=route.size()>1?route[1].z-route[0].z:0;
+        bool clear=route.size()>2;for(size_t i=0;i+1<route.size();++i) clear=clear && distanceXZ(route[i],at)>=out-.01;
+        check(clear && ox>0 && oz>0 && std::abs(ox-oz)<.05*std::hypot(ox,oz),
+            "the next Kilika approach walk steps straight out of that touch and stays out");
+        cancelPedestal(); frame(0);
+    }
+    // F25: an ordinary auto walk (to the sphere recess) touched the pedestal.
+    // The pedestal script gets no direction and the walk resumes.
+    setup(2,6,at); values[0x0c00005a]=2; position(playerActor(),{at.x-5.4,at.y,at.z+1});
+    walking=true; frame(0);
+    write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0 && !walking,"an auto walk touching the Kilika pedestal gives its script no direction");
+    auto started=starts; restore(); frame(0);
+    check(starts==started+1 && walking,"the interrupted walk resumes when control returns");
+    legValid=legArrived=true; frame(0);
+    // Step 8 via the plain Pedestal row: the walk arrived, the touch pushed
+    // the player out of reach, and facing failed. Ask for the route again.
+    faceResult=false; disable(6,4,0x274b); restore(); auto faced=faces; auto asked8=pathQueries; started=starts; frame(0);
+    check(faces==faced+1 && starts==started,"an interrupted walk that had arrived faces its target instead");
+    check(pathQueries==asked8+1,"an interrupted walk that had arrived but cannot face its target is routed again");
+    faceResult=true;
+    legValid=legArrived=false; walking=true; frame(0);
+    disable(6,4,0x274b); restore(); started=starts; frame(0);
+    check(starts==started,"a third touch within ten seconds does not resume the walk");
+    walking=false; frame(0);
+    write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0x2000,"a manual touch keeps the player's direction");
+    restore(); frame(0);
 }
 int main() {
     base=reinterpret_cast<uintptr_t>(VirtualAlloc(nullptr,0x2100000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
@@ -468,5 +559,6 @@ int main() {
     check(capturePedestalNavigationState().held,"pending route retains explicit held consent");frame(0);check(!capturePedestalNavigationState().armed,"released consent retires a pending route before delayed movement can start");delayRoute=false;
     nativeOwner=false;cancelPedestal();nativeOwner=true;
     check(!pedestalActivePlan(target,heldPlan),"foreign cancellation immediately retires consent without touching Native fields");frame(0);
+    kilikaWalkFixtures();
     std::puts("PASS: all-trial pedestal sides, Space push/native contact lifecycle, remaps and cancellation");
 }

@@ -31,6 +31,45 @@ void contactPedestalFixtures(const Mesh& room) {
         "a walk past the Kilika pedestal to a storage recess goes around it");
     auto inner=list[1].zone; inner.range=4;
     check(!interactionRoute(room,{50,0,25},inner).empty(),"a talk zone wholly inside pedestal contact keeps its old route");
+    // In-game F26: walking around the Kilika pedestal to its push side
+    // touched it five times. Only the last, inward leg may come close.
+    InteractionZone staging; staging.valid=true; staging.shape=1; staging.center=center; staging.contactRadius=5; staging.approach={-1,0,0};
+    const auto around=interactionRoute(room,{62,0,40},staging);
+    check(around.size()>2 && inInteractionZone(staging,around.back()) &&
+        keepsClear(std::vector<Point>(around.begin(),around.end()-1),center,7.5) && keepsClear(around,center,5),
+        "a walk around the Kilika pedestal to its push side keeps a wide margin");
+    // In-game F25: a walk that starts touching the pedestal steps straight
+    // out first instead of sliding along it.
+    const Point touching{44.9,0,41.2};
+    const auto away=interactionRoute(room,touching,list[1].zone);
+    const double rx=touching.x-center.x,rz=touching.z-center.z;
+    const double sx=away.size()>1?away[1].x-touching.x:0,sz=away.size()>1?away[1].z-touching.z:0;
+    check(away.size()>2 && (rx*sx+rz*sz)>.95*std::hypot(rx,rz)*std::hypot(sx,sz) &&
+        keepsClear(std::vector<Point>(away.begin()+1,away.end()),center,5.5),
+        "a walk that starts touching the Kilika pedestal steps straight out first");
+    // In-game F27: from the reset tile, north-east of the pedestal, the first
+    // leg ran straight at it, and the walk ran on into it (nine touches). No
+    // leg before the last may aim at the pedestal: three units past its end
+    // the walk must still be clear.
+    const auto runsOnClear=[&](const std::vector<Point>& points,size_t from,double radius) {
+        for(size_t i=from+1;i+1<points.size();++i) {
+            const Point a=points[i-1],b=points[i];const double length=distanceXZ(a,b);if(length<.01) continue;
+            const Point past{b.x+(b.x-a.x)/length*3,b.y,b.z+(b.z-a.z)/length*3};
+            if(distanceXZ(past,center)<radius) return false;
+        }
+        return true;
+    };
+    const Point northEast{center.x+43.8,0,center.z+43.8};
+    const auto fromTile=interactionRoute(room,northEast,staging);
+    check(fromTile.size()>2 && inInteractionZone(staging,fromTile.back()) && runsOnClear(fromTile,0,7) &&
+        keepsClear(std::vector<Point>(fromTile.begin(),fromTile.end()-1),center,7.5),
+        "a walk from north-east of the Kilika pedestal to its west push side does not aim at it");
+    const Point touchingNorthEast{center.x+3.46,0,center.z+3.46};
+    const auto fromTouch=interactionRoute(room,touchingNorthEast,staging);
+    const double ox=fromTouch.size()>1?fromTouch[1].x-touchingNorthEast.x:0,oz=fromTouch.size()>1?fromTouch[1].z-touchingNorthEast.z:0;
+    check(fromTouch.size()>2 && inInteractionZone(staging,fromTouch.back()) && ox>0 && oz>0 &&
+        std::abs(ox-oz)<.05*std::hypot(ox,oz) && runsOnClear(fromTouch,1,7),
+        "a walk that starts touching the Kilika pedestal on its north-east side steps out, then goes around");
 }
 void zoneFixtures() {
     Mesh counter;

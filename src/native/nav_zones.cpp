@@ -138,12 +138,19 @@ std::vector<Point> interactionAnchors(const InteractionZone& zone,Point player) 
     return anchors;
 }
 
-bool clearsPedestal(const std::vector<Point>& points,const InteractionZone& zone) {
+// A segment may enter the band between contact and `clear` only when its
+// distance to the actor changes one way: it leaves the band or ends in it.
+// A segment that runs along the band can touch the actor when steering
+// cuts a corner (in-game F26: five touches walking around Kilika's pedestal).
+bool clearsPedestal(const std::vector<Point>& points,const InteractionZone& zone,double clear) {
     if(points.empty()) return false;
     for(size_t i=1;i<points.size();++i) {
         const auto a=points[i-1],b=points[i];
         const auto closest=onSegment(a,b,zone.center);
-        if(distanceXZ(closest,zone.center)>=zone.contactRadius+.05) continue;
+        const double distance=distanceXZ(closest,zone.center);
+        if(distance>=clear) continue;
+        const bool monotonic=distanceXZ(closest,a)<1e-6 || distanceXZ(closest,b)<1e-6;
+        if(distance>=zone.contactRadius+.05 && monotonic) continue;
         // Permit an outward first segment when already touching the actor.
         const double x=a.x-zone.center.x,z=a.z-zone.center.z;
         if(i==1 && x*(b.x-a.x)+z*(b.z-a.z)>=0 &&
@@ -152,48 +159,92 @@ bool clearsPedestal(const std::vector<Point>& points,const InteractionZone& zone
     }
     return true;
 }
-std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone) {
+std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone,double margin) {
+    // A push zone may carry a wider touch radius learned in game (in-game
+    // F27: touches well outside the modelled contact). Walks keep clear of
+    // it; only the final leg to the push position goes inside.
+    const double keep=std::max(zone.contactRadius,zone.obstacleRadius);
+    const double clear=keep+margin-.1;
+    // A walk that starts touching the actor first steps straight out, so
+    // its first move does not slide along the actor (in-game F25).
+    std::vector<Point> prefix;
+    const double from=distanceXZ(player,zone.center);
+    if(from>.01 && from<keep+1) {
+        const double scale=(keep+1.2)/from;
+        const Point out{zone.center.x+(player.x-zone.center.x)*scale,player.y,zone.center.z+(player.z-zone.center.z)*scale};
+        auto step=routePoints(mesh,player,out);
+        if(step.size()>=2 && clearsPedestal(step,zone,zone.contactRadius+.05)) {prefix=std::move(step);player=prefix.back();prefix.pop_back();}
+    }
+    const auto joined=[&](std::vector<Point> route) {
+        if(route.empty() || prefix.empty()) return route;
+        route.insert(route.begin(),prefix.begin(),prefix.end());return route;
+    };
     const auto direct=routePoints(mesh,player,goal);
-    if(clearsPedestal(direct,zone)) return direct;
+    if(clearsPedestal(direct,zone,clear)) return joined(direct);
     // The floor mesh omits actor collisions. Try both arcs around the live
     // target cylinder, validating each leg against the actual connected floor.
     constexpr unsigned count=16;
     constexpr double turn=6.283185307179586,countAngle=turn/count;
-    const double radius=(zone.contactRadius+1.5)/std::cos(countAngle*.5);
+    const double radius=(keep+margin)/std::cos(countAngle*.5);
+    const auto bearing=[&](Point p) {return std::atan2(p.z-zone.center.z,p.x-zone.center.x);};
     const auto index=[&](Point p) {
-        return (static_cast<int>(std::round(std::atan2(p.z-zone.center.z,p.x-zone.center.x)/countAngle))+count)%count;
+        return (static_cast<int>(std::round(bearing(p)/countAngle))+count)%count;
     };
     const int first=index(player),last=index(goal);
+    const double distance=distanceXZ(player,zone.center);
     std::vector<Point> best; double bestLength=std::numeric_limits<double>::infinity();
     for(int side:{-1,1}) {
         std::vector<Point> candidate{player}; bool valid=true;
         int at=first;
+        // From outside the ring, the first leg ends where it touches the
+        // ring tangentially, so a walk that runs on goes past the actor, not
+        // into it (in-game F27: a straight leg at the pedestal ran into it).
+        if(distance>radius*1.01) {
+            const double spread=std::acos(radius/distance),angle=bearing(player)+side*spread;
+            const double steps=angle/countAngle;
+            const int next=((side>0?static_cast<int>(std::floor(steps+1e-9))+1:static_cast<int>(std::ceil(steps-1e-9))-1)%static_cast<int>(count)+count)%count;
+            // Only when the goal's ring point is not between the player and the tangent.
+            const auto ahead=[&](int i) {return ((i-first)*side%static_cast<int>(count)+count)%count;};
+            if(ahead(last)>=ahead(next) || last==next) {
+                const Point tangent{zone.center.x+radius*std::cos(angle),zone.center.y,zone.center.z+radius*std::sin(angle)};
+                const auto leg=routePoints(mesh,player,tangent);
+                if(clearsPedestal(leg,zone,clear)) {candidate.insert(candidate.end(),leg.begin()+1,leg.end());at=next;}
+            }
+        }
         for(unsigned n=0;n<count;++n) {
             nav::checkComputation();
             const double angle=at*countAngle;
             const Point ring{zone.center.x+radius*std::cos(angle),zone.center.y,zone.center.z+radius*std::sin(angle)};
             const auto leg=routePoints(mesh,candidate.back(),ring);
-            if(!clearsPedestal(leg,zone)) { valid=false; break; }
+            if(!clearsPedestal(leg,zone,clear)) { valid=false; break; }
             candidate.insert(candidate.end(),leg.begin()+1,leg.end());
             if(at==last) break;
             at=(at+side+count)%count;
         }
         if(!valid) continue;
         const auto final=routePoints(mesh,candidate.back(),goal);
-        if(!clearsPedestal(final,zone)) continue;
+        if(!clearsPedestal(final,zone,clear)) continue;
         candidate.insert(candidate.end(),final.begin()+1,final.end());
-        if(!clearsPedestal(candidate,zone)) continue;
+        if(!clearsPedestal(candidate,zone,clear)) continue;
         double length=0; for(size_t i=1;i<candidate.size();++i) length+=distanceXZ(candidate[i-1],candidate[i]);
         if(length<bestLength) { bestLength=length; best=std::move(candidate); }
     }
-    return best;
+    return joined(std::move(best));
+}
+// Kilika and Besaid pedestals (a contact zone, or a talk zone with an
+// obstacle) start their push script on any touch, so walks keep a wide
+// margin where the floor allows it, and the old 1.5 margin otherwise.
+// Djose and Macalania push obstacles keep the old margin.
+std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone,bool wide) {
+    if(wide) if(auto route=contactRoute(mesh,player,goal,zone,3.5);!route.empty()) return route;
+    return contactRoute(mesh,player,goal,zone,1.5);
 }
 std::vector<Point> avoidingRoute(const Mesh& mesh,Point player,Point goal,const InteractionZone& zone,int endTriangle=-1) {
-    if(zone.obstacleRadius>0) {
+    if(zone.obstacleRadius>0 && !(zone.contactRadius>0)) {
         auto obstacle=zone; obstacle.center=zone.obstacle; obstacle.contactRadius=zone.obstacleRadius;
-        return contactRoute(mesh,player,goal,obstacle);
+        return contactRoute(mesh,player,goal,obstacle,zone.talk);
     }
-    return zone.contactRadius>0?contactRoute(mesh,player,goal,zone):
+    return zone.contactRadius>0?contactRoute(mesh,player,goal,zone,true):
         endTriangle>=0?routePoints(mesh,player,goal,endTriangle):routePoints(mesh,player,goal);
 }
 
@@ -249,7 +300,7 @@ static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const Interact
 std::vector<Point> interactionRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
     auto route=zoneRoute(mesh,player,zone,horizontalApproach);
     // A pedestal obstacle added for safety never removes a destination.
-    if(route.empty() && zone.talk && zone.obstacleRadius>0) {
+    if(route.empty() && (zone.talk || zone.contactRadius>0) && zone.obstacleRadius>0) {
         auto plain=zone; plain.obstacleRadius=0; route=zoneRoute(mesh,player,plain,horizontalApproach);
     }
     return route;

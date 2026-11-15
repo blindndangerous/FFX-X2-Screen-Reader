@@ -273,6 +273,10 @@ void pedestalZone(Entity& e,const Scene& s,const WorkerFact& w,const std::array<
         const auto radius=e.zone.contactRadius,height=e.zone.height;e.zone={};e.zone.shape=1;e.zone.center=e.position;
         e.zone.range=radius-.15;e.zone.height=height;e.zone.valid=std::isfinite(radius) && radius>.5;e.inactive=e.inactive || !e.zone.valid;return;
     }
+    // In-game F27: walks keep outside a learned off-side touch.
+    if(e.pushControl<=2 && activePedestal(s,e) && s.pedestal.touch>e.zone.contactRadius && e.zone.contactRadius>0) {
+        e.zone.obstacle=e.zone.center;e.zone.obstacleRadius=s.pedestal.touch;
+    }
     try {
         const auto plan=copiedPedestalPlan(s,w,e,script);
         if(e.pushControl<=2) {
