@@ -39,6 +39,21 @@ bool parseCharset(const std::uint8_t* data, std::size_t size, Charset& out) {
     return true;
 }
 
+bool parseLoadedCharset(const std::uint8_t* data, std::size_t capacity, Charset& out) {
+    out.glyphs.clear();
+    if(!data) return false;
+    std::vector<std::string> glyphs;
+    for(std::size_t at=0;at<capacity && data[at];) {
+        const auto length=sequenceLength(data+at,capacity-at);
+        if(!length) break; // uninitialised padding after the file
+        glyphs.emplace_back(reinterpret_cast<const char*>(data+at),length);
+        at+=length;
+    }
+    if(glyphs.size()<MinimumLoadedGlyphs) return false;
+    out.glyphs=std::move(glyphs);
+    return true;
+}
+
 std::string decode(const std::uint8_t* source, std::size_t length, const Charset& charset) {
     std::string out;
     if(!source) return out;
