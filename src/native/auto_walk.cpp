@@ -157,10 +157,13 @@ void controlDisabled(Event&) { controlTaken(); }
 }
 void setNavigationInputAssist(NavigationKeyboardAssist keyAssist,NavigationControllerAssist padAssist) { keyboardAssist=keyAssist;controllerAssist=padAssist; }
 void suspendAutoWalk() {manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("reset");else {engaged=false;cancel=true;mask=0;stamp=0;}}
+// The battle is over once the game says so, even before serviceResume has moved
+// the phase on: input in that first frame belongs to the field, not the battle.
+bool resumeBattleOver(int phase) {return phase==ResumeAfter || (phase==ResumeBattle && !inBattle());}
 void stopAutoWalk() {
     // A navigation command after the battle replaces the pending resume. Before
     // and during the battle, route teardown also lands here and must not cancel it.
-    if(resumePhase.load()==ResumeAfter) resumeCancel=true;
+    if(resumeBattleOver(resumePhase.load())) resumeCancel=true;
     manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) {takeover={};stop("cancelled");}else {engaged=false;cancel=true;mask=0;stamp=0;}
 }
 bool toggleAutoWalkOff(void (*cancelCommand)()) {
@@ -201,7 +204,7 @@ void startAutoWalk() {
 }
 // Walking outside the battle means the player took over; battle commands and
 // confirming results do not.
-void movedAfterBattle() {const int phase=resumePhase.load();if(phase==ResumeArmed || phase==ResumeAfter) resumeCancel=true;}
+void movedAfterBattle() {const int phase=resumePhase.load();if(phase==ResumeArmed || resumeBattleOver(phase)) resumeCancel=true;}
 void serviceResume() {
     const int phase=resumePhase.load();if(phase==ResumeNone) return;
     const auto now=nowMs();
