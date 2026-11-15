@@ -46,7 +46,8 @@ constexpr SettingInfo options[] = {
     // Append the persistent ID; menu order is independent, so old IDs/keys stay stable.
     {L"Automatically read extra info",L"Read the visible extra-information pane automatically. Independent of Autodetail. U repeats extra information; I repeats the selected description.",L"auto_extra_info",0,0,1,1},
     {L"Unavailable cue",L"Say Unavailable when the game plays its error buzzer in a menu or battle, such as when confirming an item or ability that cannot be used now.",L"unavailable_cue",1,0,1,1},
-    {L"Clock directions",L"Give destination directions as a clock position relative to the camera, such as 2 o'clock, and say above or below when the destination is at least two steps higher or lower. Off keeps compass words. Route directions always use compass words.",L"clock_directions",0,0,1,1}
+    {L"Clock directions",L"Give destination directions as a clock position relative to the camera, such as 2 o'clock, and say above or below when the destination is at least two steps higher or lower. Off keeps compass words. Route directions always use compass words.",L"clock_directions",0,0,1,1},
+    {L"Sphere Grid node numbers",L"Say the node number after each Sphere Grid node name and in route guidance. F6 node-number entry works either way.",L"sphere_node_numbers",1,0,1,1}
 };
 static_assert(_countof(options)==static_cast<unsigned>(Setting::Count));
 std::atomic<int> values[_countof(options)];

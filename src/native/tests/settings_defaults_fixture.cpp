@@ -22,6 +22,8 @@ int main() {
         constexpr Setting cues[]={Setting::GagazetCues};
         loadSettings();
         check(!setting(Setting::AutoExtraInfo) && settingInfo(Setting::AutoExtraInfo).initial==0,"fresh extra information defaults Off");
+        check(setting(Setting::SphereNodeNumbers)==1 && settingInfo(Setting::SphereNodeNumbers).initial==1 &&
+            static_cast<unsigned>(Setting::SphereNodeNumbers)>static_cast<unsigned>(Setting::AutoExtraInfo),"node numbers default On with a new appended ID");
         check(static_cast<unsigned>(Setting::AutoDetail)==2 && static_cast<unsigned>(Setting::BlitzAssist)==36 &&
             static_cast<unsigned>(Setting::AutoExtraInfo)==37 && static_cast<unsigned>(Setting::UnavailableCue)==38,"new extra setting preserves all previous setting IDs");
         check(setting(Setting::UnavailableCue)==1 && settingInfo(Setting::UnavailableCue).initial==1,"fresh unavailable cue defaults On");
