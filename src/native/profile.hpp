@@ -218,8 +218,9 @@ inline constexpr Ffx2Rva ffx2Addresses[] = {
     {0x46fed0, 0x32a970}, // map request: event map jump
     {0x5093b0, 0x3ba3b0}, // map load ("RAM Inuse"), load-finished boundary
 };
-// FFX-2-only addresses: FFX-2.exe RVAs with no FFX counterpart, found by
-// call-graph and data-flow reading of FFX-2.exe. Evidence:
+// FFX-2-specific addresses and layouts, found by call-graph and data-flow
+// reading of FFX-2.exe. Experimental field sites remain disabled by default.
+// Evidence:
 // Docs/ffx2-addresses.md, "FFX-2-only addresses".
 enum class Ffx2Only : unsigned {
     TopMenuUpdate, // top-level menu module update (module VA 0xd62e20, slot 0)
@@ -229,6 +230,11 @@ enum class Ffx2Only : unsigned {
     HelpText,      // pointer to the help line the menu shows (setter 0x365a50)
     Charset,       // pointer to the loaded ffx2sjistbl_us.bin (loader 0x111120)
     StoryMode,     // dword read by 0x392ee0; zero in the main story
+    FieldTextWindows, // eight window pointers; cursor state is inside each window
+    FieldTextSet,     // sets +0xf0/+0xf4, unlike FFX's +0x90/+0x94
+    FieldTextOpen,    // begins a new active window lifetime
+    FieldTextPage,    // selected page preparation callback (+0x128)
+    FieldTextChoice,  // ordinary choice callback (+0x130); numeric input is separate
 };
 struct Ffx2OnlyRva { Ffx2Only name; unsigned rva; };
 inline constexpr Ffx2OnlyRva ffx2OnlyAddresses[] = {
@@ -239,6 +245,11 @@ inline constexpr Ffx2OnlyRva ffx2OnlyAddresses[] = {
     {Ffx2Only::HelpText, 0x12bd97c},
     {Ffx2Only::Charset, 0x9eade0},
     {Ffx2Only::StoryMode, 0x12ef654},
+    {Ffx2Only::FieldTextWindows, 0x18ceb20},
+    {Ffx2Only::FieldTextSet, 0x396fc0},
+    {Ffx2Only::FieldTextOpen, 0x396280},
+    {Ffx2Only::FieldTextPage, 0x39b9f0},
+    {Ffx2Only::FieldTextChoice, 0x3926e0},
 };
 inline unsigned ffx2Rva(Ffx2Only name) {
     if(nativeProfile!=NativeProfile::Ffx2) throw std::out_of_range("FFX-2-only address outside the FFX-2 profile");
