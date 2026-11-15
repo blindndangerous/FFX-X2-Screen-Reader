@@ -242,6 +242,12 @@ void ruleTests() {
         "Macalania approach uses world motion rather than its differently mapped raw input direction");
     s.values[0x0c0000a3]=2; check(!pedestalPlan(4,1,s).blocked.empty(),"wrong Macalania branch cannot become first-mound success");
     for(unsigned local=56;local<=60;++local) { s=snapshot({},{{0x0c0000de+local-56,0}}); p=pedestalPlan(5,local,s); check(p.moves.size()==1 && p.moves[0].mode==PushMode::Single,"each upper Djose pedestal uses one original Confirm"); }
+    // A single Confirm push moves the pedestal by itself, so the text names the
+    // button and the direction the pedestal moves, not a push direction that
+    // can contradict the side the player stands on.
+    { s=snapshot({},{{0x0c0000de,0}}); p=pedestalPlan(5,56,s);
+      const auto text=describePedestalPlan(p,s.position,L"Confirm");
+      check(text.rfind(L"Press Confirm once. The pedestal then moves ",0)==0 && text.find(L"Push ")==std::wstring::npos,"single Confirm push names the button, then the pedestal movement"); }
     for(unsigned local=44;local<=47;++local) { s=snapshot({},{{0x0c000021,0}}); check(pedestalPlan(6,local,s).moves[0].mode==PushMode::Single,"each Zanarkand pedestal activates its pattern once"); }
     bool missingRejected=false;
     try { (void)pedestalPlan(1,7,snapshot({},{{0x5c0000cc,1} })); }
