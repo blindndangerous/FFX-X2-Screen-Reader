@@ -53,6 +53,10 @@ struct PedestalPlan {
     std::wstring_view blocked;
     unsigned phase=0,producer=0,entry=0;
     bool complete=false;
+    // The push key is not the consent: at this pedestal Confirm opens its
+    // sphere prompt. Auto walk to the pedestal is the consent (Besaid,
+    // Kilika).
+    bool walkConsent=false;
 };
 static_assert(std::is_trivially_copyable_v<PedestalSnapshot> && std::is_trivially_destructible_v<PedestalPlan>);
 PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot&);
@@ -80,8 +84,10 @@ struct PedestalNavigationState {
     bool armed=false,held=false,contact=false,crossing=false;
 };
 PedestalNavigationState capturePedestalNavigationState(); // Native owner, fixed copied state only.
-void armPedestal(const Entity&);
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&);
+// walk: armed by an auto walk start (backslash), which is the consent for a
+// walk-consent plan. Selecting or facing the pedestal arms without it.
+void armPedestal(const Entity&,bool walk=false);
+void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool walk=false);
 void updatePedestalOwnedTarget(const NativeRouteTarget&);
 void cancelPedestal();
 void updatePedestalInput();

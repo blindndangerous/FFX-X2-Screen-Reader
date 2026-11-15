@@ -200,6 +200,7 @@ Entity setup(unsigned controlKind,unsigned local,Point p) {
     configurePedestalTarget(target,names[controlKind],local);
     return target;
 }
+PedestalPlan kilikaPlan;
 void ready(Entity& target) { refreshTargetZone(target,worker(target.pushLocal),1); armPedestal(target); }
 PedestalSnapshot snapshot(Point p,std::initializer_list<PedestalBindings::Value> vars) {return {p,PedestalBindings(vars)};}
 PedestalPlan measuredPlan(unsigned control,unsigned local,const PedestalSnapshot& s,const char* reason) {
@@ -293,9 +294,11 @@ int main() {
     }
     auto target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1; ready(target);
     check(pedestalConsentKey(0x39) && pedestalConsentKey(0x2c) && !pedestalConsentKey(0x1c) && pedestalConsentButtons()==pad::bit(pad::East),"configured Space/alternate push and physical B publish consent separately from Confirm");
-    check(pedestalInstruction(target).find(L"Hold Space or Z")!=std::wstring::npos,"instructions announce actual configured push keys");
+    check(pedestalInstruction(target).find(L"Do not press Space or Z at the pedestal")!=std::wstring::npos,"walk-push instructions name the configured keys that open the sphere prompt");
+    { PedestalPlan held; held.moves.push_back({{0,0,50},0,PushMode::Slide});
+      check(describePedestalPlan(held,{0,0,0},L"Space or Z").find(L"Hold Space or Z")!=std::wstring::npos,"held-push instructions announce actual configured push keys"); }
     padOwned=true;inputDeviceMark.store(0);observeInputDevice(true);
-    check(pedestalInstruction(target).find(L"Hold B")!=std::wstring::npos,"controller instructions announce actual configured push button");
+    check(pedestalInstruction(target).find(L"Do not press B at the pedestal")!=std::wstring::npos,"controller instructions announce actual configured push button");
     padOwned=false;inputDeviceMark.store(0);observeInputDevice(false);
     check(frame()==0 && walking && !route.empty(),"held Space starts actual DI/pad walking across the pedestal contact gap");
     refreshTargetZone(target,worker(7),1);
@@ -323,6 +326,33 @@ int main() {
         "starting already touching routes outward to clear native contact before re-entry");
     position(playerActor(),route.back()); walking=false; frame();
     check(pedestalActiveContact(target) && walking,"holding Space re-enters only after reaching the outside stage");
+    // Besaid and Kilika: Confirm at the pedestal runs its sphere prompt
+    // (Kilika w6 entry 2, disable 0F98), so the push key cannot be pressed
+    // there. The original push (Kilika w6 entry 4 at 274B, Besaid w7 entry 4
+    // at 12AB) reads only a held direction, after contact from an axis-aligned
+    // side (Kilika 27DF-28B9: more than 2 units out, under 2 across). A
+    // backslash walk to the pedestal is the consent, and only a contact from
+    // the planned side is pushed.
+    target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=2;
+    position(playerActor(),{.2215-3,-10,144.1042}); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
+    disable(6,4,0x274b);
+    // The first Kilika row pushes east (+x), raw 0x2000.
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0x2000,"Kilika contact from the planned side pushes without the push key");
+    check(frame(0)==0x2000,"Kilika push keeps its direction without the push key");
+    restore();
+    target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=2;
+    position(playerActor(),{.2215+2,-10,144.1042+2}); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
+    write<uint16_t>(address(0xf27080),0x4000); disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0 && pedestalActivePlan(target,kilikaPlan),
+        "Kilika corner contact reads no direction and stays armed");
+    restore();
+    target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1; refreshTargetZone(target,worker(7),1); armPedestal(target,true);
+    disable(7,4,0x12ab);
+    check(frame(0)==0x1000,"Besaid backslash push from the planned side needs no push key");
+    restore();
+    target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1; ready(target);
+    check(frame(0)==0 && !walking,"selecting a Besaid pedestal without backslash starts nothing");
+    restore();
     target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=1; ready(target);
     const auto pedestal=read<uintptr_t>(worker(6)+0x9c);
     position(pedestal,{49.1,-10,144.1042}); target.position={49.1,-10,144.1042};

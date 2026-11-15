@@ -20,7 +20,7 @@ struct Session {
     PedestalPlan plan;
     unsigned epoch=0,segment=0,consent=0;
     std::array<unsigned,2> directions{};
-    bool held=false,owned=false,started=false,single=false,stopping=false,approaching=false,crossing=false,contact=false,committed=false,waitingShape=false;
+    bool walk=false,held=false,owned=false,started=false,single=false,stopping=false,approaching=false,crossing=false,contact=false,committed=false,waitingShape=false;
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0;
     Point last,lastPlayer;
@@ -113,9 +113,22 @@ bool needsHeldInput() {
 }
 void entered(Event& e) { e.before[0]=interpreter; e.before[1]=interpreterEpoch; interpreter=e.args[0]; interpreterEpoch=generation(); }
 void left(Event& e) { interpreter=static_cast<uintptr_t>(e.before[0]); interpreterEpoch=static_cast<unsigned>(e.before[1]); }
+// The original push pushes only after contact from an axis-aligned side:
+// more than 2 units out along the push axis and under 2 across for Kilika
+// (w6 entry 4, 27DF-28B9), 2.3 for Besaid (w7 entry 4, 11DD-121F). A
+// walk-consent push claims only a contact on the planned side.
+bool onPushSide() {
+    if(active.segment>=active.plan.moves.size()) return false;
+    PedestalSnapshot snapshot;if(!capturePedestalSnapshot(active.script,active.target,snapshot)) return false;
+    const auto goal=active.plan.moves[active.segment].goal,p=snapshot.position,player=playerPosition();
+    const double gx=goal.x-p.x,gz=goal.z-p.z,x=player.x-p.x,z=player.z-p.z;
+    const double edge=active.target.pushControl==1?2.3:2;
+    if(std::abs(gx)>=std::abs(gz)) return (gx>0?-x:x)>edge && std::abs(z)<edge;
+    return (gz>0?-z:z)>edge && std::abs(x)<edge;
+}
 void disabled(Event& e) {
     if(!armed) return;
-    if(ownsDisable(e)) {
+    if(ownsDisable(e) && (!active.walk || active.owned || onPushSide())) {
         active.signal=read<uintptr_t>(interpreter+0x90); active.owned=active.started=true; active.contact=false; stopAutoWalk();
         // The same interpreter reads its direction immediately after disabling
         // control. Replace approach input before that read, not next frame.
@@ -127,12 +140,13 @@ void disabled(Event& e) {
             active.committed=true; if(published) suppress(published); published=0;
         }
     }
-    else if(!active.held && !active.owned && ownsDisable(e,false)) {
+    else if((!active.held || active.walk) && !active.owned && ownsDisable(e,false)) {
         // Auto walk touched the pedestal before the push key was held, and the
         // original push script took control by itself. Give it no direction so
         // the pedestal stays put, and stay armed for the real held push.
         stopAutoWalk(); suppress(pedestalInputMask(0xf000));
-        recordLog("pedestal contact before the push key: waiting for it");
+        if(active.walk) {active.approaching=active.contact=false;recordLog("pedestal contact off the push side: walking to it");}
+        else recordLog("pedestal contact before the push key: waiting for it");
     }
     else stop("unrelated player-control disable");
 }
@@ -213,7 +227,7 @@ bool pedestalActivePlan(const Entity& target,PedestalPlan& plan) {
         target.pushLocal!=active.target.pushLocal || target.worker!=active.target.worker || target.id!=active.target.id) return false;
     plan=active.plan; plan.moves.erase(plan.moves.begin(),plan.moves.begin()+active.segment); return true;
 }
-void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& script,const PedestalPlan& plan) {
+void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& script,const PedestalPlan& plan,bool walk) {
     if(!nativeGameThread()) return;
     stop("new target");
     observedCancel=cancelRevision.load(std::memory_order_acquire);
@@ -222,6 +236,7 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
         if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
         active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent;
+        active.walk=active.held=walk && plan.walkConsent;
         unsigned index=0;for(const auto& move:plan.moves) {
             const auto bits=pedestalInputMask(move.held);
             if(move.held && pedestalLogicalInput(bits)!=move.held) {stop("invalid inverse input mapping");return;}
@@ -233,9 +248,9 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         active.last=target.position; active.lastPlayer=playerPosition(); active.progress=GetTickCount64(); armed=true;
     }catch(...) {stop("unavailable verified state");}
 }
-void armPedestal(const Entity& target) {
+void armPedestal(const Entity& target,bool walk) {
     UtilityScript script;if(!pedestalScript(target.pushControl,script)) {stop("new target");return;}
-    try {OwnedNavTarget copied;if(!captureOwnedNavTarget(target,copied)) return;const auto plan=currentPedestalPlan(target);armPedestalOwned(copied.native,script,plan);}catch(...) {stop("unavailable verified state");}
+    try {OwnedNavTarget copied;if(!captureOwnedNavTarget(target,copied)) return;const auto plan=currentPedestalPlan(target);armPedestalOwned(copied.native,script,plan,walk);}catch(...) {stop("unavailable verified state");}
 }
 void updatePedestalOwnedTarget(const NativeRouteTarget& target) {
     if(!nativeGameThread() || !armed || active.epoch!=generation() || target.worker!=active.target.worker || target.id!=active.target.id || target.pushControl!=active.target.pushControl || target.pushLocal!=active.target.pushLocal) return;
@@ -248,7 +263,7 @@ void updatePedestalInput() {
     const auto drained=drain; drain&=raw; if(drained) suppress(drained);
     if(!armed) return;
     const bool wasHeld=active.held;
-    active.held=(raw&active.consent)!=0;
+    active.held=active.walk || (raw&active.consent)!=0;
     if(!active.held) {
         if(wasHeld || active.owned || active.started || active.single || active.stopping) { stop("push action released"); return; }
         active.approaching=autoWalkActive(); return;
