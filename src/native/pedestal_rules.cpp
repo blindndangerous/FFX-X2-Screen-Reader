@@ -13,7 +13,7 @@ PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot
     const auto p=s.position;
     switch(control) {
     case 1: // bsyt0100: four original edges around the final depression.
-        plan.producer=7; plan.entry=4;
+        plan.producer=7; plan.entry=4; plan.walkConsent=true;
         plan.complete=s.get(0x5c000100)==1;
         if(plan.complete) break;
         if(s.get(0x5c0000cc)!=1) { plan.blocked=L"Insert the Besaid Sphere into the pedestal sphere recess first."; break; }
@@ -21,7 +21,7 @@ PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot
         move(plan,{-14.4117183685,p.y,-147.6743469238},p.z> -147.6743469238?0x1000:0x4000);
         break;
     case 2: // klyt1000: reset position, then the actor-only depression edge.
-        plan.producer=6; plan.entry=4;
+        plan.producer=6; plan.entry=4; plan.walkConsent=true;
         plan.complete=s.get(0x0c000064)==1;
         if(plan.complete) break;
         // w6 entry 4 (2CE3) accepts socket values 1-3, the Kilika Sphere;
@@ -122,6 +122,9 @@ std::wstring describePedestalPlan(const PedestalPlan& plan,Point position,const 
     const bool single=plan.moves.front().mode==PushMode::Single;
     // A single push is one Confirm press; the original script then plays a
     // fixed animation. Name the button first, then where the pedestal goes.
+    if(plan.walkConsent) return L"Push "+join(parts,L", then ")+L". Walk into the pedestal from the push side and keep moving in the push direction. "
+        L"Do not press "+action+L" at the pedestal: that opens its sphere prompt. With Auto walk on, select the Pedestal and press backslash: "
+        L"the walk goes to the push side and pushes. Any movement key stops it.";
     if(single) return L"Press "+action+L" once. The pedestal then moves "+join(parts,L", then ")+L". With Auto walk on, hold "+action+L" to push into position.";
     return L"Push "+join(parts,L", then ")+L". "+(single?L"Press "+action+L" once. ":L"Hold "+action+L" and move in the announced direction. ")+
         L"With Auto walk on, hold "+action+L" to push into position.";

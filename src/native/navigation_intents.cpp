@@ -89,7 +89,7 @@ void invoke(unsigned slot) {
     else if(f.kind==Intent::UpdatePedestal) updatePedestalOwnedTarget(f.target);
     else if(f.kind==Intent::AssistFailed) cancelPedestal();
     else {
-        if(f.kind==Intent::ArmAndStart || f.kind==Intent::ArmAndFace) {UtilityScript script;if(!scriptFor(f,script)) return;armPedestalOwned(f.target,script,f.plan);}
+        if(f.kind==Intent::ArmAndStart || f.kind==Intent::ArmAndFace) {UtilityScript script;if(!scriptFor(f,script)) return;armPedestalOwned(f.target,script,f.plan,f.kind==Intent::ArmAndStart);}
         if(f.kind==Intent::ArmAndFace) faceNavigationTarget(f.target);else startAutoWalk();
     }
 }
