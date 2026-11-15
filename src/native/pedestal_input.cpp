@@ -25,6 +25,7 @@ struct Session {
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
     unsigned requests=0,failures=0;
+    unsigned walkInput=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
     Point last,lastPlayer,pushFrom;
 
@@ -47,7 +48,7 @@ struct {unsigned epoch=0;uintptr_t chunk=0;int worker=-1;double radius=0;} remem
 // Stop only a walk that is running. stopAutoWalk also advances the manual
 // input revision, which rejects the mod's own queued navigation actions
 // (in-game F26: "navigation action rejected: manual input revision").
-void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();}
+void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();active.walkInput=autoWalkInputRevision();}
 // Route around a learned off-side touch as a wider keep-out radius. The
 // contact radius itself stays, so the final walk-in still reaches contact.
 void learnedTouch(NativeRouteTarget& target) {
@@ -261,6 +262,10 @@ bool approach() {
         haltAutoWalk(); active.approaching=active.walked=false; active.requests=0; faceNavigationTarget(active.target); return true;
     }
     if(autoWalkActive()) {active.approaching=active.walked=true; return false;}
+    // The player stopped the walk (Backslash again, or any movement or
+    // menu key). stopAutoWalk and physical input both advance the input
+    // revision; our own stops record it. Do not walk again on our own.
+    if(active.approaching && autoWalkInputRevision()!=active.walkInput) {stop("approach walk stopped by the player");return false;}
     // Ask again when the walk ended short of the zone (another hook stopped
     // it at a touch), or when a request never started a walk.
     const auto now=GetTickCount64();
@@ -314,7 +319,7 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
     try {
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
         if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
-        active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent;
+        active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent; active.walkInput=autoWalkInputRevision();
         if(remembered.epoch==active.epoch && remembered.chunk==script.chunk && remembered.worker==target.worker) active.touch=remembered.radius;
         learnedTouch(active.target);
         active.walk=active.held=walk && plan.walkConsent;

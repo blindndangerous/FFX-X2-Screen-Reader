@@ -106,7 +106,9 @@ bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return faceResult;}
 bool autoWalkActive() { return walking; }
 unsigned walkStops=0;
 bool legValid=false,legArrived=false;
-void stopAutoWalk() { walking=false; ++walkStops; }
+unsigned inputRevision=1;
+unsigned autoWalkInputRevision() { return inputRevision; }
+void stopAutoWalk() { walking=false; ++walkStops; ++inputRevision; }
 void startAutoWalk() { walking=true; ++starts; }
 bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
@@ -358,6 +360,14 @@ void kilikaWalkFixtures() {
     check(walking,"a Kilika walk-in push starts its approach walk");
     walking=false; frame(0);
     check(routeRequests==asked+1 && walking,"a Kilika approach walk that ended short is requested again");
+    // Integration review: Backslash pressed again during the walk stops it
+    // through stopAutoWalk only ("Auto walk stopped"). The approach must not
+    // ask for the route again, or the walk restarts on its own.
+    {
+        const auto again=routeRequests; stopAutoWalk(); frame(0); frame(0);
+        check(routeRequests==again && !walking && !capturePedestalNavigationState().armed,
+            "a Kilika approach walk the player stopped is not requested again");
+    }
     cancelPedestal(); frame(0);
     // F27: on the reset tile north-east of the pedestal, every approach walk
     // touched it off the push side, farther out than the modelled contact
