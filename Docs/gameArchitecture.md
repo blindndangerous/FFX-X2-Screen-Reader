@@ -2859,6 +2859,19 @@ The physical asset format alone does not tell us who owns input or text.
 This is a source coverage inventory, not a claim that every listed menu was opened
 and tested. Existing historical 'Solved' notes must not override the user's report.
 
+November 15 FFX-2 source checkpoint: the current X-2 branch includes the top-level
+menu reader and default-off experimental field page/choice speech. This
+supersedes the older FFX-2 row above. X-2 stores current text at window `+0xf4`
+and cursor state/row at `+0x144/+0x148`, in one object. Hooks only copy bounded
+ready bytes and native focus, and existing speech preparation decodes owned
+snapshots. The experiment uses the setter/opener to identify lifetimes and the
+native page/choice callbacks for observations; it does not port FFX structures
+or reuse FFX text getters. Unresolved substitutions, voice qualification, FMV,
+dedicated tutorials and location arrival remain gaps. Static evidence, exact
+addresses, compile flag, synthetic checks and live limits are maintained in
+[Dialogue and field text](ffx2-addresses.md#dialogue-and-field-text). The ordinary
+build keeps experimental hooks disabled; gameplay and NVDA behavior are unverified.
+
 ### Corrected map-exit analysis
 
 The own-game log recorded worker 31, type 2, code length 17,956, destination

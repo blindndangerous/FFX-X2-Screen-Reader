@@ -1,4 +1,17 @@
-# FFX current memory — November4
+# FFX current memory — November15
+
+FFX-2 field text research on `feat/ffx2-text` is static only and uncommitted.
+[Address evidence and limits](Docs/ffx2-addresses.md#dialogue-and-field-text)
+records the text setter 0x396fc0, page advance/preparer 0x397a40/0x39b9f0,
+ordinary choices 0x3926e0, numeric-input lead 0x392490 and exact location getter
+0x326b20. An explicit `FFX2_EXPERIMENTAL_FIELD_TEXT=1` enables a bounded owned
+page/choice capture experiment; the default remains 0. Unresolved macros/buttons,
+FMV/event subtitles, dedicated tutorials, native voice and location arrival are
+not implemented. Five synthetic X-2 fixtures and the canonical no-deploy build
+pass. The full native suite reaches Jecht, then fails because the retained Winno
+EBP fixture is unavailable; later groups remain unrun. No live game/debugger,
+deployment, tester evidence, commit, push or release activity occurred. This
+worktree checkpoint does not change the deployed FFX release described below.
 
 [Release1.0.2](Docs/release.md#release102--november4) is built, guarded-deployed,
 packaged and [published Latest](https://github.com/bladestorm360/FFX-X2-Screen-Reader/releases/tag/v1.0.2).
