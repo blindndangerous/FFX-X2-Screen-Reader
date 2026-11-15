@@ -18,6 +18,7 @@
 #include "lightning.hpp"
 #include "esc_details.hpp"
 #include "nonblocking_snapshots.hpp"
+#include "profile.hpp"
 #include <atomic>
 
 namespace ffx {
@@ -37,6 +38,14 @@ std::atomic<unsigned> inputRevision{1};
 std::array<bool,256> swallowedMessages{};
 std::atomic<bool> keyboard{false};
 thread_local unsigned messageDepth = 0;
+// FFX-2 has no verified addresses for the ESC menu, Blitzball, field, battle or
+// minigame state these predicates read, so it never consults them.
+bool ffxScenes() { return nativeProfile!=NativeProfile::Ffx2; }
+bool escapeMenu() { return ffxScenes() && escMenuActive(); }
+bool activityCaptures(unsigned vk) { return ffxScenes() && minigameCapturesKey(vk); }
+bool sceneCaptures(unsigned vk,bool control) {
+    return ffxScenes() && (blitzCapturesKey(vk,control) || fieldControlsCapturesKey(vk,control) || battleSensorCapturesKey(vk,control));
+}
 void messageEnter(Event& e) { e.before[0] = ++messageDepth; }
 void received(Event& e) {
     if (messageDepth) --messageDepth;
@@ -77,7 +86,7 @@ void drainKeys() {
     Key event;
     // One bounded FIFO drain; publications and availability handback never wait.
     for(unsigned count=0;count<64 && queue.tryPop(event);++count)
-      if(event.epoch==generation() && event.revision==inputRevision.load(std::memory_order_acquire) && gameFocused() && event.escape==escMenuActive() && (!event.guard || event.guard())) {
+      if(event.epoch==generation() && event.revision==inputRevision.load(std::memory_order_acquire) && gameFocused() && event.escape==escapeMenu() && (!event.guard || event.guard())) {
         if(event.menu) { if(modMenuActive()) modMenuKey(event.vk,event.shift); }
         else if(!modMenuActive() && !utilityConsoleActive()) {
             if(event.activity) dispatchMinigameKey(event.vk,event.shift);
@@ -103,6 +112,7 @@ void inputEvent(Event&) {
     if (!utilityConsoleActive() && !modMenuActive()) pumpPuzzleSolver();
 }
 void inputBefore(Event&) { if(observeGameThread()) { updateUtilityContext(); pumpController(); } }
+void ffx2InputBefore(Event&) { observeGameThread(); }
 void inputAfter(Event&) {
     // Dispatch copied commands at their native input return, without running
     // field movement/utility pumps in a menu update.
@@ -110,10 +120,12 @@ void inputAfter(Event&) {
 }
 }
 void dispatchHotkey(unsigned vk,bool shift,bool control) {
-    if(dispatchBlitzKey(vk,control)) return;
-    if(dispatchFieldControlsKey(vk,control)) return;
-    if(dispatchBattleSensorKey(vk,control)) return;
-    if(dispatchMinigameKey(vk,shift)) return;
+    if(ffxScenes()) {
+        if(dispatchBlitzKey(vk,control)) return;
+        if(dispatchFieldControlsKey(vk,control)) return;
+        if(dispatchBattleSensorKey(vk,control)) return;
+        if(dispatchMinigameKey(vk,shift)) return;
+    }
     if(const auto binding=chord(vk,shift)) { binding->handler(shift); return; }
     if(vk>=bindings.size()) return;
     const auto& binding=bindings[vk];
@@ -124,7 +136,7 @@ bool queueControllerHotkey(unsigned vk,bool shift,bool control,bool(*guard)()) {
     if(!nativeGameThread() || !vk || !gameFocused() || utilityConsoleActive() || modMenuActive() || !guard || !guard()) return false;
     // Do not call consumeKey: that would misclassify this controller event as
     // keyboard input. Keep physical passthrough and native input sampling immediate.
-    const bool accepted=queue.tryPush({vk,shift,control,generation(),inputRevision.load(std::memory_order_acquire),false,false,escMenuActive(),nullptr,guard});
+    const bool accepted=queue.tryPush({vk,shift,control,generation(),inputRevision.load(std::memory_order_acquire),false,false,escapeMenu(),nullptr,guard});
     if(!accepted) output(L"Input is busy. Try the command again.",true,"input-pressure");
     return accepted;
 }
@@ -142,7 +154,7 @@ bool consumeKey(unsigned vk,bool shift,bool control) {
     if(!nativeGameThread() || !vk || !gameFocused() || utilityConsoleActive()) return false;
     observeInputDevice(false);
     autoWalkPlayerInput(vk);
-    const bool activity=minigameCapturesKey(vk);
+    const bool activity=activityCaptures(vk);
     const bool captured=activity || capturesKey(vk,shift,control);
     // Unbound function keys belong to the game/screen reader, including NVDA
     // history on F12. Do not cancel the addon speech they can initiate.
@@ -150,9 +162,8 @@ bool consumeKey(unsigned vk,bool shift,bool control) {
     if(!captured) return false;
     const bool menu=modMenuActive();
     const auto registeredChord=chord(vk,shift);
-    const auto scoped=!menu && !activity && !blitzCapturesKey(vk,control) && !fieldControlsCapturesKey(vk,control) &&
-        !battleSensorCapturesKey(vk,control)?registeredChord:nullptr;
-    const bool accepted=queue.tryPush({vk,shift,control,generation(),inputRevision.load(std::memory_order_acquire),menu,activity,escMenuActive(),scoped?scoped->handler:nullptr});
+    const auto scoped=!menu && !activity && !sceneCaptures(vk,control)?registeredChord:nullptr;
+    const bool accepted=queue.tryPush({vk,shift,control,generation(),inputRevision.load(std::memory_order_acquire),menu,activity,escapeMenu(),scoped?scoped->handler:nullptr});
     // No retry/wait on native input. A refused exclusive command is dropped,
     // while its physical press/repeat/release stays ours instead of native F1.
     return accepted || (registeredChord && registeredChord->exclusive);
@@ -160,10 +171,8 @@ bool consumeKey(unsigned vk,bool shift,bool control) {
 bool capturesKey(unsigned vk,bool shift,bool control) {
     if(!nativeGameThread() || !gameFocused() || utilityConsoleActive()) return false;
     if(modMenuActive()) return true;
-    if(blitzCapturesKey(vk,control)) return true;
-    if(fieldControlsCapturesKey(vk,control)) return true;
-    if(battleSensorCapturesKey(vk,control)) return true;
-    if(minigameCapturesKey(vk)) return true;
+    if(sceneCaptures(vk,control)) return true;
+    if(activityCaptures(vk)) return true;
     if(chord(vk,shift)) return true;
     if(vk>=bindings.size()) return false;
     const auto& binding=bindings[vk];
@@ -183,5 +192,15 @@ void installInput() {
     hook(0x471d10,nullptr,inputEvent);
     installDirectInputKeyboard();
     installController();
+}
+void installFfx2Input() {
+    // Keyboard only: window messages, the PInput::Update probe and the
+    // DirectInput keyboard/pad updaters. Commands drain at the probe return.
+    // No controller, help-page or per-frame field input hook under FFX-2.
+    const auto user = GetModuleHandleW(L"user32.dll");
+    const char* names[] = {"PeekMessageA", "PeekMessageW", "GetMessageA", "GetMessageW"};
+    for (unsigned i = 0; i < 4; ++i) hookAddress(reinterpret_cast<uintptr_t>(GetProcAddress(user, names[i])), 0xffff0000 + i, messageEnter, received);
+    hook(gameThreadProbe(),ffx2InputBefore,inputAfter);
+    installDirectInputKeyboard();
 }
 }

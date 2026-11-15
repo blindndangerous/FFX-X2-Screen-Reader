@@ -23,6 +23,7 @@
 #include "minigame_completion.hpp"
 #include "text_plan.hpp"
 #include "esc_details.hpp"
+#include "profile.hpp"
 #include <atomic>
 #include <stdexcept>
 #include <cstring>
@@ -71,7 +72,12 @@ void captureSpeechStatus() {
     if(copySpeechBackendSnapshot(current)) std::memcpy(speechSnapshot.status,current.status,sizeof(speechSnapshot.status));
     else speechSnapshot.status[0]=0;
 }
+// FFX-2 has no verified scene, beacon or minigame state, so its menu keeps
+// only the speech settings.
+bool ffx2() { return nativeProfile==NativeProfile::Ffx2; }
 bool visible(unsigned item) {
+    if(ffx2()) return item==option(Setting::Speech) || item==SpeechOptionsMenu ||
+        item==option(Setting::SpeakPunctuationNames) || item==Back || item==Close;
     if(item==TrialMenu) return context.supported;
     if(item==HiddenAirshipMenu) return hiddenAirshipMenuAvailable();
     if(item==GagazetMenu) return context.gagazet;
@@ -158,6 +164,7 @@ void announce(bool opening=false) {
 void close() {
     active=false; captureSpeech(false); cancelControllerBinding(); drainController(); pauseNavAudio(); stopNavPreview();
     emitReady(L"Mod menu closed");
+    if(ffx2()) return;
     refreshSelectedBeacon();
       updateNavAudio(playerPosition(),false);
     refreshMinigameAudio();
@@ -374,8 +381,8 @@ void modMenuKey(unsigned vk,bool shift) {
     }
     switch(vk) {
     case VK_F8: close(); break;
-    case VK_F6: beaconKey(false); break;
-    case VK_F7: detailKey(false); break;
+    case VK_F6: if(!ffx2()) beaconKey(false); break;
+    case VK_F7: if(!ffx2()) detailKey(false); break;
     case VK_ESCAPE: case VK_BACK:
         back(); break;
     case VK_UP: row=(row+count()-1)%count(); announce(); break;
@@ -389,6 +396,16 @@ void modMenuKey(unsigned vk,bool shift) {
     }
 }
 void resetModMenu() { resetWakka(); resetSpherePlanner(); if(active) close(); }
+void ffx2MenuKey(bool) {
+    if(active) { close(); return; }
+    ModMenuState snapshot; snapshot.epoch=generation();
+    openModMenu(snapshot);
+}
+void installFfx2ModMenu() {
+    // F8 opens the speech settings menu and F11 repeats the last speech.
+    hotkey(VK_F8,ffx2MenuKey);
+    hotkey(VK_F11,[](bool shift) { repeatSpeech(shift); });
+}
 void installModMenu() {
     installUtilityText();
     hotkey(VK_F8,menuKey); hotkeyWhen(VK_F9,stepKey,guideKeysAvailable); hotkeyWhen(VK_F10,pathKey,guideKeysAvailable);

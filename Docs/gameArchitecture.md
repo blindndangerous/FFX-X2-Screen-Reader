@@ -2853,7 +2853,7 @@ The physical asset format alone does not tell us who owns input or text.
 | Shops | No shop reader installed | Buy/sell/equipment lists, prices, quantities, comparisons and confirms |
 | Battle | Main commands/targets implemented | Summon/party swap end-to-end unverified; Wakka Slots missing; partial Overdrive support |
 | Blitzball | No reader installed | Team/league/player/technique and in-match selection menus |
-| FFX-2 / Last Mission | Boot only: hash-selected `NativeProfile::Ffx2` speaks one startup line; no hooks, every FFX RVA refused | All menus, dialogue, battle and field; current FFX RVAs cannot be reused blindly |
+| FFX-2 / Last Mission | Keyboard input only: hash-selected `NativeProfile::Ffx2` speaks one startup line and hooks PInput::Update, the DirectInput updaters and window messages for F8 (speech settings) and F11 (repeat); only the RVAs in Docs/ffx2-addresses.md resolve | All menus, dialogue, battle and field; current FFX RVAs cannot be reused blindly |
 | Steam launcher | Original-action event adapter + native Tolk DLL built | Actual launcher validation; English image labels only; mute icon/credits content remain gaps |
 
 This is a source coverage inventory, not a claim that every listed menu was opened

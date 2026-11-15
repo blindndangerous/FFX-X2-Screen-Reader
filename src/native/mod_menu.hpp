@@ -7,6 +7,7 @@ void openModMenu(const ModMenuState&);
 bool modMenuActive();
 bool puzzleGuidanceAvailable(); // Same actual field-guide predicate as F9/F10; Native owner only.
 void installModMenu();
+void installFfx2ModMenu();
 void modMenuReply(const std::wstring&);
 void modMenuKey(unsigned vk,bool shift=false);
 void resetModMenu();
