@@ -26,6 +26,7 @@
 #include "mod_state.hpp"
 #include "auto_walk.hpp"
 #include "sphere_grid.hpp"
+#include "x2_boot.hpp"
 #include <MinHook.h>
 #include <atomic>
 
@@ -103,13 +104,16 @@ unsigned initializeReader(bool& initializedHooks) {
     wchar_t exe[MAX_PATH]{}; GetModuleFileNameW(nullptr, exe, MAX_PATH);
     const auto leaf = wcsrchr(exe, L'\\');
     const bool movieOnly=_wcsicmp(leaf ? leaf+1:exe,L"FFX&X-2_Will.exe")==0;
-    if (!movieOnly && _wcsicmp(leaf ? leaf + 1 : exe, L"FFX.exe") != 0) {
+    const bool ffx2=_wcsicmp(leaf ? leaf+1:exe,L"FFX-2.exe")==0;
+    if (!movieOnly && !ffx2 && _wcsicmp(leaf ? leaf + 1 : exe, L"FFX.exe") != 0) {
         recordLog("native game hooks skipped: no verified addresses for this executable"); return 0;
     }
     if (!configureNativeProfile()) return 0;
-    if(movieOnly!=(nativeProfile==NativeProfile::MovieCaptions)) {
+    if(movieOnly!=(nativeProfile==NativeProfile::MovieCaptions) || ffx2!=(nativeProfile==NativeProfile::Ffx2)) {
         recordLog("native readers refused: executable name/profile disagree"); return 0;
     }
+    // FFX-2 stops here: no FFX extension scan, dependency check or hook.
+    if(nativeProfile==NativeProfile::Ffx2) { announceFfx2Boot(); return 0; }
     if (!resolveNativeExtensions()) { recordLog("native readers refused: extension address verification failed"); return 0; }
     if (!validateNativeDependencies()) { recordLog("native readers refused: feature dependency verification failed"); return 0; }
     if (MH_Initialize() != MH_OK) return 0;
