@@ -102,9 +102,20 @@ std::wstring instruction(const nav::Scene& observation,const Entity& target,cons
 // holds its last exact step until the player has control again.
 bool settling(const nav::Scene& observation) {return !observation.control || (observation.pedestal.armed && observation.pedestal.held);}
 // Manual F9 and F10 selection starts from the step the guide last found.
+// A sphere put back where it came from. A pickup step whose `also` says its
+// source recess is empty (Besaid w39) is undone when the hand is empty and the
+// source holds a sphere again; the right next move leaves the source empty.
+void putBack(const nav::Scene& observation,State& state) {
+    if(state.expected<=state.begin || state.expected>=state.end) return;
+    const auto& pickup=state.route->steps[state.expected-1];
+    if(!pickup.check || pickup.checkpoint || !pickup.also.low || pickup.also.value!=0 || pickup.done.value==0) return;
+    if(value(observation,state,pickup.done.low,pickup.done.high,pickup.done.element)==pickup.done.value) return;
+    if(value(observation,state,pickup.also.low,pickup.also.high,pickup.also.element)==0) return;
+    --state.expected;
+}
 void follow(const nav::Scene& observation,State& state) {
     if(settling(observation)) return;
-    const auto before=state.expected;advance(observation,state);
+    const auto before=state.expected;putBack(observation,state);advance(observation,state);
     if(state.expected!=before) state.step=state.expected;
 }
 bool pushStep(const State& state,const PuzzleStep& step) {return step.platform || (!std::strcmp(state.route->script,"dome0700") && step.worker>=44 && step.worker<=47);}
@@ -172,8 +183,12 @@ bool ownedGuideTargetsTile(const nav::Scene& observation,const Entity& tile) {
     return std::wstring_view(step.label).find(L"reset tile")!=std::wstring_view::npos;
 }
 bool ownedGuidePedestalFace(const nav::Scene& observation,const Entity& pedestal,Point& face) {
-    if(pedestal.pushControl!=3 || ownedGuidePedestalStep(observation,pedestal).empty()) return false;
-    const auto& state=storage.get();if(std::string_view(state.route->script)!="djyt0600") return false;
+    // Kilika (2), Djose (3) and Macalania (4) pedestals hold their sphere
+    // recess on the pedestal worker itself. A sphere step routes to that
+    // recess, at interaction range, not to the push position: touching the
+    // pedestal starts the original push script, which takes control.
+    if(pedestal.pushControl<2 || pedestal.pushControl>4 || ownedGuidePedestalStep(observation,pedestal).empty()) return false;
+    face={};const auto& state=storage.get();if(std::string_view(state.route->script)!="djyt0600") return true;
     try {
         // Djose W15 owns the east socket (0x9d) and W16 the west socket (0x9e).
         // An insert goes to an empty socket, a take to a loaded one; east first.

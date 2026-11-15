@@ -24,7 +24,9 @@ PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot
         plan.producer=6; plan.entry=4;
         plan.complete=s.get(0x0c000064)==1;
         if(plan.complete) break;
-        if(s.get(0x0c00005a)!=1) { plan.blocked=L"Insert a Kilika Sphere into the pedestal first."; break; }
+        // w6 entry 4 (2CE3) accepts socket values 1-3, the Kilika Sphere;
+        // the guide's insert writes 2. 4 is the starting Glyph Sphere.
+        if(s.get(0x0c00005a)<1 || s.get(0x0c00005a)>3) { plan.blocked=L"Insert a Kilika Sphere into the pedestal first."; break; }
         if(p.z<100) { plan.blocked=L"Step on the pedestal reset glyph before this push."; break; }
         if(std::abs(p.x-50.0109901428)>1) move(plan,{50.0109901428,p.y,p.z},p.x<50.0109901428?0x2000:0x8000);
         // Crossing Z196.276 starts the native plunge to Z205.153. Keep the

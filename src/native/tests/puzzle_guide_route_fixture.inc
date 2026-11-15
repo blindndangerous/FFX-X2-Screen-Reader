@@ -160,6 +160,13 @@ double guidePedestalFace(const Entity& pedestal) {
     const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;Point face{};
     const bool found=ownedGuidePedestalFace(*fixtureGuideScene,pedestal,face);fixtureNativeOwner=previous;return found?face.x:0;
 }
+// A guide step that puts a sphere in or takes one out of a pedestal routes
+// to the pedestal's sphere recess, which stops at interaction range. The push
+// position touches the pedestal and starts the native push.
+bool guidePedestalRecess(const Entity& pedestal) {
+    const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;Point face{};
+    const bool found=ownedGuidePedestalFace(*fixtureGuideScene,pedestal,face);fixtureNativeOwner=previous;return found;
+}
 // The guide holds its last exact step while a scene or an assisted push owns
 // the player, because the script is part-way through its writes. Manual F9 and
 // F10 selection starts from the last exact step, and pedestal arrival text
@@ -245,6 +252,19 @@ void besaidGuideRouteFixture() {
         {"insert pedestal",{{0x5c0000e0,1},{0x5c0000ac,0},{0x5c0000cc,1}},10},
         {"take back and put back pedestal sphere",{{0x5c0000ac,1},{0x5c0000cc,0},{0x5c0000ac,0},{0x5c0000cc,1}},10},
     });
+    // w39 writes 0xac=2 and 0xb0=0 when the Glyph Sphere is taken, and 0xac=0
+    // and 0xb0=2 when it is put back. The door insert also clears 0xac, so
+    // only the refilled source tells a put-back from the right move.
+    walkGuideRoute("bsyt0100",{
+        {"enter the trial",{{0x5c0000b0,2},{0x5c0000bc,3},{0x5c0000c0,1}},1},
+        {"touch entry glyph",{{0x5c0000ec,1}},2},
+        {"touch door glyph",{{0x5c0000d4,1}},3},
+        {"take Glyph Sphere",{{0x5c0000ac,2},{0x5c0000b0,0}},4},
+        {"put Glyph Sphere back",{{0x5c0000ac,0},{0x5c0000b0,2}},3},
+        {"take Glyph Sphere again",{{0x5c0000ac,2},{0x5c0000b0,0}},4},
+        {"empty hand before the door flag",{{0x5c0000ac,0}},4},
+        {"insert door recess",{{0x5c0000b4,2},{0x5c0000d8,1}},5},
+    });
 }
 void kilikaGuideRouteFixture() {
     // klyt1000: 0x5b carried sphere (1-3 Kilika, 4 Glyph, 6 Destruction);
@@ -275,6 +295,35 @@ void kilikaGuideRouteFixture() {
         {"open Destruction treasure",{{0x01000a70,2}},21},
         {"remove antechamber door sphere",{{0x0c000062,0},{0x0c00005b,3},{0x0c000063,3}},22},
     });
+    {
+        const std::vector<GuideStage> stages={
+            {"entry",{{0x0c000058,1},{0x0c00005a,4},{0x0c00005f,2},{0x0c000060,6},{0x0c000061,3}},1},
+            {"take entry sphere",{{0x0c00005b,1},{0x0c000058,0}},2},
+            {"insert entry door recess",{{0x0c000059,1},{0x0c00005b,0}},3},
+            {"remove entry door sphere",{{0x0c00005b,1},{0x0c000059,0},{0x0c000063,1}},4},
+            {"insert wall glyph recess",{{0x0c00005d,1},{0x0c00005b,0}},5},
+            {"remove wall glyph sphere",{{0x0c00005b,1},{0x0c00005d,5}},6},
+            {"store in storage recess 2",{{0x0c00005e,1},{0x0c00005b,0}},7},
+            {"touch exposed glyph",{{0x0c00005d,0}},8}};
+        loadGuideRoute("klyt1000",stages);
+        for(const auto& stage:stages) {for(const auto& w:stage.writes) setValue(w.low,w.high,w.value,w.element);expectGuide("klyt1000",stage.action,stage.expected);}
+        Entity pedestal;configurePedestalTarget(pedestal,"klyt1000",6);
+        check(guidePedestalRecess(pedestal),"Kilika take step at the pedestal routes to its sphere recess");
+        const std::vector<GuideStage> later={
+            {"take Glyph Sphere",{{0x0c00005b,4},{0x0c00005a,0}},9},
+            {"store Glyph in storage recess 1",{{0x0c00005c,4},{0x0c00005b,0}},10},
+            {"take fire chamber sphere",{{0x0c00005b,2},{0x0c00005f,0}},11}};
+        for(const auto& stage:later) {for(const auto& w:stage.writes) setValue(w.low,w.high,w.value,w.element);expectGuide("klyt1000",stage.action,stage.expected);}
+        check(guidePedestalRecess(pedestal),"Kilika insert step at the pedestal routes to its sphere recess");
+        const std::vector<GuideStage> loaded={
+            {"insert pedestal",{{0x0c00005a,2},{0x0c00005b,0}},12},
+            {"retrieve Glyph Sphere",{{0x0c00005b,4},{0x0c00005c,0}},13},
+            {"insert Glyph in fire chamber recess",{{0x0c00005f,4},{0x0c00005b,0}},0}};
+        for(const auto& stage:loaded) {for(const auto& w:stage.writes) setValue(w.low,w.high,w.value,w.element);expectGuide("klyt1000",stage.action,stage.expected);}
+        guideSays(OwnedGuideAction::Next,L"Step 15 of","manual next to the Kilika push step");
+        check(!guidePedestalRecess(pedestal),"Kilika push step keeps the push position");
+        resetOwnedPuzzleGuide();
+    }
     walkGuideRoute("klyt1000",{{"late start on depression",{{0x0c000064,1}},16}});
     walkGuideRoute("klyt1000",{{"late start after treasure",{{0x0c000064,1},{0x01000a70,2},{0x0c000063,3}},22}});
     // The treasure flag is permanent save data, but the room resets on each

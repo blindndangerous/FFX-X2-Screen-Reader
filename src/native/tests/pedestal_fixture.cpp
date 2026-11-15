@@ -225,6 +225,17 @@ void ruleTests() {
     check(p.moves.size()==2 && p.moves[0].goal.x>50 && p.moves[1].goal.z>196,"Kilika turns before crossing original depression edge");
     check(describePedestalApproach(p,s.position,{s.position.x+4,s.position.y,s.position.z}).find(L"Push from the west side.")!=std::wstring::npos,
         "Kilika alignment begins on the west side before the northbound turn");
+    // klyt1000 w6 entry 4 (2CE3) finishes the trial for socket 0x5a of 1, 2 or
+    // 3: a Kilika Sphere. The guide's step 11 insert writes 2. 4 is the
+    // Glyph Sphere the pedestal starts with, and 0 is empty.
+    for(int sphere:{2,3}) {
+        auto loaded=snapshot({.2215,-10,144.1042},{{0x0c00005a,sphere},{0x0c000064,0}});
+        check(pedestalPlan(2,6,loaded).blocked.empty() && !pedestalPlan(2,6,loaded).moves.empty(),"Kilika push accepts every Kilika Sphere value");
+    }
+    for(int sphere:{0,4}) {
+        auto other=snapshot({.2215,-10,144.1042},{{0x0c00005a,sphere},{0x0c000064,0}});
+        check(!pedestalPlan(2,6,other).blocked.empty(),"Kilika push stays blocked without a Kilika Sphere");
+    }
     s.position.x=50.01099; p=measuredPlan(2,6,s,"Kilika segmented production plan allocates no heap");
     check(describePedestalApproach(p,s.position,{s.position.x-4,s.position.y,s.position.z}).find(L"Push from the south side.")!=std::wstring::npos,
         "Kilika side guidance changes after the original alignment segment");
