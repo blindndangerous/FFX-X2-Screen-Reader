@@ -93,7 +93,7 @@ ProcessStorage<Owned> storage;
 std::atomic<bool> interested{false};
 bool blocked=false;
 Owned& owned() {return storage.get();}
-bool visible(const Entity& e) {const auto& s=owned();return (!setting(Setting::HideUnreachable) || !e.unreachable) && (!s.category || e.category==categories[s.category]);}
+bool visible(const Entity& e) {const auto& s=owned();return !nav::hiddenAsUnreachable(e,setting(Setting::HideUnreachable)!=0,ownedGuideStepTarget(s.observation,e)) && (!s.category || e.category==categories[s.category]);}
 std::vector<const Entity*> filtered() {
     std::vector<const Entity*> rows;for(const auto& e:owned().entities) if(visible(e)) rows.push_back(&e);
     return rows;
@@ -153,7 +153,7 @@ void announce(const Pending& event,bool interrupt=true,bool index=true) {
     auto& s=owned();const auto rows=filtered();if(rows.empty()) return;if(s.selected>=rows.size()) s.selected=0;
     const auto& target=*rows[s.selected];const auto player=s.observation.player;
     auto text=label(target)+(target.swimDepth?L". "+nav::sceneSwimmingInstruction(s.observation):(index?L", ":L": ")+decimal(distanceXZ(player,target.position)/UnitsPerStep)+L" steps "+destinationDirection(player,target.position));
-    if(target.inactive) text+=L", currently inactive";if(target.pushControl) {const auto side=describePedestalSide(target.position,player);if(!side.empty()) text+=L". "+side;}
+    if(target.inactive) text+=L", currently inactive";text+=nav::reachabilityNote(target,setting(Setting::HideUnreachable)!=0);if(target.pushControl) {const auto side=describePedestalSide(target.position,player);if(!side.empty()) text+=L". "+side;}
     // Totals wait until the room's destination set and reachability verdicts have settled.
     if(index && s.list.totals(GetTickCount64(),setting(Setting::HideUnreachable)!=0,ownedReachabilityChecking()))
         text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));
@@ -347,7 +347,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     if(!sameMesh) {s.mesh=nav::decodeNavigationSceneMesh(observation);s.haveMesh=true;}
     s.mesh.player=geometry.player;s.mesh.playerTriangle=geometry.floor;
     nav::stageAirshipPassages(observation,s.mesh,found);nav::collapseInactiveDuplicates(found);
-    nav::orderEntities(found,s.entities,key,s.selection.valid);nav::keepVerdicts(found,s.entities,key);
+    nav::orderEntities(found,s.entities,key,s.selection.valid);nav::keepVerdicts(found,s.entities,key,s.meshContext.roomState==geometry.roomState);
     s.entities=std::move(found);s.selected=0;s.list.observe(generation(),s.entities.size(),GetTickCount64());
     s.meshContext=geometry;
     if(nav::reachabilityRefreshAllowed(observation.allowed,observation.control,observation.message)) requestOwnedReachability(observation,s.entities,true);
