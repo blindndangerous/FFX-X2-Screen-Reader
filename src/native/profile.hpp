@@ -1,11 +1,12 @@
 #pragma once
 #include "runtime.hpp"
+#include "map_transition.hpp"
 #include <stdexcept>
 #include <map>
 
 namespace ffx {
-// The verified executable decides which game runs. Ffx2 has no verified
-// addresses yet, so profileRva refuses every FFX RVA there.
+// The verified executable decides which game runs. Ffx2 resolves only the
+// FFX RVAs listed in ffx2Addresses; profileRva refuses every other one there.
 enum class NativeProfile { Reference, Installed, MovieCaptions, Ffx2 };
 bool nativeProfileForDigest(const std::string& digest,NativeProfile& profile);
 const char* nativeProfileName(NativeProfile profile);
@@ -203,9 +204,22 @@ inline constexpr RvaPair nativeAddresses[] = {
     {0x1fc44e4, 0x1fc44e4},
     {0x1fcc092, 0x1fcc092},
 };
+// FFX reference RVA -> FFX-2.exe RVA. Only functions whose whole body matches
+// the FFX function once relocated operands and call displacements are masked.
+// Evidence and the rejected candidates: Docs/ffx2-addresses.md.
+struct Ffx2Rva { unsigned reference, ffx2; };
+inline constexpr Ffx2Rva ffx2Addresses[] = {
+    {0x225930, 0x6b50a0}, // PInput::Update, game-thread probe
+    {0x22d770, 0x6bcea0}, // DirectInput keyboard updater
+    {0x22db80, 0x6bd2b0}, // DirectInput pad updater
+    {0x471d10, 0x32ce30}, // per-frame input event
+};
 inline unsigned profileRva(unsigned rva) {
-    if(nativeProfile==NativeProfile::Ffx2)
+    if(nativeProfile==NativeProfile::Ffx2) {
+        if(!rva) return 0;
+        for(const auto& pair:ffx2Addresses) if(pair.reference==rva) return pair.ffx2;
         throw std::out_of_range("Unverified FFX-2 RVA " + std::to_string(rva));
+    }
     if (!rva || nativeProfile == NativeProfile::Reference) return rva;
     const auto extension=extendedAddresses.find(rva);
     if(extension!=extendedAddresses.end()) return extension->second;
@@ -220,6 +234,14 @@ inline unsigned profileRva(unsigned rva) {
     if (low < sizeof(nativeAddresses) / sizeof(nativeAddresses[0]) &&
         nativeAddresses[low].reference == rva) return nativeAddresses[low].installed;
     throw std::out_of_range("Unverified native RVA " + std::to_string(rva));
+}
+// PInput::Update. Its entry marks the game thread for every profile.
+inline unsigned gameThreadProbe() { return 0x225930; }
+// Calls whose dynamic extent loads FFX resources. FFX-2 has no verified
+// equivalents, so no hook opens a resource scope there.
+inline bool resourceScopeHook(unsigned rva) {
+    if(nativeProfile==NativeProfile::Ffx2) return false;
+    return rva==0x46fed0 || rva==0x5093b0 || rva==map_transition::Initialize;
 }
 inline unsigned logicalRva(uintptr_t pointer) {
     const auto rva = static_cast<unsigned>(pointer - address(0));

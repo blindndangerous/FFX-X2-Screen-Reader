@@ -1,5 +1,6 @@
 #include "events.hpp"
 #include "map_transition.hpp"
+#include "profile.hpp"
 #include "native_image.hpp"
 #include "resource_reset.hpp"
 #include "hook_calls.hpp"
@@ -52,7 +53,7 @@ struct NativeErrorState {
     ~NativeErrorState() { SetLastError(value); }
 };
 bool failed = false;
-bool resourceCall(unsigned rva) { return rva==0x46fed0 || rva==0x5093b0 || rva==map_transition::Initialize; }
+bool resourceCall(unsigned rva) { return resourceScopeHook(rva); }
 // These four reviewed POD/copy observers track physical allocation lifetimes,
 // including loads/frees while Off. Ordinary readers and other snapshots stop.
 bool allocationLifetimeCall(unsigned rva) {return rva==0x48d230 || rva==0x2871c0 || rva==0x48d490 || rva==0x46ca90;}
@@ -139,7 +140,7 @@ extern "C" void __cdecl enterBridge(uintptr_t* r) {
     Hook* h = reinterpret_cast<Hook*>(r[9]);
     r[9] = h->original;
     if (inReader) return;
-    if(h->rva==0x225930) {
+    if(h->rva==gameThreadProbe()) {
         if(observeGameThread() && !nativeResourceLoading()) {
             inReader=true;
             try {serviceModToggle();} catch(...) {recordLog("mod toggle owner reset failed");}
