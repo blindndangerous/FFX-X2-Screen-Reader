@@ -21,9 +21,11 @@ struct Session {
     unsigned epoch=0,segment=0,consent=0;
     std::array<unsigned,2> directions{};
     bool walk=false,held=false,owned=false,started=false,single=false,stopping=false,approaching=false,crossing=false,contact=false,committed=false,waitingShape=false;
+    bool ended=false,walked=false;
     uintptr_t signal=0,pawn=0;
-    uint64_t previous=0,progress=0;
-    Point last,lastPlayer;
+    uint64_t previous=0,progress=0,requested=0;
+    unsigned requests=0,failures=0;
+    Point last,lastPlayer,pushFrom;
 
 } active;
 std::atomic<bool> armed{false},manual{false};
@@ -32,6 +34,15 @@ std::atomic<unsigned> cancelRevision{1};
 unsigned observedCancel=1;
 thread_local uintptr_t interpreter=0;
 thread_local unsigned interpreterEpoch=0;
+// A touch by an ordinary auto walk (not a push) that the Kilika or Besaid
+// pedestal script turned into a push start.
+bool walkSeen=false,strayResume=false;
+unsigned strayResumes=0;
+uint64_t strayAt=0;
+// Stop only a walk that is running. stopAutoWalk also advances the manual
+// input revision, which rejects the mod's own queued navigation actions
+// (in-game F26: "navigation action rejected: manual input revision").
+void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();}
 bool fieldControl() {
     const auto controller=read<uintptr_t>(address(0xf26ae8));
     return controller && (read<uint8_t>(controller)&2) && read<uintptr_t>(address(0xf00740));
@@ -51,7 +62,7 @@ void stop(const char* reason,bool announce=false) {
     if(published) suppress(published);
     if(armed || active.epoch) {
         if(active.held) drain|=active.consent;
-        stopAutoWalk(); recordLog("pedestal assistance stopped: %s",reason);
+        haltAutoWalk(); recordLog("pedestal assistance stopped: %s",reason);
         if(announce) output(L"Pedestal assistance stopped",false,"pedestal-push");
     }
     armed=false;manual=false;active={};injected=published=0;publishPedestalConsent(0);
@@ -63,15 +74,22 @@ bool context() {
     using Mode=int(__cdecl*)();
     return reinterpret_cast<Mode>(address(0x46c840))()==0;
 }
-unsigned pc(uintptr_t worker) {
+unsigned pc(uintptr_t worker,const UtilityScript& script) {
     const auto signal=read<uintptr_t>(worker+0x90);
     const auto level=read<uint8_t>(worker+0x32);
     const auto type=read<uint8_t>(read<uintptr_t>(worker));
     if(!signal || level>((type==5 || type==6)?1u:8u) || (read<uint8_t>(signal+0xe)&15)!=level)
         return 0xffffffff;
-    const auto code=active.script.chunk+active.script.codeOffset;
+    const auto code=script.chunk+script.codeOffset;
     const auto cursor=read<uintptr_t>(worker+0x12c+level*0x4c+0x18);
-    return cursor>=code && cursor<code+active.script.length?static_cast<unsigned>(cursor-code):0xffffffff;
+    return cursor>=code && cursor<code+script.length?static_cast<unsigned>(cursor-code):0xffffffff;
+}
+unsigned pc(uintptr_t worker) {return pc(worker,active.script);}
+// The disable sites where the original contact push takes control:
+// Besaid w7 entry 4 and Kilika w6 entry 4.
+bool contactPushSite(unsigned control,unsigned at) {
+    if(control==1) return at==0x12ab || at==0x139b || at==0x13c7 || at==0x13e1 || at==0x13ed;
+    return control==2 && at==0x274b;
 }
 bool producer(uintptr_t worker,unsigned local,unsigned entry) {
     return worker && read<uintptr_t>(worker+4)==active.script.chunk && read<uint16_t>(worker+0x2e,0xffff)==local &&
@@ -82,8 +100,7 @@ bool ownsDisable(Event& event,bool requireHeld=true) {
         !producer(interpreter,active.plan.producer,active.plan.entry)) return false;
     const auto at=pc(interpreter);
     switch(active.target.pushControl) {
-    case 1: return at==0x12ab || at==0x139b || at==0x13c7 || at==0x13e1 || at==0x13ed;
-    case 2: return at==0x274b;
+    case 1: case 2: return contactPushSite(active.target.pushControl,at);
     case 3: return at==0xd17c;
     case 4: return at==0xe2ad || at==0xe44a;
     case 5: {
@@ -123,13 +140,37 @@ bool onPushSide() {
     const auto goal=active.plan.moves[active.segment].goal,p=snapshot.position,player=playerPosition();
     const double gx=goal.x-p.x,gz=goal.z-p.z,x=player.x-p.x,z=player.z-p.z;
     const double edge=active.target.pushControl==1?2.3:2;
-    if(std::abs(gx)>=std::abs(gz)) return (gx>0?-x:x)>edge && std::abs(z)<edge;
-    return (gz>0?-z:z)>edge && std::abs(x)<edge;
+    // Claim only a contact well inside the native limit across the axis. In
+    // game F26 a contact near the corner took control but never pushed, and
+    // the walk-in staging point is within .65 of the axis anyway.
+    const double across=edge-.5;
+    if(std::abs(gx)>=std::abs(gz)) return (gx>0?-x:x)>edge && std::abs(z)<across;
+    return (gz>0?-z:z)>edge && std::abs(x)<across;
+}
+// An ordinary auto walk (to a sphere recess or past the pedestal) touched a
+// Kilika or Besaid pedestal, and its script took control (in-game F25).
+// Give the script no direction so the pedestal stays put, and resume the
+// walk when control returns. A manual touch keeps the player's direction.
+void strayTouch(Event& e) {
+    if(!walkSeen || e.parentRva!=0x464180 || interpreterEpoch!=generation() || !interpreter) return;
+    for(unsigned control:{1u,2u}) {
+        UtilityScript script;if(!pedestalScript(control,script)) continue;
+        if(read<uintptr_t>(interpreter+4)!=script.chunk || read<uint16_t>(interpreter+0x2e,0xffff)!=(control==1?7u:6u) ||
+            read<uint16_t>(read<uintptr_t>(interpreter+0x90)+8,0xffff)!=4 || !contactPushSite(control,pc(interpreter,script))) continue;
+        suppress(pedestalInputMask(0xf000)); haltAutoWalk();
+        const auto now=GetTickCount64();if(now-strayAt>10000) strayResumes=0;
+        strayAt=now; strayResume=strayResumes<2; ++strayResumes;
+        recordLog("pedestal touched by auto walk: %s",strayResume?"resuming the walk":"walk not resumed");
+        return;
+    }
 }
 void disabled(Event& e) {
-    if(!armed) return;
+    if(!armed) {try {strayTouch(e);} catch(...) {} return;}
     if(ownsDisable(e) && (!active.walk || active.owned || onPushSide())) {
-        active.signal=read<uintptr_t>(interpreter+0x90); active.owned=active.started=true; active.contact=false; stopAutoWalk();
+        active.signal=read<uintptr_t>(interpreter+0x90); active.owned=active.started=true; active.contact=false; haltAutoWalk();
+        active.pushFrom=active.target.position;
+        {const auto player=playerPosition();
+         recordLog("pedestal push contact: player offset %.2f %.2f, segment %u",player.x-active.target.position.x,player.z-active.target.position.z,active.segment);}
         // The same interpreter reads its direction immediately after disabling
         // control. Replace approach input before that read, not next frame.
         if(active.target.pushControl<=2) {
@@ -144,13 +185,23 @@ void disabled(Event& e) {
         // Auto walk touched the pedestal before the push key was held, and the
         // original push script took control by itself. Give it no direction so
         // the pedestal stays put, and stay armed for the real held push.
-        stopAutoWalk(); suppress(pedestalInputMask(0xf000));
-        if(active.walk) {active.approaching=active.contact=false;recordLog("pedestal contact off the push side: walking to it");}
+        haltAutoWalk(); suppress(pedestalInputMask(0xf000));
+        if(active.walk) {active.approaching=active.contact=active.walked=false;recordLog("pedestal contact off the push side: walking to it");}
         else recordLog("pedestal contact before the push key: waiting for it");
     }
     else stop("unrelated player-control disable");
 }
-void restored(Event&) { if(armed) active.owned=false; }
+// A Kilika or Besaid push ends when control returns. If the pedestal is not
+// at the segment goal, the next frame walks back out and in again (in-game
+// F26: holding the direction against the pedestal for 18 s did nothing).
+void restored(Event&) {
+    if(!armed) return;
+    if(active.owned && active.walk && active.target.pushControl<=2) {
+        active.ended=true;
+        try {recordLog("pedestal push ended at pc %x",pc(utilityWorker(active.script,active.plan.producer)));} catch(...) {}
+    }
+    active.owned=false;
+}
 void text(Event&) { stop("dialogue"); }
 void collected(Event&) { published=0; }
 void requestStarted(Event& e) {
@@ -185,10 +236,16 @@ void finished(Event& e) {
 bool approach() {
     const auto player=playerPosition();
     if(!active.target.zone.crossing && inInteractionZone(active.target.zone,player)) {
-        stopAutoWalk(); active.approaching=false; faceNavigationTarget(active.target); return true;
+        haltAutoWalk(); active.approaching=active.walked=false; active.requests=0; faceNavigationTarget(active.target); return true;
     }
-    if(!autoWalkActive() && !active.approaching) active.approaching=requestNavigationAssistRoute();
-    active.approaching=active.approaching || autoWalkActive(); return false;
+    if(autoWalkActive()) {active.approaching=active.walked=true; return false;}
+    // Ask again when the walk ended short of the zone (another hook stopped
+    // it at a touch), or when a request never started a walk.
+    const auto now=GetTickCount64();
+    if(active.approaching && !active.walked && now-active.requested<1500) return false;
+    if(active.requests>=8) {output(L"Pedestal push route unavailable. Walk to the push side by hand.",false,"pedestal-push");stop("approach walk failed");return false;}
+    ++active.requests; active.walked=false; active.requested=now;
+    active.approaching=requestNavigationAssistRoute(); active.walked=autoWalkActive(); return false;
 }
 void freshTarget(Point position) {
     const auto previous=active.target.position;
@@ -261,6 +318,12 @@ void updatePedestalInput() {
     const auto revision=cancelRevision.load(std::memory_order_acquire);if(revision!=observedCancel) {observedCancel=revision;stop("selection or context changed");}
     const auto raw=read<uint16_t>(address(pedestal_rva::Held));
     const auto drained=drain; drain&=raw; if(drained) suppress(drained);
+    if(strayResume && (armed || autoWalkActive())) strayResume=false; // Another walk or a push took over.
+    if(strayResume && fieldControl()) {
+        strayResume=false;
+        NavLeg leg;if(navLeg(leg) && leg.arrived) faceNavigationTarget(leg.target);else startAutoWalk();
+    }
+    walkSeen=!armed && autoWalkActive();
     if(!armed) return;
     const bool wasHeld=active.held;
     active.held=active.walk || (raw&active.consent)!=0;
@@ -299,7 +362,8 @@ void updatePedestalInput() {
             if(active.segment+1==active.plan.moves.size()) {
                 output(L"Pedestal push complete",false,"pedestal-push"); stop("destination reached"); return;
             }
-            ++active.segment; active.started=active.stopping=active.contact=active.approaching=false; injected=0;
+            ++active.segment; active.started=active.stopping=active.contact=active.approaching=active.ended=false; injected=0;
+            active.requests=active.failures=0;
             freshTarget(snapshot.position);
             active.target.zone.valid=false;
             active.waitingShape=true;
@@ -314,6 +378,24 @@ void updatePedestalInput() {
             return;
         }
         if(!fieldControl()) { stop("player control unavailable"); return; }
+        if(active.ended) {
+            active.ended=false;
+            const double moved=distanceXZ(snapshot.position,active.pushFrom);
+            recordLog("pedestal push stopped short: moved %.2f, player offset %.2f %.2f",moved,player.x-snapshot.position.x,player.z-snapshot.position.z);
+            if(moved<.3 && ++active.failures>=3) {
+                output(L"Pedestal push did not start. Walk into the pedestal from the push side by hand.",false,"pedestal-push");
+                stop("push did not start"); return;
+            }
+            if(moved>=.3) active.failures=0;
+            // Walk back to the push side and in again: the original script
+            // starts a push only on a fresh contact.
+            if(published) suppress(published);
+            injected=published=0;
+            active.started=active.contact=active.approaching=active.walked=false; active.requests=0;
+            freshTarget(snapshot.position);
+            active.target.zone.valid=false; active.waitingShape=true;
+            return;
+        }
         if(active.started && move.mode==PushMode::Scripted) return;
         freshTarget(snapshot.position);
         if(active.waitingShape) return; // Only synthetic assistance waits for copied facts; original processing continues.
