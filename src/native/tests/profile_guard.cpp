@@ -75,6 +75,34 @@ int main() {
         std::fprintf(stderr, "FFX-2 resource scopes are not exactly map request and map load, or the game-thread probe changed.\n");
         return 1;
     }
+    // FFX-2-only addresses (no FFX counterpart) resolve under FFX-2 only, to
+    // the FFX-2.exe RVAs recorded in Docs/ffx2-addresses.md.
+    const struct {ffx::Ffx2Only name; unsigned rva;} only[]={
+        {ffx::Ffx2Only::TopMenuUpdate,0x373170u},{ffx::Ffx2Only::TopMenuCursor,0x12bef0cu},
+        {ffx::Ffx2Only::TopMenuItems,0x12befe0u},{ffx::Ffx2Only::TopMenuCount,0x12bf040u},
+        {ffx::Ffx2Only::HelpText,0x12bd97cu},{ffx::Ffx2Only::Charset,0x9eade0u},
+        {ffx::Ffx2Only::StoryMode,0x12ef654u}};
+    for(const auto& entry:only) {
+        unsigned resolved=0;
+        try { resolved=ffx::ffx2Rva(entry.name); } catch(const std::out_of_range&) {}
+        if(resolved!=entry.rva) {
+            std::fprintf(stderr, "FFX-2-only address %u resolved to 0x%x, expected 0x%x.\n", static_cast<unsigned>(entry.name), resolved, entry.rva);
+            return 1;
+        }
+    }
+    if(ffx::ffx2HookId(0x373170u)==0x373170u || ffx::resourceScopeHook(ffx::ffx2HookId(0x373170u))) {
+        std::fprintf(stderr, "FFX-2-only hook ids must not reuse the FFX RVA space or open resource scopes.\n");
+        return 1;
+    }
+    for(const auto profile:{ffx::NativeProfile::Reference,ffx::NativeProfile::Installed,ffx::NativeProfile::MovieCaptions}) {
+        ffx::nativeProfile=profile;
+        bool refused=false;
+        try { (void)ffx::ffx2Rva(ffx::Ffx2Only::TopMenuUpdate); } catch(const std::out_of_range&) { refused=true; }
+        if(!refused) {
+            std::fprintf(stderr, "FFX-2-only address resolved under profile %s.\n", ffx::nativeProfileName(profile));
+            return 1;
+        }
+    }
     // FFX tables must not change. Reference passes every RVA through; the
     // installed FFX.exe keeps its static pairs (probe and DirectInput RVAs are
     // signature extensions there, resolved at runtime).

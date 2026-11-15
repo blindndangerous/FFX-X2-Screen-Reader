@@ -218,6 +218,36 @@ inline constexpr Ffx2Rva ffx2Addresses[] = {
     {0x46fed0, 0x32a970}, // map request: event map jump
     {0x5093b0, 0x3ba3b0}, // map load ("RAM Inuse"), load-finished boundary
 };
+// FFX-2-only addresses: FFX-2.exe RVAs with no FFX counterpart, found by
+// call-graph and data-flow reading of FFX-2.exe. Evidence:
+// Docs/ffx2-addresses.md, "FFX-2-only addresses".
+enum class Ffx2Only : unsigned {
+    TopMenuUpdate, // top-level menu module update (module VA 0xd62e20, slot 0)
+    TopMenuCursor, // dword cursor index into the item array
+    TopMenuItems,  // 12 entries of 8 bytes: dword menu id, word available, word needs member
+    TopMenuCount,  // dword number of items in the array
+    HelpText,      // pointer to the help line the menu shows (setter 0x365a50)
+    Charset,       // pointer to the loaded ffx2sjistbl_us.bin (loader 0x111120)
+    StoryMode,     // dword read by 0x392ee0; zero in the main story
+};
+struct Ffx2OnlyRva { Ffx2Only name; unsigned rva; };
+inline constexpr Ffx2OnlyRva ffx2OnlyAddresses[] = {
+    {Ffx2Only::TopMenuUpdate, 0x373170},
+    {Ffx2Only::TopMenuCursor, 0x12bef0c},
+    {Ffx2Only::TopMenuItems, 0x12befe0},
+    {Ffx2Only::TopMenuCount, 0x12bf040},
+    {Ffx2Only::HelpText, 0x12bd97c},
+    {Ffx2Only::Charset, 0x9eade0},
+    {Ffx2Only::StoryMode, 0x12ef654},
+};
+inline unsigned ffx2Rva(Ffx2Only name) {
+    if(nativeProfile!=NativeProfile::Ffx2) throw std::out_of_range("FFX-2-only address outside the FFX-2 profile");
+    for(const auto& entry:ffx2OnlyAddresses) if(entry.name==name) return entry.rva;
+    throw std::out_of_range("Unknown FFX-2-only address");
+}
+// Hook ids for FFX-2-only functions, outside the FFX RVA space that handlers
+// and resource scopes compare against.
+inline constexpr unsigned ffx2HookId(unsigned rva) { return 0xfe000000u | rva; }
 inline unsigned profileRva(unsigned rva) {
     if(nativeProfile==NativeProfile::Ffx2) {
         if(!rva) return 0;
