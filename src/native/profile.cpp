@@ -44,20 +44,31 @@ bool fileDigest(const wchar_t* path,std::string& result,int laaMode) {
 }
 }
 bool nativeFileDigest(const wchar_t* path,std::string& result) { return fileDigest(path,result,0); }
+bool nativeProfileForDigest(const std::string& digest,NativeProfile& profile) {
+    static const struct { const char* digest; NativeProfile profile; } verified[]{
+        {"3d13e5ed53821df8db204cd3c27d470c5c220b18e16849fc4440996c15f277e1",NativeProfile::Reference},
+        {"0537b2a1047f3266e73495cd4e35f63f0777f4231d417699f979954686da686d",NativeProfile::Installed},
+        {"18e1b899a091a1a21f0732eab8a49f7067e5347cb442dc35d5910bb23652d123",NativeProfile::MovieCaptions},
+        // Steam FFX-2.exe (12281600 bytes, Last Mission included).
+        {"6ea7f142f129a43bdaea7eaabda4477a9057e60d12fdae367530c63e9a14cd69",NativeProfile::Ffx2},
+    };
+    for(const auto& entry:verified) if(digest==entry.digest) { profile=entry.profile; return true; }
+    return false;
+}
+const char* nativeProfileName(NativeProfile profile) {
+    switch(profile) {
+    case NativeProfile::Reference: return "reference";
+    case NativeProfile::Installed: return "installed";
+    case NativeProfile::MovieCaptions: return "Will captions";
+    case NativeProfile::Ffx2: return "FFX-2";
+    }
+    return "unknown";
+}
 bool configureNativeProfileForPath(const wchar_t* path) {
     std::string digest;
     if (!nativeFileDigest(path,digest)) { recordLog("native profile refused: cannot hash executable"); return false; }
-    if (digest == "3d13e5ed53821df8db204cd3c27d470c5c220b18e16849fc4440996c15f277e1") {
-        nativeProfile = NativeProfile::Reference;
-        recordLog("native address profile=reference sha256=%s", digest.c_str()); return true;
-    }
-    if (digest == "0537b2a1047f3266e73495cd4e35f63f0777f4231d417699f979954686da686d") {
-        nativeProfile = NativeProfile::Installed;
-        recordLog("native address profile=installed sha256=%s", digest.c_str()); return true;
-    }
-    if (digest == "18e1b899a091a1a21f0732eab8a49f7067e5347cb442dc35d5910bb23652d123") {
-        nativeProfile = NativeProfile::MovieCaptions;
-        recordLog("native address profile=Will captions sha256=%s", digest.c_str()); return true;
+    if(nativeProfileForDigest(digest,nativeProfile)) {
+        recordLog("native address profile=%s sha256=%s", nativeProfileName(nativeProfile), digest.c_str()); return true;
     }
     // The launcher may change exactly IMAGE_FILE_LARGE_ADDRESS_AWARE. Preserve
     // exact image identity: every other byte must match a verified FFX profile.
