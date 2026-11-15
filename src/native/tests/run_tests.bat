@@ -184,6 +184,10 @@ cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:ffx2_submenus_fixture.exe "%TEST_SRC
 if not "%errorlevel%"=="0" goto failed
 .\ffx2_submenus_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:ffx2_battle_ready_fixture.exe "%TEST_SRC%ffx2_battle_ready_fixture.cpp" "%TEST_SRC%..\ffx2_battle_ready.cpp"
+if not "%errorlevel%"=="0" goto failed
+.\ffx2_battle_ready_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--ffx2-text" goto success
 :abi
 cl /nologo /W4 /EHa /std:c++17 /MT /I"%MINHOOK_ROOT%\include" /Fe:hook_abi.exe "%TEST_SRC%hook_abi.cpp" "%TEST_SRC%..\hooks.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\resource_reset.cpp" "%TEST_SRC%..\hook_calls.cpp" /link "%MINHOOK_ROOT%\bin\MinHook.x86.lib"
