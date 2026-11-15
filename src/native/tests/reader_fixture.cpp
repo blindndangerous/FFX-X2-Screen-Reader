@@ -709,6 +709,10 @@ int main(int argc, char** argv) {
     event(0x49c870,address(0xf3c910)); expect(L"Potion","battle command");
     count=said.size(); event(0x49c870,address(0xf3c910)); check(said.size()==count,"unchanged battle cursor");
     event(0x49c870,address(0xf3c910),[]{set<uint8_t>(0xf3c952,1);}); expect(L"Ether","battle command move");
+    setSetting(Setting::MenuIndex,1); set<uint16_t>(0xf3c916,6);
+    event(0x49cd50,address(0xf3c910),[]{set<uint8_t>(0xf3c952,0);}); expect(L"Potion, 1 of 2","battle Item list speaks native row of command list length");
+    set<uint16_t>(0xf3c916,0); event(0x49c870,address(0xf3c910),[]{set<uint8_t>(0xf3c952,1);}); expect(L"Ether","main battle command bar is not indexed");
+    setSetting(Setting::MenuIndex,0);
     protectSpeech(false);
     event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview");
     check(said.back().second,"target movement interrupts after deliberate input, including held menu navigation");

@@ -5,6 +5,7 @@
 #include "../text_plan.hpp"
 #include "../selection_details.hpp"
 #include "../copied_controls.hpp"
+#include "../battle_lists.hpp"
 #include "ready_speech_adapter.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -153,6 +154,33 @@ void indexing() {
     set<uint16_t>(win+0x30,3);
     setSetting(Setting::MenuIndex,0);event(0x4b4460,address(win),[]{set<int16_t>(win+0x48,1);});expect(L"Potion","generic index Off preserves name");
 }
+// BtlWindow: +0x06 type, +0x24 command_list_len, +0x42 sel_idx.
+constexpr unsigned battleWin=0xf3c910;
+void battleWindow(uint16_t type,unsigned count,uint8_t row) {
+    std::memset(reinterpret_cast<void*>(address(battleWin)),0,0xf0);
+    set<uint16_t>(battleWin+6,type);set<unsigned>(battleWin+0x24,count);set<uint8_t>(battleWin+0x42,row);
+}
+void battleRow(const wchar_t* name) {
+    TextPlan p;prepareTextPlan(p,"battle-command");
+    p.headline=planBattleListName(p,planLiteral(p,name),address(battleWin));
+    commitTextPlan(p);drain();
+}
+void battleIndexing() {
+    setSetting(Setting::AutoDetail,0);setSetting(Setting::MenuIndex,1);
+    battleWindow(6,20,2);battleRow(L"Potion (12)");expect(L"Potion (12), 3 of 20","battle Item list uses native row and list length");
+    battleWindow(6,20,19);battleRow(L"Potion (12)");expect(L"Potion (12), 20 of 20","battle Item last row");
+    for(const unsigned type:{1u,2u,3u,4u,5u,7u,10u,14u,15u,17u,20u}) {
+        battleWindow(static_cast<uint16_t>(type),4,0);battleRow(L"Cure");expect(L"Cure, 1 of 4","battle submenu list indexes");
+    }
+    for(const unsigned type:{0u,12u,13u,21u,22u}) {
+        battleWindow(static_cast<uint16_t>(type),4,1);battleRow(L"Attack");expect(L"Attack","command bar and amount windows are not indexed");
+    }
+    battleWindow(6,3,3);battleRow(L"Potion (12)");expect(L"Potion (12)","row outside native length never claims an index");
+    battleWindow(6,0,0);battleRow(L"Potion (12)");expect(L"Potion (12)","zero-length list never claims an index");
+    battleWindow(6,0x1001,0);battleRow(L"Potion (12)");expect(L"Potion (12)","implausible list length is ignored");
+    battleWindow(6,4,0);battleRow(L"");check(said.empty() || said.back().first!=L", 1 of 4","blank name never speaks a bare index");
+    setSetting(Setting::MenuIndex,0);battleWindow(6,20,2);battleRow(L"Potion (12)");expect(L"Potion (12)","battle index Off preserves speech");
+}
 }
 int main(int argc,char** argv) {
     testBase=reinterpret_cast<uintptr_t>(VirtualAlloc(nullptr,0x2400000,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
@@ -167,6 +195,7 @@ int main(int argc,char** argv) {
     if(mode=="all" || mode=="slots") slots();
     if(mode=="all" || mode=="yes-no") yesNo();
     if(mode=="all" || mode=="index") indexing();
+    if(mode=="all" || mode=="battle-index") battleIndexing();
     std::printf("PASS: menu speech (%s), %u checks; synthetic fixtures only\n",mode.c_str(),checks);
     VirtualFree(reinterpret_cast<void*>(testBase),0,MEM_RELEASE);return 0;
 }

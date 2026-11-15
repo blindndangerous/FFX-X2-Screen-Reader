@@ -136,7 +136,10 @@ It uses dialogue text independently of other mod announcements and expires
 when dialogue closes. Native TK Al Bhed glyphs follow collected Primers.
 **Menu indexing** defaults Off in F8 > Miscellaneous. It reads positions in mod
 menus and native field Items, Key Items, Abilities, equipment, Customize and
-Overdrive lists when their counts are known. Battle lists are not covered.
+Overdrive lists when their counts are known. In battle it reads positions in
+Item, Use, Mix, Skill, Special, Black Magic, White Magic, Overdrive, Summon,
+Weapon, Armor and party Change lists. The main command bar and Gil amounts are
+not indexed.
 
 The post-game audio drama also reads its localized timed captions. Choose its
 output mode in FFX's F8 menu before opening the audio drama; the saved setting

@@ -7,6 +7,7 @@
 #include "ready_game_text.hpp"
 #include "game_visual_text.hpp"
 #include "battle_hud.hpp"
+#include "battle_lists.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -68,7 +69,7 @@ void highlighted(uintptr_t win) {
         const auto description=planRecordDescription(p,0x39a4c0,lastCommand);
         detail=planPair(p,TextPlanOp::Or,description,planEncoded(p,address(0xf3f4f8),128,TextPlanOp::Lines));
     }
-    const auto name=commandName(p,win,id,type);
+    const auto name=planBattleListName(p,commandName(p,win,id,type),win);
     p.headline=type==10?planSuffix(p,name,detail,L", "):name;
     planSelectionDetail(p,detail,type!=10 && (setting(Setting::CombatDetail)!=0 || setting(Setting::AutoDetail)!=0));
     commitTextPlan(p);
