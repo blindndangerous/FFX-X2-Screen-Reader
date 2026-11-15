@@ -468,9 +468,7 @@ NPCs keep their browsing order. Selection follows the same native worker.
 **` (backtick)** — rescan nearby entities and announce the count.
 
 **]** — cycle to the next entity in the current category and announce it with
-distance, direction and its position such as "6 of 10". Just after entering a
-room, or while Hide unreachable destinations is still checking, the position is
-left out until the list stops changing.
+distance and direction.
 
 **[** — cycle to the previous entity.
 
