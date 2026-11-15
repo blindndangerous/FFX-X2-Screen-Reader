@@ -4,7 +4,11 @@
 #include <map>
 
 namespace ffx {
-enum class NativeProfile { Reference, Installed, MovieCaptions };
+// The verified executable decides which game runs. Ffx2 has no verified
+// addresses yet, so profileRva refuses every FFX RVA there.
+enum class NativeProfile { Reference, Installed, MovieCaptions, Ffx2 };
+bool nativeProfileForDigest(const std::string& digest,NativeProfile& profile);
+const char* nativeProfileName(NativeProfile profile);
 bool validateNativeDependencies();
 bool nativeFileDigest(const wchar_t* path,std::string& result);
 inline NativeProfile nativeProfile = NativeProfile::Reference;
@@ -200,6 +204,8 @@ inline constexpr RvaPair nativeAddresses[] = {
     {0x1fcc092, 0x1fcc092},
 };
 inline unsigned profileRva(unsigned rva) {
+    if(nativeProfile==NativeProfile::Ffx2)
+        throw std::out_of_range("Unverified FFX-2 RVA " + std::to_string(rva));
     if (!rva || nativeProfile == NativeProfile::Reference) return rva;
     const auto extension=extendedAddresses.find(rva);
     if(extension!=extendedAddresses.end()) return extension->second;
