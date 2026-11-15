@@ -504,7 +504,8 @@ next leg using the new camera direction. Slow camera pans do not repeat guidance
 destination, then press **Backslash** to walk its current collision route.
 The field controller route command (right trigger) also starts walking. Movement input or Escape cancels immediately.
 Pressing **Backslash** (or the right trigger) again while walking stops the walk and says **Auto walk stopped**,
-without reading the route again.
+without reading the route again. It also ends any pedestal approach the walk was
+making, so the walk does not start again by itself.
 Screen-reader commands do not cancel it: an arrow, Enter or Escape pressed while
 **Insert**, **Numpad Insert** or **Caps Lock** is held is left to the screen reader
 until that key is released, and does not steer the character. Dialogue, scripted
