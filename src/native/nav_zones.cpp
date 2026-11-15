@@ -85,8 +85,13 @@ std::vector<Point> interactionAnchors(const InteractionZone& zone,Point player) 
         for(const auto side:sides) anchors.push_back({zone.center.x+side.x*radius,zone.center.y,zone.center.z+side.z*radius});
         return anchors;
     }
-    if(distanceXZ(zone.approach,{})>.1)
-        return {{zone.center.x+zone.approach.x*std::max(0.0,zone.range-.5),zone.center.y,zone.center.z+zone.approach.z*std::max(0.0,zone.range-.5)}};
+    if(distanceXZ(zone.approach,{})>.1) {
+        std::vector<Point> anchors{{zone.center.x+zone.approach.x*std::max(0.0,zone.range-.5),zone.center.y,zone.center.z+zone.approach.z*std::max(0.0,zone.range-.5)}};
+        // Just outside pedestal contact, on the named face.
+        if(zone.talk && zone.obstacleRadius>0) anchors.push_back({zone.obstacle.x+zone.approach.x*(zone.obstacleRadius+.6),zone.center.y,
+            zone.obstacle.z+zone.approach.z*(zone.obstacleRadius+.6)});
+        return anchors;
+    }
     const auto closest=onShape(zone,player);
     const double d=distanceXZ(player,closest),radius=std::max(0.0,zone.range-.25);
     Point desired=closest;
@@ -125,6 +130,10 @@ std::vector<Point> interactionAnchors(const InteractionZone& zone,Point player) 
             const double a=i*6.283185307179586/32;
             anchors.push_back({zone.center.x+r*std::cos(a),zone.center.y,zone.center.z+r*std::sin(a)});
         }
+    }
+    if(zone.talk && zone.obstacleRadius>0) for(unsigned i=0;i<16;++i) {
+        const double a=i*6.283185307179586/16,r=zone.obstacleRadius+.6;
+        anchors.push_back({zone.obstacle.x+r*std::cos(a),zone.center.y,zone.obstacle.z+r*std::sin(a)});
     }
     return anchors;
 }
@@ -204,6 +213,8 @@ template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bo
         return std::min(std::abs(x),std::abs(z))<=.65;
     }
     if(!insideShape(zone,p,true,horizontal)) return false;
+    // Talk from outside a contact-pushed pedestal (Kilika, Besaid).
+    if(zone.talk && zone.obstacleRadius>0 && distanceXZ(p,zone.obstacle)<zone.obstacleRadius+.5) return false;
     // A guide sphere step names one face of a talk zone (Djose pedestal).
     if(distanceXZ(zone.approach,{})>.1) {
         const double x=p.x-zone.center.x,z=p.z-zone.center.z,along=x*zone.approach.x+z*zone.approach.z;
@@ -222,9 +233,28 @@ template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bo
     }
     return true;
 }
+void avoidContactPedestals(std::vector<Entity>& entities) {
+    for(const auto& pedestal:entities) {
+        if(pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
+        for(auto& e:entities) {
+            // Push routes keep their own contact staging and obstacles.
+            if(e.pushControl || !e.zone.valid || e.zone.obstacleRadius>0 || e.zone.contactRadius>0) continue;
+            e.zone.obstacle=pedestal.zone.center; e.zone.obstacleRadius=pedestal.zone.contactRadius;
+        }
+    }
+}
 bool inInteractionZone(const InteractionZone& zone,Point p) { return interactionEndpoint(zone,p,false); }
 bool inInteractionZone(const NativeInteractionZone& zone,Point p) { return zone.competing.count<=zone.competing.rows.size() && interactionEndpoint(zone,p,false); }
+static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach);
 std::vector<Point> interactionRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
+    auto route=zoneRoute(mesh,player,zone,horizontalApproach);
+    // A pedestal obstacle added for safety never removes a destination.
+    if(route.empty() && zone.talk && zone.obstacleRadius>0) {
+        auto plain=zone; plain.obstacleRadius=0; route=zoneRoute(mesh,player,plain,horizontalApproach);
+    }
+    return route;
+}
+static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
     if(!zone.valid || !mesh.events.ready) return {};
     if(mesh.crossWater) return crossWaterRoute(mesh,player,zone,horizontalApproach);
     const bool horizontal=mesh.fixedHeight && horizontalApproach;

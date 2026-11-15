@@ -64,6 +64,9 @@ std::wstring pedestalInstruction(const Entity&);
 bool inInteractionZone(const InteractionZone&,Point);
 bool inInteractionZone(const NativeInteractionZone&,Point);
 std::vector<Point> interactionRoute(const Mesh&,Point,const InteractionZone&,bool horizontalApproach=false);
+// Besaid and Kilika pedestals start their push script on body contact. Give
+// every other target's zone that pedestal as an obstacle to walk around.
+void avoidContactPedestals(std::vector<Entity>&);
 void refreshNavigation();
 bool requestNavigationAssistRoute();
 void requestNavigationAssistInstruction();

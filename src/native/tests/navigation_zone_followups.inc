@@ -1,3 +1,37 @@
+// Kilika and Besaid pedestals start their push script on any body contact,
+// which disables player control (in-game F23, F25). Walks to other targets,
+// and to the pedestal's own sphere recess, must stay out of that contact.
+bool keepsClear(const std::vector<Point>& route,Point center,double radius) {
+    if(route.empty()) return false;
+    for(size_t i=1;i<route.size();++i) {
+        const Point a=route[i-1],b=route[i];const double x=b.x-a.x,z=b.z-a.z,length=x*x+z*z;
+        const double t=length>0?std::clamp(((center.x-a.x)*x+(center.z-a.z)*z)/length,0.0,1.0):0;
+        if(std::hypot(a.x+t*x-center.x,a.z+t*z-center.z)<radius) return false;
+    }
+    return true;
+}
+void contactPedestalFixtures(const Mesh& room) {
+    const Point center{50,0,40};
+    Entity pedestal; pedestal.worker=6; pedestal.pushControl=2; pedestal.position=center;
+    pedestal.zone.valid=true; pedestal.zone.shape=1; pedestal.zone.center=center; pedestal.zone.contactRadius=5; pedestal.zone.height=-1;
+    Entity recess; recess.worker=6; recess.name=L"Pedestal sphere recess"; recess.position=center;
+    recess.zone.valid=true; recess.zone.talk=true; recess.zone.shape=1; recess.zone.center=center; recess.zone.range=5.8; recess.zone.height=5;
+    recess.zone.approach={0,0,1};
+    Entity storage; storage.worker=40; storage.name=L"Side-wall storage recess 1"; storage.position={36,0,40};
+    storage.zone.valid=true; storage.zone.talk=true; storage.zone.shape=1; storage.zone.center={36,0,40}; storage.zone.range=3; storage.zone.height=5;
+    std::vector<Entity> list{pedestal,recess,storage};
+    avoidContactPedestals(list);
+    check(list[0].zone.obstacleRadius==0 && list[0].zone.contactRadius==5,"the pushed pedestal keeps its own contact staging");
+    const auto toRecess=interactionRoute(room,{50,0,25},list[1].zone);
+    check(keepsClear(toRecess,center,5),"a walk to the Kilika pedestal sphere recess goes around the pedestal");
+    check(!toRecess.empty() && distanceXZ(toRecess.back(),center)>=5.5 && inInteractionZone(list[1].zone,toRecess.back()),
+        "the sphere recess walk stops in talk range, outside pedestal contact");
+    const auto toStorage=interactionRoute(room,{56,0,40},list[2].zone);
+    check(keepsClear(toStorage,center,5) && inInteractionZone(list[2].zone,toStorage.back()),
+        "a walk past the Kilika pedestal to a storage recess goes around it");
+    auto inner=list[1].zone; inner.range=4;
+    check(!interactionRoute(room,{50,0,25},inner).empty(),"a talk zone wholly inside pedestal contact keeps its old route");
+}
 void zoneFixtures() {
     Mesh counter;
     counter.triangles={triangle({0,0,0},{8,0,0},{0,0,10}),triangle({8,0,0},{8,0,10},{0,0,10}),
@@ -105,4 +139,5 @@ void zoneFixtures() {
     check(!interactionRoute(water,{1,-50,1},zone).empty(),"free swimming reaches native interaction zones without a walking mesh");
     zone.center.y=0; check(interactionRoute(water,{1,-50,1},zone).empty(),"free swimming cannot route to ship-deck interactions at another height");
     zone.valid=false; check(interactionRoute(counter,player,zone).empty(),"unresolved geometry never manufactures an interaction destination");
+    contactPedestalFixtures(room);
 }

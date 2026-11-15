@@ -282,6 +282,8 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     if(!ready) {nav::navigationWaitingForData(true);return;}
     if(overflow) {for(const auto& event:s.pending) emit(event,L"Navigation names exceed the supported observation capacity. The command is unavailable.","navigation-data-unavailable",false);s.pending.clear();nav::navigationWaitingForData(false);return;}
     if(missing) {if(names.count!=s.names.count) {s.names=names;nav::requestNavigationAreaNames(names);}nav::navigationWaitingForData(true);return;}
+    // Before guideTargets copies a recess zone onto its pedestal.
+    avoidContactPedestals(found);
     guideTargets(observation,found);
     const auto& geometry=observation.geometry;
     const bool sameMesh=s.haveMesh && reach::sameGeometry(s.meshContext.geometry,geometry.geometry) && s.meshContext.swimming==geometry.swimming && s.meshContext.waterBake==geometry.waterBake && s.meshContext.waterCrossings==geometry.waterCrossings && nav::sameRouteEvents(s.meshContext.events,geometry.events) &&
