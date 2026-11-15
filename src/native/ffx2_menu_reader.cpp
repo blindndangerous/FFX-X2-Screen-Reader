@@ -5,6 +5,8 @@
 #include "x2_boot.hpp"
 #include "ffx2_text.hpp"
 #include "ffx2_top_menu.hpp"
+#include "ffx2_menu_snapshot.hpp"
+#include "speech_domains.hpp"
 #include "events.hpp"
 #include "log_capture.hpp"
 #include "profile.hpp"
@@ -27,49 +29,46 @@ bool readState(TopMenuState& state) {
     return true;
 }
 
-// The loaded ffx2sjistbl_us.bin. Parsed again whenever the game's pointer
-// changes; a failed parse is not cached.
-ffx2text::Charset charset;
-uintptr_t charsetSource=0;
-bool charsetReady() {
+// The loaded ffx2sjistbl_us.bin. Copy on its native owner; parse only the
+// owned snapshot on preparation. Same-address reloads cannot retain old glyphs.
+void captureText(ffx2menu::MenuSnapshot& snapshot) {
     const auto source=read<uintptr_t>(ffx2Address(Ffx2Only::Charset),0);
-    if(!source) return false;
-    if(source==charsetSource) return true;
     // The buffer is the file rounded up to 16 bytes plus one NUL; the last
     // copy sizes keep a short buffer near the end of a mapping readable.
-    for(const std::size_t size:{std::size_t{1024},std::size_t{512},std::size_t{336}}) {
-        std::uint8_t bytes[1024];
-        if(!copy(source,bytes,size)) continue;
-        ffx2text::Charset parsed;
-        if(!ffx2text::parseLoadedCharset(bytes,size,parsed)) break;
-        charset=std::move(parsed);
-        charsetSource=source;
-        recordLog("FFX-2 charset loaded glyphs=%u",static_cast<unsigned>(charset.glyphs.size()));
-        return true;
+    if(source) for(const unsigned size:{1024u,512u,336u}) {
+        if(!copy(source,snapshot.charset.data(),size)) continue;
+        snapshot.charsetBytes=size;break;
     }
-    recordLog("FFX-2 charset unreadable at %p",reinterpret_cast<void*>(source));
-    return false;
-}
-
-std::string helpLine() {
     const auto text=read<uintptr_t>(ffx2Address(Ffx2Only::HelpText),0);
-    if(!text || !charsetReady()) return {};
-    for(const std::size_t size:{std::size_t{256},std::size_t{96}}) {
-        std::uint8_t bytes[256];
-        if(copy(text,bytes,size)) return ffx2text::decode(bytes,size,charset);
+    if(text) for(const unsigned size:{256u,96u}) {
+        if(!copy(text,snapshot.help.data(),size)) continue;
+        snapshot.helpBytes=size;break;
     }
-    return {};
 }
 
-bool storyModeLogged=false;
+void prepareMenu(const speechq::Header& header,const std::wstring& owned) {
+    if(header.generation!=generation() || owned.size()*sizeof(wchar_t)!=sizeof(ffx2menu::MenuSnapshot)) return;
+    ffx2menu::MenuSnapshot snapshot;std::memcpy(&snapshot,owned.data(),sizeof snapshot);
+    if(snapshot.charsetBytes>snapshot.charset.size() || snapshot.helpBytes>snapshot.help.size()) return;
+    ffx2text::Charset charset;
+    std::string help;
+    if(ffx2text::parseLoadedCharset(snapshot.charset.data(),snapshot.charsetBytes,charset))
+        help=ffx2text::decode(snapshot.help.data(),snapshot.helpBytes,charset);
+    const auto speech=ffx2menu::topMenuSpeech(snapshot.id,help);
+    recordLog("FFX-2 top menu id=%u charset glyphs=%u",snapshot.id,static_cast<unsigned>(charset.glyphs.size()));
+    if(header.generation==generation() && !speech.empty())
+        speechq::emitOwned(speech,header,"ffx2-top-menu",false,true);
+}
+
 void topMenuBefore(Event& e) {
     TopMenuState state;
-    e.before[0]=readState(state);
+    e.before[0]=read<unsigned>(e.args[0]+0x1c,0xffffffffu)==5 && readState(state);
     e.before[1]=static_cast<intptr_t>(state.cursor);
     e.before[2]=static_cast<intptr_t>(state.count);
 }
 void topMenuAfter(Event& e) {
     if(!e.before[0]) return;
+    if(read<unsigned>(e.args[0]+0x1c,0xffffffffu)!=5) return;
     TopMenuState before, after;
     before.cursor=static_cast<std::uint32_t>(e.before[1]);
     before.count=static_cast<std::uint32_t>(e.before[2]);
@@ -79,16 +78,12 @@ void topMenuAfter(Event& e) {
     // 0x379050 maps ids to names differently when this flag is not zero; the
     // name table covers only the zero (main story) mapping.
     const auto mode=read<std::uint32_t>(ffx2Address(Ffx2Only::StoryMode),0xffffffffu);
-    if(mode!=0) {
-        if(!storyModeLogged) recordLog("FFX-2 top menu not read: story mode flag %u",mode);
-        storyModeLogged=true;
-        return;
-    }
+    if(mode!=0) return;
     unsigned id=0;
     if(!ffx2menu::focusedId(after,id)) return;
-    const auto speech=ffx2menu::topMenuSpeech(id,helpLine());
-    recordLog("FFX-2 top menu cursor=%u id=%u",after.cursor,id);
-    if(!speech.empty()) outputAt(speech,true,"ffx2-top-menu",e.epoch);
+    ffx2menu::MenuSnapshot snapshot{};snapshot.id=id;
+    captureText(snapshot);
+    speechq::captureDomain(speechq::Ffx2MenuDomain,snapshot,e.epoch);
 }
 
 // 0x373170 starts push ebp; mov ebp,esp; push ecx; push ebx; call rel32.
@@ -100,9 +95,11 @@ bool prologueMatches(uintptr_t target) {
 }
 
 bool installFfx2TopMenu() {
+    if(nativeProfile!=NativeProfile::Ffx2) return false;
     const auto rva=ffx2Rva(Ffx2Only::TopMenuUpdate);
     const auto target=address(0)+rva;
     if(!prologueMatches(target)) { recordLog("FFX-2 top menu hook refused: prologue mismatch at rva=%x",rva); return false; }
+    speechq::registerDomain(speechq::Ffx2MenuDomain,prepareMenu,nullptr);
     return hookAddress(target,ffx2HookId(rva),topMenuBefore,topMenuAfter);
 }
 }

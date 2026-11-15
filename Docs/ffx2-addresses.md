@@ -1,5 +1,13 @@
 # FFX-2 address evidence
 
+## Gameplay qualification (November 15)
+
+Every FFX-2 address and structure offset recorded here remains **UNVERIFIED
+in game**. Historical headings such as "Verified" describe static binary
+correspondence, not gameplay confirmation. No game was launched, attached to,
+controlled or deployed during this work. New submenu and battle code has no
+live hook. The already-existing top-menu hook remains the only menu reader.
+
 This file records which FFX function addresses have a verified FFX-2.exe
 equivalent, and why. `profileRva()` in `src/native/profile.hpp` reads the
 `ffx2Addresses` table under `NativeProfile::Ffx2`. That table holds only the
@@ -303,6 +311,33 @@ reading every reference to it in FFX-2.exe.
 - The text of each help line on screen.
 
 ## What runs under FFX-2
+
+### Charset capture and preparation (November 15)
+
+The top-menu hook copies the loaded charset and selected help bytes into one
+owned `ffx2_menu_snapshot.hpp` packet. Only the existing speech preparation
+worker parses UTF-8, decodes game text, assembles speech and logs it. Native
+capture performs no allocation, decode, logging, wait or worker-memory read.
+Queue refusal drops the observation; there is no synchronous fallback.
+The packet retains its originating speech generation. Retired packets are silent.
+
+There is no pointer-keyed cache: an allocator can reuse the same charset address
+after a language/resource reload. Every move captures the current bytes. Missing
+or malformed charset data produces the item label alone. Copy ceilings remain
+1024/512/336 charset bytes and 256/96 help bytes; these are **not** allocation
+extents or proof that every localized glyph fits. Japanese/Korean/Chinese escape
+text and parameterized controls remain unsupported. Do not report those as
+localized speech support.
+
+Static evidence for the **UNVERIFIED** charset pointer: RVA `0x11124c`,
+`a1 e0 ad de 00`, reads VA `0xdeade0`; RVA `0x11125e`,
+`89 3d e0 ad de 00`, replaces it after freeing the preceding buffer.
+RVA `0x11121a`, `c6 04 37 00`, writes the trailing NUL at `[edi+esi]`.
+The existing **UNVERIFIED** module phase offset `+0x1c` comes from
+RVA `0x3731c4`, `8b 47 1c` (`mov eax,[edi+0x1c]`);
+only phase 5 is eligible for top-menu capture. The synthetic boundary fixture
+checks source-buffer mutation, same-address reload, profile and phase guards,
+missing/malformed charset, queue pressure and generation retirement.
 
 - MinHook starts.
 - Window message hooks (PeekMessageA/W, GetMessageA/W) for key capture.
