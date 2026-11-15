@@ -733,6 +733,10 @@ int main(int argc, char** argv) {
     setSetting(Setting::UnavailableCue,0); event(0x486b00,3); check(said.size()==count,"battle buzzer cue Off stays silent");
     setSetting(Setting::UnavailableCue,1);
     event(0x49c870,address(0xf3c910),[]{set<uint8_t>(0xf3c952,1);}); expect(L"Ether","battle command move after availability checks");
+    setSetting(Setting::MenuIndex,1); set<uint16_t>(0xf3c916,6);
+    event(0x49cd50,address(0xf3c910),[]{set<uint8_t>(0xf3c952,0);}); expect(L"Potion, 1 of 2","battle Item list speaks native row of command list length");
+    set<uint16_t>(0xf3c916,0); event(0x49c870,address(0xf3c910),[]{set<uint8_t>(0xf3c952,1);}); expect(L"Ether","main battle command bar is not indexed");
+    setSetting(Setting::MenuIndex,0);
     protectSpeech(false);
     event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview");
     event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});

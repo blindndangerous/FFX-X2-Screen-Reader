@@ -30,7 +30,13 @@ retire the previous description. Cursor positions outside the native row count
 remain silent. The existing English fixed label is shared with Key Items.
 Menu indexing uses the copied cell/count (`+0x94`) or generic row/count (`+0x30`)
 and calls `menuIndex` on the text-plan worker. Trailing blank cells do not receive
-an invalid position. Battle indexing is outside this change.
+an invalid position. Battle cursor speech appends the same index through
+`planBattleListName` (`battle_lists.cpp`): row is BtlWindow `sel_idx` (`+0x42`)
+and the total is `command_list_len` (`+0x24`), the row and bound the cursor
+reader already uses. Only submenu list types are indexed (1-7, 0xA, 0xE, 0xF,
+0x11, 0x14); the main bar (0), Left/Right bars (0xC/0xD) and Gil amount windows
+(0x15/0x16) are not. Rows at or past the length, zero or implausible lengths
+(above 0x1000) and blank names get no index.
 Items and Abilities rows read the inventory table usable byte (`+3`, 0 means
 greyed) and append `unavailable`. Ability MP cost is not read: the record byte
 (`+0x25`) ignores One MP Cost and Half MP Cost. Gear and Overdrive lists use
