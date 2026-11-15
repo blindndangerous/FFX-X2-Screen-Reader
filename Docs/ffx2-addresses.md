@@ -310,6 +310,154 @@ reading every reference to it in FFX-2.exe.
 - That the flag at VA 0x16ef654 is zero in the main story.
 - The text of each help line on screen.
 
+Additional static instruction checks for the **UNVERIFIED** existing globals:
+
+- Cursor: RVA `0x3731f4`, `a1 0c ef 6b 01`, reads VA `0x16bef0c`;
+  RVA `0x37332b`, `a3 0c ef 6b 01`, writes it after a cursor move.
+- Item list: RVA `0x3761f7`, `8b 34 c5 e0 ef 6b 01`, reads the dword
+  ID from VA `0x16befe0 + 8*cursor`.
+- Count: RVA `0x373370`, `3b 05 40 f0 6b 01`, compares against VA
+  `0x16bf040` for wrap-around.
+- Story flag: RVA `0x392ee0`, `a1 54 f6 6e 01`, reads VA `0x16ef654`.
+- Help and charset pointer store bytes are recorded in the submenu and
+  charset-capture sections below. Their final gameplay meaning remains unverified.
+
+## Native submenu investigation. UNVERIFIED (November 15)
+
+These findings use only the pinned executable and read-only archive entries.
+No submenu address was added to `ffx2OnlyAddresses`; no new submenu hook exists.
+The parsers in `ffx2_submenus.*` consume supplied, owned bytes only. A passing
+synthetic parser test does not verify which live controller owns those bytes.
+
+### Items. UNVERIFIED
+
+- Route: top ID 0 dispatches slot 5. RVA `0x37621a`, `6a 05`, followed by
+  `e8 8f e8 fe ff`, calls the module activator. Registry slot 5 contains
+  module VA `0xd631e0`, whose update is RVA `0x37b6f0`.
+- Window pointer: RVA `0x12bf514`, VA `0x16bf514`. RVA `0x37b715`,
+  `8b 15 14 f5 6b 01`, loads it into EDX. RVA `0x37b78e`,
+  `0f bf 51 4c`, reads its signed word cursor at `+0x4c`.
+- The effective column is the signed activity/column byte at `+0x48`,
+  clamped against byte `+0x45`. Negative activity suppresses help. RVA
+  `0x37eb50`, `0f bf 4e 4c`, reads the row; `0x37eb54`,
+  `8b 44 96 5c`, reads the column base at `+0x5c+4*column`;
+  `0x37eb58`, `8d 0c 48`, computes `base+2*row`. The `+0x98` dword
+  must be nonzero (`0x37eb5d`, `39 86 98 00 00 00`).
+- Main item rows: RVA `0xdb8e00`, VA `0x11b8e00`, stride 4. RVA
+  `0x37eb82`, `0f b7 04 8d 00 8e 1b 01`, loads the word ID.
+  RVA `0x37eb79`, `38 04 8d 03 8e 1b 01`, tests byte `+3` against zero.
+  Other list modes use other arrays; this is not permission to reuse the
+  main item layout for every inventory pane or target/quantity dialog.
+- Help: RVA `0x37eb8b`, `e8 40 58 01 00`, calls getter RVA `0x3943d0`
+  with the ID. RVA `0x37ebf7`, `e9 54 6e fe ff`, forwards the resulting
+  pointer to RVA `0x365a50`. The selected help pointer is the existing
+  `HelpText` RVA `0x12bd97c`.
+
+### Abilities. UNVERIFIED
+
+- Route: top ID 4 dispatches slot 4. RVA `0x376298`, `6a 04`, followed by
+  `e8 11 e8 fe ff`. Registry slot 4 contains module VA `0xd62eb8`,
+  update RVA `0x376870`.
+- Window pointer: RVA `0x12bf268`, VA `0x16bf268`. RVA `0x376a07`,
+  `a3 68 f2 6b 01`, stores the result of the constructor at `0x378d00`.
+  The selected help helper is `0x3777e0`. Constructor RVA `0x378d17`,
+  `c7 46 0c 90 71 77 00`, installs update callback `0x377190` at `+0xc`.
+  RVA `0x378d25`, `c7 46 14 10 8f 77 00`, installs `0x378f10` at
+  `+0x14`; callback roles must be traced rather than assumed by offset.
+- Cursor/list indexing: help callback RVA `0x37780a`, `0f bf 4e 4c`,
+  reads the signed row. `0x37780e`, `8b 44 96 5c`, reads its column base;
+  `0x377812`, `8d 04 48`, computes `base+2*row`. Activity/column
+  handling at `+0x48` and `+0x45` matches the Items calculation.
+- Rows: RVA `0xdbc400`, VA `0x11bc400`, stride 16. RVA `0x377815`,
+  `c1 e0 04`, multiplies by 16; `0x377818`, `05 00 c4 1b 01`, adds
+  the table. Byte `+0` gates availability (`80 38 00` at `0x37781d`);
+  the dword at `+4` supplies the ID (`ff 70 04` at `0x377822`).
+- Help: RVA `0x377825`, `e8 a6 cb 01 00`, calls `0x3943d0`;
+  `0x37783c`, `e9 0f e2 fe ff`, forwards to `0x365a50`. The final
+  pointer is again `HelpText` RVA `0x12bd97c`.
+
+### Garment Grids. UNVERIFIED, controller binding incomplete
+
+- Route: top ID 3 dispatches slot 6 (`6a 06` at RVA `0x376276`).
+  Module VA `0xd631bc`, update `0x37b550`, enters the legacy controller:
+  RVA `0x37b586`, `e8 c5 75 e7 ff`, calls `0x1f2b50`; update RVA
+  `0x37b59c`, `e8 3f 73 e7 ff`, calls `0x1f28e0`.
+- There are several panels, not one interchangeable menu window. Cursor
+  candidates include signed word RVA `0x16c9a68` (VA `0x1ac9a68`) and
+  signed word RVA `0x16c9b88` (VA `0x1ac9b88`). RVA `0x1f2961`,
+  `0f bf 05 68 9a ac 01`, reads the first; RVA `0x1f2942`,
+  `0f bf 05 88 9b ac 01`, reads the second. The node-edit callback reads
+  panel `+8` (`0f b7 47 08` at `0x1f34fa`) and bounds it below 32
+  (`66 83 f8 20` at `0x1f3507`). Do not confuse this node cursor with
+  a selected Garment Grid ID or the available-dressphere list cursor.
+- A sorted byte ID list is at RVA `0x9f4fc4`, VA `0xdf4fc4`: getter
+  `0x1ea7a6`, `0f b6 80 c4 4f df 00`. Its count is stored at RVA
+  `0x9f502c` (`89 3d 2c 50 df 00` at `0x1ea7fa`). The builder at
+  `0x1ea7b0` filters records through `0x20c6e0` before sorting. This is
+  an available-dressphere list used by the controller, not proof of a
+  complete owned-Garment-Grid catalog.
+- Grid node data comes through pointer RVA `0x9f4fc0`, VA `0xdf4fc0`.
+  Getter `0x1eb9e6`, `8b 15 c0 4f df 00`, reads it; subsequent shifts
+  compute `(grid*32+node)*8` bits and return an eight-bit node value.
+  It is not a string list.
+- Help routes include `0x1f30a0`: signed panel `+8` (`0f bf 40 08`
+  at `0x1f30a8`), plus `0x1088` (`05 88 10 00 00`), text getter
+  `0x21d7c0` with space 1, then help setter `0x3638a0`.
+  The list callback at `0x1f30d0` handles the final three action rows
+  separately; other rows reach record-based helper `0x1e5920`.
+  RVA `0x1e5970`, `0f b7 40 04`, takes the help offset from a resolved
+  record; `0x1e597b`, `e8 20 df 17 00`, calls the same help setter.
+  Setter RVA `0x3638b6`, `a3 7c d9 6b 01`, stores the shared help pointer.
+- Remaining proof: bind the focused grid-list phase and its owned catalog
+  to the correct cursor. The offline panel parser requires an explicitly
+  supplied qualified ID list; it does not guess that binding.
+
+### Dresspheres. UNVERIFIED, focused list binding incomplete
+
+- Route: top ID 6 dispatches slot `0x11` (`6a 11` at RVA `0x3762d2`).
+  Module VA `0xd636d0`, update `0x385650`, delegates to controller
+  `0x75e480`: RVA `0x385671`, `e8 0a 8e 3d 00`.
+- The controller creates a legacy panel at VA `0x1ac9a60` with buffer
+  VA `0x1aca6b0`. RVA `0x75e608`, `68 b0 a6 ac 01`, and `0x75e60d`,
+  `68 60 9a ac 01`, pass them to constructor `0x1e5610`. This constructor
+  resets signed cursor `+8` (`66 89 46 08` at `0x1e561c`) and initializes
+  words `+0x1c/+0x1e` (`c7 46 1c 01 00 01 00` at `0x1e5632`).
+  Constructor `0x1e5550` independently writes a total to `+0x1e`
+  (`66 89 7e 1e` at `0x1e558b`). Those generic panel fields have parser
+  coverage, but their role as the player-focused Dressphere list is not proven.
+- The sorted byte ID list and record help helper above are candidates for
+  this controller family. The ownership/phase path from this panel to that
+  list and its displayed help remains incomplete. Do not hook this inference.
+- Globals VA `0x1a65b94`, `0x1a65b98` and `0x1a65ba0` are **not verified
+  cursor addresses**. For example `0x75e8e5`, `89 0d 94 5b a6 01`, and
+  `0x75eb3f`, `ff 0d 94 5b a6 01`, change the first inside rendering.
+  A draw iterator is not evidence of player focus.
+
+### Config. UNVERIFIED
+
+- Route: top ID 9 dispatches slot 8 (`6a 08` at RVA `0x376320`). Module
+  VA `0xd63924` has update RVA `0x388880`; its window pointer is RVA
+  `0x12d5f44`, VA `0x16d5f44` (`a3 44 5f 6d 01` at `0x388a6c`).
+- Cursor: dword RVA `0x12d5f38`, VA `0x16d5f38`. Up reads/decrements it
+  at `0x388d30`, `8b 15 38 5f 6d 01`, and stores at `0x388d40`,
+  `89 15 38 5f 6d 01`; Down stores at `0x388d97` with the same bytes.
+  The scroll origin at VA `0x16d5f30` is separate from this cursor.
+- Eleven label/value/help descriptors, 16 bytes each: RVAs `0x12d5f50`,
+  `0x12d6000`, `0x12d60b0` (VAs `0x16d5f50`, `0x16d6000`,
+  `0x16d60b0`). Builder `0x388ab0` visits eleven rows; updater
+  `0x389213`, `8d 87 50 5f 6d 01`, addresses labels;
+  `0x389221`, `8d 87 00 60 6d 01`, values; `0x38922f`,
+  `8d 87 b0 60 6d 01`, help. It advances by 16 (`83 c7 10` at
+  `0x38923b`) until `0xb0` bytes (`81 ff b0 00 00 00` at `0x389243`).
+- These descriptors are not encoded character arrays. Constructor
+  `0x373020` writes fields and state; `0x37304c`, `89 42 08`, clears
+  the `+8` dword. Do not dereference it as a ready string. Value choices
+  use a separate pointer table at VA `0x16d5f40` (`a1 40 5f 6d 01`
+  at `0x389833`); the chosen list's word `+4` is a bound
+  (`66 3b 48 04` at `0x389842`).
+- The parser selects exact owned descriptors by cursor. Resolving their
+  rendered text requires further native getter/reveal evidence before a hook.
+
 ## What runs under FFX-2
 
 ### Charset capture and preparation (November 15)
