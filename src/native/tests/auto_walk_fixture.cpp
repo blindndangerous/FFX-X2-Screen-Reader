@@ -61,9 +61,11 @@ bool consent=false;
 bool pedestalConsentKey(unsigned scan) { return consent && scan==0x1c; }
 bool pedestalConsentVk(unsigned vk) { return consent && vk==VK_RETURN; }
 uint64_t pedestalConsentButtons() { return consent?pad::bit(pad::South):0; }
-void pedestalKeyboardInput(const uint8_t*) {}
+// Records movement the pedestal approach would treat as manual cancellation.
+bool pedestalSawMovement=false;
+void pedestalKeyboardInput(const uint8_t* keys) {for(unsigned scan:{0xc8u,0xd0u,0xcbu,0xcdu,0x11u,0x1eu,0x1fu,0x20u,0x01u}) if(keys[scan]&0x80) pedestalSawMovement=true;}
 void pedestalControllerInput(const pad::State&) {}
-void pedestalPlayerInput(unsigned) {}
+void pedestalPlayerInput(unsigned vk) {if(vk==VK_DOWN || vk==VK_UP || vk==VK_ESCAPE || vk=='W') pedestalSawMovement=true;}
 int setting(Setting s) { return s==Setting::AutoWalk && enabled; }
 unsigned generation() { return epoch; }
 Point playerPosition() { return player; }
@@ -207,6 +209,14 @@ int main() {
     begin(); keys={}; keys[0x52]=0x80; keys[0xc8]=0x80; keys[0x01]=0x80; autoWalkKeyboard(keys.data());
     check(autoWalkActive() && !keys[0x01],"Numpad Insert+Up+Escape reader command does not cancel");
     keyboard(); updateAutoWalk(); check(autoWalkActive(),"reader command leaves the walk running on the next tick");
+    // An armed pedestal approach must not see reader chords as manual movement either.
+    begin(); pedestalSawMovement=false; keys={}; keys[0xd2]=0x80; autoWalkKeyboard(keys.data()); keys={}; keys[0xd2]=0x80; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    keys={}; keys[0xd0]=0x80; autoWalkKeyboard(keys.data());
+    check(!pedestalSawMovement,"Insert+Down reaches neither auto walk nor the pedestal approach as movement");
+    keys={}; autoWalkKeyboard(keys.data()); keys[0xd0]=0x80; autoWalkKeyboard(keys.data()); check(pedestalSawMovement,"a plain Down still reaches the pedestal approach");
+    begin(); pedestalSawMovement=false; autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkReaderModifier(false);
+    check(!pedestalSawMovement,"a reader chord in the window-message path is not pedestal movement");
+    autoWalkPlayerInput(VK_DOWN); check(pedestalSawMovement,"a plain window-message Down is still pedestal movement");
     begin(); autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkPlayerInput(VK_RETURN); updateAutoWalk();
     check(autoWalkActive(),"message-path arrow and Enter with a reader modifier held do not cancel");
     autoWalkReaderModifier(false); autoWalkPlayerInput(VK_DOWN); updateAutoWalk();

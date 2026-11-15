@@ -325,8 +325,11 @@ void updateAutoWalk() {
 }
 void autoWalkReaderModifier(bool held) {readerModifier=held;}
 void autoWalkPlayerInput(unsigned vk) {
+    // Reader chords belong to the screen reader: neither auto walk nor an armed
+    // pedestal approach may take them as manual movement.
+    if(readerModifier) return;
     pedestalPlayerInput(vk);
-    if(pedestalConsentVk(vk) || readerModifier) return;
+    if(pedestalConsentVk(vk)) return;
     const bool movement=vk=='W' || vk=='A' || vk=='S' || vk=='D' || vk==VK_UP || vk==VK_DOWN || vk==VK_LEFT || vk==VK_RIGHT;
     if(movement) movedAfterBattle();
     if(movement || vk==VK_ESCAPE || vk==VK_RETURN) {
@@ -335,7 +338,6 @@ void autoWalkPlayerInput(unsigned vk) {
     }
 }
 void autoWalkKeyboard(uint8_t* keys) {
-    pedestalKeyboardInput(keys);
     bool modifier=false;
     for(unsigned scan:readerModifierScans) if(keys[scan]&0x80) modifier=true;
     readerModifier=modifier;
@@ -344,6 +346,10 @@ void autoWalkKeyboard(uint8_t* keys) {
         readerOwned[i]=down && (readerOwned[i] || (modifier && !physicalDown[i]));
         physicalDown[i]=down;
     }
+    // The pedestal approach sees only the player's keys, never reader-owned ones.
+    std::array<uint8_t,256> playerKeys;
+    for(unsigned i=0;i<256;++i) playerKeys[i]=readerOwned[i]?0:keys[i];
+    pedestalKeyboardInput(playerKeys.data());
     const auto player=[&](unsigned scan) {return (keys[scan]&0x80) && !readerOwned[scan];};
     bool physical=false;
     for(unsigned scan:cancelScans) if(player(scan) && !pedestalConsentKey(scan)) physical=true;
