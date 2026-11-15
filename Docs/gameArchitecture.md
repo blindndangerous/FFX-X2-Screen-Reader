@@ -741,7 +741,7 @@ actual call context. The detailed audit at the end records evidence and gaps.
 | File | Size | Purpose |
 |------|------|---------|
 | FFX.exe | ~37MB (0x237d000) | Final Fantasy X |
-| FFX-2.exe | TBD | Final Fantasy X-2 |
+| FFX-2.exe | 12281600 bytes, SHA-256 6ea7f142…cd69 (Steam manifest 1235377778411650212) | Final Fantasy X-2, Last Mission included |
 | FFX&X-2_Will.exe | TBD | Post-game audio drama |
 | FFX-2_LM.exe | TBD | FFX-2 Last Mission |
 | FFX&X-2_LAUNCHER.exe | TBD | Game selector UI — **.NET assembly** (NOT native) |
@@ -2853,7 +2853,7 @@ The physical asset format alone does not tell us who owns input or text.
 | Shops | No shop reader installed | Buy/sell/equipment lists, prices, quantities, comparisons and confirms |
 | Battle | Main commands/targets implemented | Summon/party swap end-to-end unverified; Wakka Slots missing; partial Overdrive support |
 | Blitzball | No reader installed | Team/league/player/technique and in-match selection menus |
-| FFX-2 / Last Mission | No production coverage | Separate executables; current FFX RVAs cannot be reused blindly |
+| FFX-2 / Last Mission | Boot only: hash-selected `NativeProfile::Ffx2` speaks one startup line; no hooks, every FFX RVA refused | All menus, dialogue, battle and field; current FFX RVAs cannot be reused blindly |
 | Steam launcher | Original-action event adapter + native Tolk DLL built | Actual launcher validation; English image labels only; mute icon/credits content remain gaps |
 
 This is a source coverage inventory, not a claim that every listed menu was opened
