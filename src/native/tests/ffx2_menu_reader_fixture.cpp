@@ -69,9 +69,14 @@ int main() {
     auto& rows=memory[address(ffx2Rva(Ffx2Only::TopMenuItems))];rows.resize(entries.size()*4);
     std::memcpy(rows.data(),entries.data(),rows.size());put(0x50001c,5u);
     global(Ffx2Only::Charset,0x600000);global(Ffx2Only::HelpText,0x610000);
-    memory[0x600000]=std::vector<unsigned char>(1024,0);
-    std::fill_n(memory[0x600000].begin(),0xd0,'x');memory[0x600000][0]='A';
-    memory[0x610000]=std::vector<unsigned char>(256,0);memory[0x610000][0]=0x30;
+    // The pinned archive's English table is exactly 310 bytes. A capture may
+    // not rely on adjacent mapped storage beyond that file's known extent.
+    // Synthetic 74 ASCII plus 118 two-byte glyphs: 192 code points in 310
+    // bytes, matching the measured shape without retaining the game's table.
+    memory[0x600000]=std::vector<unsigned char>(74,'x');
+    for(unsigned i=0;i<118;++i) {memory[0x600000].push_back(0xc3);memory[0x600000].push_back(0xa9);}
+    memory[0x600000][0]='A';
+    memory[0x610000]={0x30,0};
     check(installFfx2TopMenu(),"verified prologue installs hook");
     check(receiver!=nullptr,"bootstrap registers preparation receiver");
     move(0,1);
@@ -82,6 +87,13 @@ int main() {
     drain();check(spoken==L"Config. A","worker uses original snapshot after native memory changes");
     memory[0x610000][0]=0x30;move(1,0);drain();
     check(spoken==L"Items. B","same-address table reload does not reuse a stale charset cache");
+    memory[0x610000]={0x06,0,0x30,0};move(0,1);drain();
+    check(spoken==L"Config. B","NUL control parameter does not terminate the help snapshot");
+    memory[0x610000]={0xef,0};move(1,0);drain();
+    check(spoken==L"Items. \x00e9","last multibyte glyph fits the exact charset extent");
+    memory[0x610000].assign(256,0x30);move(0,1);drain();
+    check(spoken==L"Config","unterminated help is not spoken as a truncated string");
+    memory[0x610000]={0x30,0};
     spoken.clear();move(0,0);drain();check(spoken.empty(),"idle cursor stays silent");
     global(Ffx2Only::StoryMode,1);move(0,1);drain();check(spoken.empty(),"non-story mode stays silent");
     global(Ffx2Only::StoryMode,0);put(0x50001c,6u);move(0,1);drain();

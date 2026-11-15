@@ -5,11 +5,13 @@
 #include <string>
 
 namespace {
-int failures=0;
+int checks=0,failures=0;
 void expect(bool ok,const char* what) {
+    ++checks;
     if(!ok) { std::fprintf(stderr,"FAIL: %s\n",what); ++failures; }
 }
 void expectSpeech(const std::wstring& actual,const std::wstring& expected,const char* what) {
+    ++checks;
     if(actual!=expected) {
         std::fprintf(stderr,"FAIL: %s: got \"%ls\", expected \"%ls\"\n",what,actual.c_str(),expected.c_str());
         ++failures;
@@ -62,6 +64,6 @@ int main() {
     expect(wideFromUtf8("A\xFF" "B")==L"AB","malformed byte dropped");
 
     if(failures) { std::fprintf(stderr,"FFX-2 top menu fixture: %d failure(s)\n",failures); return 1; }
-    std::puts("FFX-2 top menu fixture passed: names, focus, cursor moves, speech.");
+    std::printf("FFX-2 top menu fixture: %d checks, %d failures.\n",checks,failures);
     return 0;
 }

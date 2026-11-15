@@ -323,9 +323,14 @@ The packet retains its originating speech generation. Retired packets are silent
 
 There is no pointer-keyed cache: an allocator can reuse the same charset address
 after a language/resource reload. Every move captures the current bytes. Missing
-or malformed charset data produces the item label alone. Copy ceilings remain
-1024/512/336 charset bytes and 256/96 help bytes; these are **not** allocation
-extents or proof that every localized glyph fits. Japanese/Korean/Chinese escape
+or malformed charset data produces the item label alone. Read-only archive
+inspection found the pinned English charset file is exactly 310 bytes. The
+loader therefore allocates 321 bytes, including padding and its final NUL.
+Capture reads only those 310 file bytes; the old 1024/512/336-byte attempts
+could all exceed the allocation. This extent remains **UNVERIFIED in game**.
+Help capture copies through the encoded terminator, at most 256 bytes, without
+reading beyond it. NUL control parameters are copied as parameters. An unreadable
+or unterminated line produces the label alone. Japanese/Korean/Chinese escape
 text and parameterized controls remain unsupported. Do not report those as
 localized speech support.
 
@@ -339,6 +344,12 @@ only phase 5 is eligible for top-menu capture. The synthetic boundary fixture
 checks source-buffer mutation, same-address reload, profile and phase guards,
 missing/malformed charset, queue pressure and generation retirement.
 
+Archive provenance (read-only; no extracted asset saved):
+`data/FFX2_Data.vbf`, entry
+`ffx_ps2/ffx2/master/jppc/ffx2_encoding/ffx2sjistbl_us.bin`, 310 bytes,
+192 UTF-8 code points, SHA-256
+`9f96e3b904c0ed332bb6859ec74f36b5a440c9c10c00fad24099afd42bd39af8`.
+
 - MinHook starts.
 - Window message hooks (PeekMessageA/W, GetMessageA/W) for key capture.
 - 0x225930 probe: marks the game thread on entry, drains queued commands on
@@ -351,8 +362,9 @@ missing/malformed charset, queue pressure and generation retirement.
 - 0x46fed0 and 0x5093b0: resource scopes. Each call logs "native reader
   resource scope begin" and "end" and invalidates pending speech. The return
   logs "native load return".
-- 0x373170 (FFX-2-only): the top-level menu. On each cursor move it speaks
-  "<item name>. <help line>" and logs "FFX-2 top menu cursor=<n> id=<id>".
+- 0x373170 (FFX-2-only): the top-level menu. On each eligible cursor move it
+  captures owned text. Preparation speaks "<item name>. <help line>" and logs
+  "FFX-2 top menu id=<id> charset glyphs=<n>".
 - No other reader, menu, battle, field, controller, beacon or minigame hook. The
   input code skips the ESC menu, Blitzball, field, battle-sensor and minigame
   predicates under FFX-2, because they read FFX memory.
