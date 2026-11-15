@@ -150,6 +150,34 @@ They stay out of the table.
 - 0x48dfe0 (field initialize, the third FFX resource scope). Not searched
   yet. Under FFX-2 `resourceScopeHook()` returns false for it.
 
+## Text encoding
+
+`src/native/ffx2_text.cpp` decodes FFX-2 game text to UTF-8. It follows the
+English path of the game's own converter. Absolute operands below are virtual
+addresses at the preferred base 0x400000; function addresses are RVAs.
+
+- 0x111120 loads `%s/ffx2sjistbl_us.bin` (string at VA 0xc34214) from the
+  game archive. For English it stores the buffer in the global at VA
+  0xdeade0. Japanese, Korean and Chinese use the global at VA 0xdeaddc.
+- The table is UTF-8 text. Entry i is its i-th code point. The lookup at
+  0x1109f0 turns a character index into a byte offset with fixed ranges,
+  because some entries are wider than one byte.
+- The converter at 0x110760 dispatches bytes below 0x30 through a byte table
+  at VA 0x510860:
+  - 0x00 ends the string.
+  - 0x01, 0x02 and 0x05 are one-byte controls with no output.
+  - 0x03 writes CR LF. The decoder writes "\n".
+  - 0x04 is an escape to the Japanese table. It is three bytes when the next
+    byte is 0x2f or less, else two. The decoder skips it.
+  - 0x06 to 0x2b take one parameter byte and produce no output.
+  - 0x2c to 0x2f select a page: index = (byte - 0x2b) * 0xd0 + next - 0x30.
+  - 0x30 and above: index = byte - 0x30.
+- Not done yet: the runtime does not read the table from the game. The
+  0xdeade0 pointer is not in the verified table, and no FFX-2 text source is
+  hooked. The decoder and its fixture use synthetic bytes only.
+- Not handled: the meaning of the two-byte controls (FFX uses them for
+  button glyphs, colours and name macros). The decoder drops them.
+
 ## What runs under FFX-2
 
 - MinHook starts.
