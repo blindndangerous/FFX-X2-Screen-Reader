@@ -31,7 +31,9 @@ int value(const nav::Scene& observation,const State& state,unsigned low,unsigned
     for(unsigned i=0;i<facts.bindings.count;++i) {const auto& row=facts.bindings.rows[i];if(row.binding==low && row.high==high && row.element==element) return row.value;}
     throw std::runtime_error("Required puzzle observation is missing");
 }
-bool done(const nav::Scene& observation,const State& state,const PuzzleStep& step) {if(!step.check) return false;const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);return step.done.low==0x01000a70?(current&step.done.value)!=0:current==step.done.value;}
+bool done(const nav::Scene& observation,const State& state,const PuzzleStep& step) {if(!step.check) return false;const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);
+    if(step.also.low && value(observation,state,step.also.low,step.also.high,step.also.element)!=step.also.value) return false;
+    return step.done.low==0x01000a70?(current&step.done.value)!=0:current==step.done.value;}
 void advance(const nav::Scene& observation,State& state) {
     PuzzleProgress progress{state.expected,state.placed,state.removed};
     advancePuzzleProgress(*state.route,state.begin,state.end,progress,[&](const PuzzleStep& step) {return done(observation,state,step);},
@@ -82,8 +84,11 @@ Entity target(const nav::Scene& observation,const State& state,const PuzzleStep&
     if(!result.pushControl && (step.fallback.x || step.fallback.y || step.fallback.z)) {result.position=step.fallback;return result;}
     throw std::runtime_error("This control is not positioned yet; perform the preceding step first");
 }
-std::wstring instruction(const nav::Scene& observation,const Entity& target) {
+// step is the guide step that wants this push; its own signal decides when
+// the push is done, never the pedestal position.
+std::wstring instruction(const nav::Scene& observation,const Entity& target,const PuzzleStep* step=nullptr,bool stepDone=false) {
     if(!target.pushControl) return {};PedestalPlan plan;if(!nav::scenePedestalPlan(observation,target,plan)) return L"The current pedestal state is unavailable.";
+    if(step) {const auto text=pedestalStepText(plan,stepDone,step->done.low==0x0c0000d9 && step->done.value==1 && target.pushControl==3);if(!text.empty()) return text;}
     auto controls=observation.controls;controls.swap=false;const auto names=copiedControlContext(controls);const bool single=!plan.moves.empty() && plan.moves.front().mode==PushMode::Single;
     const unsigned raw=single?observation.confirmMask:0x40;const unsigned masks[]={0x10,0x20,0x40,0x80,4,8,1,2,0x800,0x100};std::vector<std::wstring> choices;
     for(unsigned i=0;i<_countof(masks);++i) if(raw&masks[i]) {const auto& name=names.glyphs[0x30+i];if(!name.empty() && name!=L"unassigned control") choices.push_back(name);}
@@ -155,6 +160,29 @@ std::wstring ownedGuidePedestalStep(const nav::Scene& observation,const Entity& 
     if(!text.compare(0,tag.size(),tag)) text.erase(0,tag.size());
     return L"Guide step "+std::to_wstring(state.step-state.begin+1)+L": "+text;
 }
+bool ownedGuideTargetsTile(const nav::Scene& observation,const Entity& tile) {
+    if(nativeGameThread() || tile.pushControl || tile.worker<0 || static_cast<unsigned>(tile.worker)>=observation.count ||
+        !enabled.load(std::memory_order_acquire) || !storage.ready()) return false;
+    const auto& state=storage.get();
+    if(!state.route || state.epoch!=observation.epoch || state.revision!=revision.load(std::memory_order_acquire) || state.step>=state.end) return false;
+    const auto& step=state.route->steps[state.step];const auto& worker=observation.workers[tile.worker];
+    if(!worker.valid || worker.part>=observation.partCount || observation.parts[worker.part].span.chunk!=observation.primary || worker.local!=step.worker) return false;
+    // Only reset tiles: their step-on handler has no gate, so the row is usable.
+    return std::wstring_view(step.label).find(L"reset tile")!=std::wstring_view::npos;
+}
+bool ownedGuidePedestalFace(const nav::Scene& observation,const Entity& pedestal,Point& face) {
+    if(pedestal.pushControl!=3 || ownedGuidePedestalStep(observation,pedestal).empty()) return false;
+    const auto& state=storage.get();if(std::string_view(state.route->script)!="djyt0600") return false;
+    try {
+        // Djose W15 owns the east socket (0x9d) and W16 the west socket (0x9e).
+        // An insert goes to an empty socket, a take to a loaded one; east first.
+        const auto& step=state.route->steps[state.step];
+        const bool insert=step.done.low==0x0c000094 && step.done.value==0;
+        const int east=value(observation,state,0x0c00009d),west=value(observation,state,0x0c00009e);
+        const bool useEast=insert?east==0 || west!=0:east!=0 || west==0;
+        face={useEast?1.0:-1.0,0,0};return true;
+    } catch(...) {return false;}
+}
 void resetOwnedPuzzleGuide() {enabled=false;refreshPending=false;revision.fetch_add(1,std::memory_order_acq_rel);}
 bool ownedPuzzleGuideActive() {return enabled.load(std::memory_order_acquire);}
 unsigned ownedPuzzleGuideRevision() {return revision.load(std::memory_order_acquire);}
@@ -174,7 +202,7 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
         const int stage=value(observation,state,0x5c000004);if(selected==11 || (selected==1 && stage==0) || (selected>=2 && stage==static_cast<int>(selected-1))) {Point point;std::wstring label;if(tile(observation,state,point,label)) {Entity panel;panel.name=L"Floor puzzle panel";panel.position=point;return prefix+label+(action==OwnedGuideAction::Path?L" "+path(observation,mesh,entities,panel,false,manual,intentRevision):L"");}}}
     if(!std::strcmp(state.route->script,"bsyt0100") && current.worker==7 && value(observation,state,0x5c0000cc)!=1) return prefix+L"The Besaid Sphere must be in the pedestal before the final push. Insert it into the pedestal sphere recess first."+(action==OwnedGuideAction::Path?L" "+path(observation,mesh,entities,target(observation,state,state.route->steps[8],entities),false,manual,intentRevision):L"");
     const bool held=settling(observation);
-    std::wstring push;if(pushStep(state,current) && !held) {try {push=instruction(observation,target(observation,state,current,entities));}catch(...) {}}
+    std::wstring push;if(pushStep(state,current) && !held) {try {push=instruction(observation,target(observation,state,current,entities),&current,done(observation,state,current));}catch(...) {}}
     if(held && action!=OwnedGuideAction::Path) push=L"Wait for the current scene or push to finish, then ask again.";
     return prefix+current.instruction+(action==OwnedGuideAction::Path?L" "+path(observation,mesh,entities,target(observation,state,current,entities),current.platform,manual,intentRevision):push.empty()?L"":L" "+push);
 }

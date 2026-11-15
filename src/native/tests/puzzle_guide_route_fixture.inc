@@ -88,6 +88,30 @@ void djoseGuideRouteFixture() {
     walkGuideRoute("djyt0600",{{"late start after hidden glyph",{{0x0000028e,1},{0x0c000095,1},{0x0c000096,1},{0x0c00009c,3},{0x0c00009f,10},
         {0x0c0000a1,2},{0x0c0000da,1},{0x0c0000db,1},{0x0c0000e5,2}},27}});
     walkGuideRoute("djyt0600",{{"late start after door",{{0x0000028e,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009f,10},{0x0c000094,1}},6}});
+    // In game the spheres from the charging wall went back into the same wall
+    // recesses. Only a pedestal socket insert finishes steps 14 and 16.
+    walkGuideRoute("djyt0600",{
+        {"entry",{{0x0c000095,1},{0x0c000096,1},{0x0c00009b,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009f,10}},1},
+        {"take entry sphere 1",{{0x0c000094,1},{0x0c000095,0}},2},
+        {"insert door recess 1",{{0x0c000097,1},{0x0c000094,0}},3},
+        {"take entry sphere 2",{{0x0c000094,1},{0x0c000096,0}},4},
+        {"insert door recess 2 opens door",{{0x0c000098,1},{0x0c000094,0},{0x0000028e,1}},5},
+        {"take charged-door recess sphere",{{0x0c000094,1},{0x0c00009b,0}},6},
+        {"insert charging recess 1",{{0x0c000099,1},{0x0c000094,0}},7},
+        {"take left circuit sphere",{{0x0c000094,1},{0x0c00009c,0}},8},
+        {"insert charging recess 2 powers charger",{{0x0c00009a,1},{0x0c000094,0},{0x0c0000a1,1}},9},
+        {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},0},
+        {"take charged sphere",{{0x0c000094,3},{0x0c00009d,0}},0},
+        {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},13},
+        {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
+        {"put it back in charging recess 1",{{0x0c000099,1},{0x0c000094,0}},14},
+        {"take charging recess 1 again",{{0x0c000094,1},{0x0c000099,0}},14},
+        {"insert west pedestal socket",{{0x0c00009e,1},{0x0c000094,0}},15},
+        {"take charging recess 2",{{0x0c000094,1},{0x0c00009a,0}},16},
+        {"put it back in charging recess 2",{{0x0c00009a,1},{0x0c000094,0}},16},
+        {"take charging recess 2 again",{{0x0c000094,1},{0x0c00009a,0}},16},
+        {"insert east pedestal socket",{{0x0c00009d,1},{0x0c000094,0}},17},
+    });
     // Upper pedestal 1 (0xde) is never cleared, so it is a checkpoint after the
     // unseen lift ride. Pedestals pushed out of order do not skip the first one.
     walkGuideRoute("djyt0600",{
@@ -120,13 +144,25 @@ std::wstring guidePedestalStep(const Entity& pedestal) {
     const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;
     auto text=ownedGuidePedestalStep(*fixtureGuideScene,pedestal);fixtureNativeOwner=previous;return text;
 }
+// The reset tile row is listed inactive although stepping on it works.
+bool guideTargetsTile(unsigned local) {
+    static nav::Scene scene;scene=*fixtureGuideScene;scene.count=1;scene.workers[0]={};
+    scene.workers[0].valid=true;scene.workers[0].part=0;scene.workers[0].local=local;
+    Entity tile;tile.worker=0;tile.name=L"Pedestal reset tile";tile.inactive=true;
+    const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;
+    const bool found=ownedGuideTargetsTile(scene,tile);fixtureNativeOwner=previous;return found;
+}
+double guidePedestalFace(const Entity& pedestal) {
+    const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;Point face{};
+    const bool found=ownedGuidePedestalFace(*fixtureGuideScene,pedestal,face);fixtureNativeOwner=previous;return found?face.x:0;
+}
 // The guide holds its last exact step while a scene or an assisted push owns
 // the player, because the script is part-way through its writes. Manual F9 and
 // F10 selection starts from the last exact step, and pedestal arrival text
 // follows a selected step that is not a push.
 void guideSelectionFixture() {
     const std::vector<GuideStage> stages={
-        {"entry",{{0x0c000095,1},{0x0c000096,1},{0x0c00009b,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009f,10}},0},
+        {"entry",{{0x0c000095,1},{0x0c000096,1},{0x0c00009b,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009e,0},{0x0c00009f,10}},0},
         {"door",{{0x0c000097,1},{0x0c000098,1},{0x0000028e,1},{0x0c0000a1,1}},0}};
     loadGuideRoute("djyt0600",stages);
     for(const auto& write:stages[0].writes) setValue(write.low,write.high,write.value,write.element);
@@ -159,9 +195,17 @@ void guideSelectionFixture() {
     const auto text=guidePedestalStep(pedestal);
     if(text.find(L"Guide step 11: Stand centred on the east face")!=0) std::fprintf(stderr,"pedestal arrival: %ls\n",text.c_str());
     check(text.find(L"Guide step 11: Stand centred on the east face")==0,"pedestal arrival follows the selected sphere step");
+    // W15 owns the east socket (0x9d), which holds the charged sphere.
+    setValue(0x0c00009d,1,3);fixturePuzzleGuideSync(OwnedGuideAction::Completed);
+    check(guidePedestalFace(pedestal)==1,"take step routes to the east socket face");
+    setValue(0x0c00009d,1,0);setValue(0x0c00009e,1,1);fixturePuzzleGuideSync(OwnedGuideAction::Completed);
+    check(guidePedestalFace(pedestal)==-1,"take step routes to the loaded west socket face");
     guideSays(OwnedGuideAction::Previous,L"Step 10 of","manual previous to the reset tile");
+    check(guideTargetsTile(67),"selected reset tile step lets auto walk reach the tile");
+    check(!guideTargetsTile(61),"selected reset tile step does not touch other controls");
     guideSays(OwnedGuideAction::Previous,L"Step 9 of","manual previous to the push step");
     check(guidePedestalStep(pedestal).empty(),"pedestal arrival keeps push text for a push step");
+    check(!guideTargetsTile(67),"reset tile stays as captured when the step is not the tile");
     resetOwnedPuzzleGuide();
 }
 void besaidGuideRouteFixture() {
