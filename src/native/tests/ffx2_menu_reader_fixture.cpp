@@ -101,6 +101,8 @@ int main() {
     global(Ffx2Only::Charset,0);move(0,1);drain();check(spoken==L"Config","missing charset retains label only");
     global(Ffx2Only::Charset,0x600000);memory[0x600000].assign(1024,0);
     move(1,0);drain();check(spoken==L"Items","malformed or unloaded table retains label only");
+    memory[0x600000].assign(310,'x');memory[0x600000][96]=0xff;
+    move(0,1);drain();check(spoken==L"Config","malformed file after a valid prefix is not mistaken for loader padding");
     spoken.clear();queueAccepted=false;move(1,0);drain();check(spoken.empty(),"queue pressure drops without native fallback");
     queueAccepted=true;move(0,1);++epoch;drain();check(spoken.empty(),"retired observation stays silent");
     std::printf("FFX-2 reader fixture: %d checks, %d failures.\n",checks,failures);
