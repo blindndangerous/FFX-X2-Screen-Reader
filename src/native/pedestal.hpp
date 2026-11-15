@@ -82,6 +82,7 @@ struct PedestalNavigationState {
     unsigned epoch=0,control=0,local=0,id=0;
     int worker=-1;
     bool armed=false,held=false,contact=false,crossing=false;
+    double touch=0; // Learned off-side touch radius (in-game F27), or 0.
 };
 PedestalNavigationState capturePedestalNavigationState(); // Native owner, fixed copied state only.
 // walk: armed by an auto walk start (backslash), which is the consent for a

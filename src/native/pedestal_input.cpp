@@ -25,6 +25,7 @@ struct Session {
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
     unsigned requests=0,failures=0;
+    double touch=0; // Farthest off-side touch (in-game F27), as a radius.
     Point last,lastPlayer,pushFrom;
 
 } active;
@@ -39,10 +40,20 @@ thread_local unsigned interpreterEpoch=0;
 bool walkSeen=false,strayResume=false;
 unsigned strayResumes=0;
 uint64_t strayAt=0;
+// The learned touch outlives one assistance session, so pressing the walk
+// key again after a stop keeps it, until the map changes.
+struct {unsigned epoch=0;uintptr_t chunk=0;int worker=-1;double radius=0;} remembered;
 // Stop only a walk that is running. stopAutoWalk also advances the manual
 // input revision, which rejects the mod's own queued navigation actions
 // (in-game F26: "navigation action rejected: manual input revision").
 void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();}
+// Route around a learned off-side touch as a wider keep-out radius. The
+// contact radius itself stays, so the final walk-in still reaches contact.
+void learnedTouch(NativeRouteTarget& target) {
+    if(active.touch>target.zone.contactRadius && target.zone.contactRadius>0) {
+        target.zone.obstacle=target.zone.center; target.zone.obstacleRadius=active.touch;
+    }
+}
 bool fieldControl() {
     const auto controller=read<uintptr_t>(address(0xf26ae8));
     return controller && (read<uint8_t>(controller)&2) && read<uintptr_t>(address(0xf00740));
@@ -186,7 +197,17 @@ void disabled(Event& e) {
         // original push script took control by itself. Give it no direction so
         // the pedestal stays put, and stay armed for the real held push.
         haltAutoWalk(); suppress(pedestalInputMask(0xf000));
-        if(active.walk) {active.approaching=active.contact=active.walked=false;recordLog("pedestal contact off the push side: walking to it");}
+        if(active.walk) {
+            // In-game F27: on Kilika's reset tile every walk touched the
+            // pedestal well outside the modelled contact. Keep later walks
+            // outside this touch.
+            const auto player=playerPosition();const double out=distanceXZ(player,active.target.position);
+            if(out<15) {active.touch=std::max(active.touch,out+.3);remembered={active.epoch,active.script.chunk,active.target.worker,active.touch};}
+            if(active.contact) {active.target.zone.valid=false;active.waitingShape=true;nav::requestNavigationScene();}
+            else learnedTouch(active.target);
+            active.approaching=active.contact=active.walked=false;
+            recordLog("pedestal contact off the push side: walking to it, player offset %.2f %.2f",player.x-active.target.position.x,player.z-active.target.position.z);
+        }
         else recordLog("pedestal contact before the push key: waiting for it");
     }
     else stop("unrelated player-control disable");
@@ -266,7 +287,7 @@ void freshTarget(Point position) {
 PedestalNavigationState capturePedestalNavigationState() {
     PedestalNavigationState s;if(!nativeGameThread() || !armed || active.epoch!=generation()) return s;
     s.armed=true;s.epoch=active.epoch;s.control=active.target.pushControl;s.local=active.target.pushLocal;
-    s.id=active.target.id;s.worker=active.target.worker;s.held=active.held;s.contact=active.contact;s.crossing=active.crossing;
+    s.id=active.target.id;s.worker=active.target.worker;s.held=active.held;s.contact=active.contact;s.crossing=active.crossing;s.touch=active.touch;
     if(active.segment>active.plan.moves.size()) return {};
     s.plan=active.plan;s.plan.moves.erase(s.plan.moves.begin(),s.plan.moves.begin()+active.segment);return s;
 }
@@ -293,6 +314,8 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
         if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
         active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent;
+        if(remembered.epoch==active.epoch && remembered.chunk==script.chunk && remembered.worker==target.worker) active.touch=remembered.radius;
+        learnedTouch(active.target);
         active.walk=active.held=walk && plan.walkConsent;
         unsigned index=0;for(const auto& move:plan.moves) {
             const auto bits=pedestalInputMask(move.held);
@@ -311,7 +334,7 @@ void armPedestal(const Entity& target,bool walk) {
 }
 void updatePedestalOwnedTarget(const NativeRouteTarget& target) {
     if(!nativeGameThread() || !armed || active.epoch!=generation() || target.worker!=active.target.worker || target.id!=active.target.id || target.pushControl!=active.target.pushControl || target.pushLocal!=active.target.pushLocal) return;
-    active.target=target;
+    active.target=target; learnedTouch(active.target);
     if(target.zone.valid && !target.inactive) active.waitingShape=false;
 }
 void updatePedestalInput() {
@@ -321,7 +344,10 @@ void updatePedestalInput() {
     if(strayResume && (armed || autoWalkActive())) strayResume=false; // Another walk or a push took over.
     if(strayResume && fieldControl()) {
         strayResume=false;
-        NavLeg leg;if(navLeg(leg) && leg.arrived) faceNavigationTarget(leg.target);else startAutoWalk();
+        // Step 8 via the plain Pedestal row: the walk had arrived, but the
+        // touch moved the player out of reach, so facing fails. Route again.
+        NavLeg leg;if(navLeg(leg) && leg.arrived) {if(!faceNavigationTarget(leg.target)) nav::submitNavigationQuery(nav::Query::Path);}
+        else startAutoWalk();
     }
     walkSeen=!armed && autoWalkActive();
     if(!armed) return;

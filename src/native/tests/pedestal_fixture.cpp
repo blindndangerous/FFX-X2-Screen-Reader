@@ -6,6 +6,7 @@
 #include "../input_device.hpp"
 #include "../owned_retirement.hpp"
 #include "../owned_nav_target.hpp"
+#include "../navigation_observations.hpp"
 #include "ready_speech_adapter.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -100,7 +101,8 @@ uintptr_t playerActor() { return base+0x1300000; }
 Point playerPosition() { const auto p=playerActor(); return {read<float>(p+0xc),read<float>(p+0x10),read<float>(p+0x14)}; }
 Mesh readMesh() { Mesh mesh; mesh.openPlane=true; mesh.fixedHeight=true; mesh.planeY=playerPosition().y; return mesh; }
 bool faceNavigationTarget(const Entity&) { ++faces; return true; }
-bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return true;}
+bool faceResult=true;
+bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return faceResult;}
 bool autoWalkActive() { return walking; }
 unsigned walkStops=0;
 bool legValid=false,legArrived=false;
@@ -126,7 +128,9 @@ bool requestNavigationAssistRoute() {
     updatePedestalOwnedTarget(target);if(points.empty()) {cancelPedestal();return false;}startAutoWalk();return true;
 }
 void requestNavigationAssistInstruction() {}
-namespace nav {void requestNavigationScene() {}}
+unsigned pathQueries=0;
+namespace nav {void requestNavigationScene() {}
+bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path) ++pathQueries;return true;}}
 bool relativeBearing(Point delta,double& pan,double& front) { pan=delta.x; front=delta.z; return true; }
 bool cameraBasis(Point& forward,Point& right) { forward={0,0,1}; right={1,0,0}; return true; }
 std::wstring direction(Point p) { return std::abs(p.x)>std::abs(p.z)?p.x>0?L"east":L"west":p.z>0?L"north":L"south"; }
@@ -322,6 +326,23 @@ void kilikaWalkFixtures() {
     walking=false; frame(0);
     check(routeRequests==asked+1 && walking,"a Kilika approach walk that ended short is requested again");
     cancelPedestal(); frame(0);
+    // F27: on the reset tile north-east of the pedestal, every approach walk
+    // touched it off the push side, farther out than the modelled contact
+    // radius (nine touches, no move). Learn where the touch happened; the
+    // next walk steps straight out of it and stays out.
+    {
+        const Point touch{at.x+6,at.y,at.z+6};const double out=distanceXZ(touch,at);
+        target=kilika(touch); walking=true; frame(0);
+        disable(6,4,0x274b);
+        check(capturePedestalNavigationState().armed && capturePedestalNavigationState().touch>=out+.2,
+            "a Kilika touch off the push side records how far out it happened");
+        restore(); walking=false; route.clear(); frame(0);
+        const double ox=route.size()>1?route[1].x-route[0].x:0,oz=route.size()>1?route[1].z-route[0].z:0;
+        bool clear=route.size()>2;for(size_t i=0;i+1<route.size();++i) clear=clear && distanceXZ(route[i],at)>=out-.01;
+        check(clear && ox>0 && oz>0 && std::abs(ox-oz)<.05*std::hypot(ox,oz),
+            "the next Kilika approach walk steps straight out of that touch and stays out");
+        cancelPedestal(); frame(0);
+    }
     // F25: an ordinary auto walk (to the sphere recess) touched the pedestal.
     // The pedestal script gets no direction and the walk resumes.
     setup(2,6,at); values[0x0c00005a]=2; position(playerActor(),{at.x-5.4,at.y,at.z+1});
@@ -331,8 +352,12 @@ void kilikaWalkFixtures() {
     auto started=starts; restore(); frame(0);
     check(starts==started+1 && walking,"the interrupted walk resumes when control returns");
     legValid=legArrived=true; frame(0);
-    disable(6,4,0x274b); restore(); auto faced=faces; started=starts; frame(0);
+    // Step 8 via the plain Pedestal row: the walk arrived, the touch pushed
+    // the player out of reach, and facing failed. Ask for the route again.
+    faceResult=false; disable(6,4,0x274b); restore(); auto faced=faces; auto asked8=pathQueries; started=starts; frame(0);
     check(faces==faced+1 && starts==started,"an interrupted walk that had arrived faces its target instead");
+    check(pathQueries==asked8+1,"an interrupted walk that had arrived but cannot face its target is routed again");
+    faceResult=true;
     legValid=legArrived=false; walking=true; frame(0);
     disable(6,4,0x274b); restore(); started=starts; frame(0);
     check(starts==started,"a third touch within ten seconds does not resume the walk");
