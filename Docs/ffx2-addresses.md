@@ -250,7 +250,7 @@ When the flag is not zero, 0x379050 maps id 7 to Config and id 8 to Develop.
 0x395620 sets the flag from a mode switch: case 0 clears it and the
 companion flag at VA 0x16ef6a0, every other case sets both. Zero is taken to
 be the main story (inference, to confirm in game). The reader speaks only
-when the flag is zero and logs the value once otherwise.
+when the flag is zero. Other values suppress top-menu capture.
 
 The record table (`menu_txt.bin`): ranges of record ids at `+0xc` (20 bytes
 each), 8-byte records from `+0x20` (word name offset, word, word help offset,
@@ -476,6 +476,10 @@ inspection found the pinned English charset file is exactly 310 bytes. The
 loader therefore allocates 321 bytes, including padding and its final NUL.
 Capture reads only those 310 file bytes; the old 1024/512/336-byte attempts
 could all exceed the allocation. This extent remains **UNVERIFIED in game**.
+Preparation requires a complete, NUL-free UTF-8 file with 192 glyphs. The
+padding-tolerant `parseLoadedCharset` remains a pure helper; the runtime uses
+strict `parseCharset` because no loader padding is captured now. A malformed
+suffix after a valid prefix must not be accepted as padding.
 Help capture copies through the encoded terminator, at most 256 bytes, without
 reading beyond it. NUL control parameters are copied as parameters. An unreadable
 or unterminated line produces the label alone. Japanese/Korean/Chinese escape

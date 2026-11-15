@@ -11,6 +11,7 @@
 #include "log_capture.hpp"
 #include "profile.hpp"
 #include "runtime.hpp"
+#include <algorithm>
 #include <cstring>
 
 namespace ffx {
@@ -70,7 +71,10 @@ void prepareMenu(const speechq::Header& header,const std::wstring& owned) {
     if(snapshot.charsetBytes>snapshot.charset.size() || snapshot.helpBytes>snapshot.help.size()) return;
     ffx2text::Charset charset;
     std::string help;
-    if(ffx2text::parseLoadedCharset(snapshot.charset.data(),snapshot.charsetBytes,charset))
+    if(snapshot.charsetBytes==ffx2menu::EnglishCharsetBytes &&
+        std::find(snapshot.charset.begin(),snapshot.charset.end(),0)==snapshot.charset.end() &&
+        ffx2text::parseCharset(snapshot.charset.data(),snapshot.charsetBytes,charset) &&
+        charset.glyphs.size()==ffx2menu::EnglishCharsetGlyphs)
         help=ffx2text::decode(snapshot.help.data(),snapshot.helpBytes,charset);
     const auto speech=ffx2menu::topMenuSpeech(snapshot.id,help);
     recordLog("FFX-2 top menu id=%u charset glyphs=%u",snapshot.id,static_cast<unsigned>(charset.glyphs.size()));
