@@ -116,6 +116,9 @@ std::wstring describePedestalPlan(const PedestalPlan& plan,Point position,const 
     }
     if(parts.empty()) return L"The pedestal is in position.";
     const bool single=plan.moves.front().mode==PushMode::Single;
+    // A single push is one Confirm press; the original script then plays a
+    // fixed animation. Name the button first, then where the pedestal goes.
+    if(single) return L"Press "+action+L" once. The pedestal then moves "+join(parts,L", then ")+L". With Auto walk on, hold "+action+L" to push into position.";
     return L"Push "+join(parts,L", then ")+L". "+(single?L"Press "+action+L" once. ":L"Hold "+action+L" and move in the announced direction. ")+
         L"With Auto walk on, hold "+action+L" to push into position.";
 }
