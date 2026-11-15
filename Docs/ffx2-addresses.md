@@ -172,13 +172,13 @@ addresses at the preferred base 0x400000; function addresses are RVAs.
   - 0x06 to 0x2b take one parameter byte and produce no output.
   - 0x2c to 0x2f select a page: index = (byte - 0x2b) * 0xd0 + next - 0x30.
   - 0x30 and above: index = byte - 0x30.
-- Not done yet: the runtime does not read the table from the game. The
-  0xdeade0 pointer is not in the verified table, and no FFX-2 text source is
-  hooked. The decoder and its fixture use synthetic bytes only.
+- The runtime reads the table from the game through the pointer at VA
+  0xdeade0 (FFX-2-only address `Charset`, see below). The decoder and its
+  fixtures use synthetic bytes only.
 - Not handled: the meaning of the two-byte controls (FFX uses them for
   button glyphs, colours and name macros). The decoder drops them.
 
-## Menus (findings and plan, nothing hooked)
+## Menus
 
 FFX-2 has two kinds of menu:
 
@@ -191,7 +191,8 @@ FFX-2 has two kinds of menu:
   structures. No FFX menu function matches whole (0x4e0340, 0x4b4460,
   0x4a9ab0, 0x38fd40 and 0x38fc00 have no masked match).
 
-All addresses below come from static analysis only. None is in the table.
+All addresses below come from static analysis. The ones the runtime uses are
+in the FFX-2-only table (next section).
 
 ### Module manager
 
@@ -223,25 +224,83 @@ All addresses below come from static analysis only. None is in the table.
   as a row in a 0x70 by 0x12 texture. So there is no game string for an
   item name, only for its help line.
 
-### Plan
+### Item names
 
-1. In game, confirm the cursor address: log VA 0x16bef0c, the count at VA
-   0x16bf040 and the id at `0x16befe0 + 8 * cursor` on each change, while
-   the user moves through the top-level menu. Write down which id is which
-   label.
-2. Verify the text getter 0x21d7c0 (space, id): its table at VA 0xe103b0
-   (12 bytes per space) and the jump table at VA 0x61d828. Compare it with
-   the FFX getter that `planMenuText` uses.
-3. Read the charset buffer from the pointer at VA 0xdeade0. Its size is
-   not stored next to it, so the loader 0x111120 must be read to find where
-   the size is kept, or the parser must stop at the highest index it needs.
-4. Hook the top-level update 0x373170 behind the FFX-2 profile. This needs
-   a table for FFX-2-only addresses, because `ffx2Addresses` maps FFX
-   addresses and this function has no FFX match. On a cursor change, speak
-   the item.
-5. Product question for the user: the labels are textures, so the item
-   name must come from a fixed id-to-name list in the mod (from step 1), or
-   the mod speaks the help line. Decide before step 4.
+The labels are textures, so the item name comes from a fixed English list in
+the mod (`src/native/ffx2_top_menu.cpp`, one table indexed by menu id). The
+names are the game's own text, not guesses: the help setter 0x379050 maps
+each id to a record in `battle/kernel/menu_txt.bin`, and each record holds a
+name string and a help string. With the flag at VA 0x16ef654 equal to zero:
+
+- ids 0 to 6: records 0x1047 to 0x104d: Items, White Magic, Equip, Garment
+  Grids, Abilities, Accessories, Dresspheres.
+- id 7: record 0x104f, Develop.
+- id 8: record 0x1050, Team Members.
+- id 9: record 0x104e, Config.
+
+When the flag is not zero, 0x379050 maps id 7 to Config and id 8 to Develop.
+0x395620 sets the flag from a mode switch: case 0 clears it and the
+companion flag at VA 0x16ef6a0, every other case sets both. Zero is taken to
+be the main story (inference, to confirm in game). The reader speaks only
+when the flag is zero and logs the value once otherwise.
+
+The record table (`menu_txt.bin`): ranges of record ids at `+0xc` (20 bytes
+each), 8-byte records from `+0x20` (word name offset, word, word help offset,
+word), strings at `+0x20 + [+0x18]`. 0x21d7c0 (space, id) finds the text
+space at VA 0xe103b0 + 12 * space, 0x21e3a0 finds the range, and the
+getter returns base + word `[record + 0]` (name) or `[record + 4]` (help),
+chosen by the space through the jump table at VA 0x61d828: space 0 takes
+the name, spaces 1, 3 and 4 take the help. 0x379050 asks for space 1, so the
+pointer stored at VA 0x16bd97c is the record's help string. Decoded offline,
+record 0x1047 holds "Items" and "Use items.". The reader speaks the help
+through that pointer, not by record number.
+
+## FFX-2-only addresses
+
+`ffx2OnlyAddresses` in `src/native/profile.hpp` holds FFX-2.exe RVAs that have
+no FFX counterpart. `ffx2Rva(name)` throws outside the FFX-2 profile. Hook ids
+for these functions are `0xfe000000 | rva`, outside the FFX RVA space that
+handlers and resource scopes compare against. Each entry was checked by
+reading every reference to it in FFX-2.exe.
+
+- `TopMenuUpdate`, 0x373170: update callback at `+0` of the module at VA
+  0xd62e20, which the dispatcher 0x365280 registers in slot 2 (table at VA
+  0x16bc590). Prologue `55 8b ec 51 53 e8` (push ebp; mov ebp, esp; push
+  ecx; push ebx; call 0x37b250); the reader refuses to hook if these bytes
+  differ. A jump table at VA 0x7735e4 dispatches on the module state at
+  `[module + 0x1c]`; state 5 is the top-level list.
+- `TopMenuCursor`, RVA 0x12bef0c (VA 0x16bef0c): dword. Written only by
+  0x373170 (up and down, with wrap) and by 0x375900 (reset to 0). Read by
+  the draw code (0x375c50, 0x375cc0, 0x376020), which highlights the row
+  whose index equals it.
+- `TopMenuItems`, RVA 0x12befe0 (VA 0x16befe0): 8-byte entries, dword id
+  at `+0`, word available at `+4` (confirm buzzes when zero), word at `+6`
+  (non-zero: the item asks for a party member). Built by 0x375900.
+- `TopMenuCount`, RVA 0x12bf040 (VA 0x16bf040): dword count, the wrap
+  bound in 0x373170.
+- `HelpText`, RVA 0x12bd97c (VA 0x16bd97c): the help setter 0x365a50 stores
+  its argument here when it differs from the current value (previous value
+  at VA 0x16bd980), then redraws the help window via 0x35fcd0(0x1a).
+  0x373170 calls it right after each cursor move, so the after-hook sees
+  the new line.
+- `Charset`, RVA 0x9eade0 (VA 0xdeade0): written only by the loader
+  0x111120, for every language except Japanese, Korean and Chinese (its
+  second switch at 0x1112b0 sends those to VA 0xdeaddc). The loader sizes
+  the buffer as the file size rounded up to 16 bytes (`add eax, 0xf; and
+  esi, 0xfffffff0`), allocates that plus one (0x34c180), reads the file and
+  writes a NUL at the end. The previous buffer is freed (0x34b3e0) before
+  the store. All 56 other references are reads in the lookup 0x1109f0.
+  `parseLoadedCharset` stops at the NUL or at the first malformed padding
+  byte.
+- `StoryMode`, RVA 0x12ef654 (VA 0x16ef654): dword returned by 0x392ee0;
+  written only by the mode switch 0x395620.
+
+### In game, not yet confirmed
+
+- That 0x373170 runs on the game thread that the 0x225930 probe marks
+  (the hook dispatcher drops calls from other threads).
+- That the flag at VA 0x16ef654 is zero in the main story.
+- The text of each help line on screen.
 
 ## What runs under FFX-2
 
@@ -257,6 +316,8 @@ All addresses below come from static analysis only. None is in the table.
 - 0x46fed0 and 0x5093b0: resource scopes. Each call logs "native reader
   resource scope begin" and "end" and invalidates pending speech. The return
   logs "native load return".
-- No reader, menu, battle, field, controller, beacon or minigame hook. The
+- 0x373170 (FFX-2-only): the top-level menu. On each cursor move it speaks
+  "<item name>. <help line>" and logs "FFX-2 top menu cursor=<n> id=<id>".
+- No other reader, menu, battle, field, controller, beacon or minigame hook. The
   input code skips the ESC menu, Blitzball, field, battle-sensor and minigame
   predicates under FFX-2, because they read FFX memory.
