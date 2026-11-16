@@ -1,5 +1,22 @@
 # FFX current memory — November4
 
+November16 step-15 input-path investigation supersedes the prior live-success
+assumptions. Retained native Installed82D180 has four 0–256 directional ramps,
+32/frame with deadzone48; the old instantaneous plant missed movement retained
+after reversals. Axial staging/contact now brakes and pulses through those ramps;
+detours, push legs and speech remain unchanged. A bounded emission trace records
+actual keys/axes, timing and both navigation/native camera-vector yaws. Camera
+agreement, local walls and live consumption timing remain unverified; staging
+has no facing-angle gate. The corrected fixture fails against HEAD376a236 and
+passes96 cold/warm ramp cases plus camera-change/cancel/restart/trace checks.
+The existing192-case route/input matrix passes. Final full native suite exits0:
+85 PASS groups,3 existing missing-evidence SKIPs; no-deploy build exits0.
+Receipts: `.local/r17-tests-final.log`, `.local/r17-build-final.log`. Existing
+C4244/C4456/D9026 warnings remain. Independent Sol review findings are repaired
+and tested; no further runtime defect was found. No commit, deployment or game
+access occurred or is authorized. See the
+[input-path evidence, limits and prioritized procedure](Docs/features/navigation/index.md#kilika-step-15-native-input-ramp-repair--november16).
+
 November16 step-15 redesign supersedes the failed live waypoint-hold repair.
 The radial entry now leads into an axial staging suffix; the per-frame walker
 owns staging/contact handoff and releases movement in the transition tick.

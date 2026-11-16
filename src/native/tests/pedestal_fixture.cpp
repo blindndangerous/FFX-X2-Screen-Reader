@@ -160,8 +160,12 @@ void requestNavigationAssistInstruction() {}
 unsigned pathQueries=0;
 namespace nav {void requestNavigationScene() {}
 bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path || query==Query::SilentPath) ++pathQueries;return true;}}
-bool relativeBearing(Point delta,double& pan,double& front) { pan=delta.x; front=delta.z; return true; }
-bool cameraBasis(Point& forward,Point& right) { forward={0,0,1}; right={1,0,0}; return true; }
+Point fixtureForward{0,0,1};
+bool relativeBearing(Point delta,double& pan,double& front) {
+    pan=delta.x*fixtureForward.z-delta.z*fixtureForward.x;
+    front=delta.x*fixtureForward.x+delta.z*fixtureForward.z;return true;
+}
+bool cameraBasis(Point& forward,Point& right) { forward=fixtureForward; right={forward.z,0,-forward.x}; return true; }
 std::wstring direction(Point p) { return std::abs(p.x)>std::abs(p.z)?p.x>0?L"east":L"west":p.z>0?L"north":L"south"; }
 std::wstring join(const std::vector<std::wstring>& parts,const wchar_t* separator) {
     std::wstring out; for(const auto& p:parts) { if(!out.empty()) out+=separator; out+=p; } return out;

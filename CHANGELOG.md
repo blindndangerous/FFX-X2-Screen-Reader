@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Kilika pedestal staging and contact approaches brake before correcting direction, accounting for native input acceleration and deceleration. Short approach pulses stop on camera changes and cancellation. Temporary bounded diagnostics record emitted controls and camera bearings. Push legs and speech remain unchanged; gameplay confirmation is pending.
 - Kilika pedestal approaches finish staging along the push axis and hand off to contact in the same native frame, releasing movement at arrival. Missed waypoints and stopped approaches replan instead of holding indefinitely. Progress diagnostics follow the actual steering target; native push legs, contact guards and speech remain unchanged. Gameplay confirmation is pending.
 - Pedestal approaches stop within 30 seconds across retries, or after 15 seconds without progress toward their steering target. Live collision and target centres stay paired, and delayed staging observations cannot overwrite a contact walk. Once-per-second diagnostics record timing, live positions, alignment and contact radius. Gameplay confirmation remains pending.
 - Kilika push approaches centre on the final push-side leg before walking into contact. Detour progress follows the current waypoint. Stalled approach retries stay silent until one final reason; diagnostics include player, pedestal and waypoint positions.

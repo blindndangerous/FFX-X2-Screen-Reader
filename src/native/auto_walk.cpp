@@ -15,6 +15,7 @@
 #include "swimming_navigation.hpp"
 #include "game_bindings.hpp"
 #include "controller.hpp"
+#include "log_capture.hpp"
 #include <atomic>
 #include <cstring>
 #include <cmath>
@@ -42,6 +43,54 @@ Point reachedWaypoint;
 bool waypointReached=false;
 uint64_t waypointAt=0;
 bool stopAnnounced=false;
+// Native 82D180 (installed): four 0..256 input ramps rise/decay by 32;
+// values below 48 do not move. Neutral must drain eight frames plus the
+// keyboard/controller publication pipeline before another precision pulse.
+constexpr unsigned PedestalDrainFrames=10;
+struct Precision {bool active=false;unsigned drain=0,pulse=0,bits=0;double stride=0;Point seen,goal;} precision;
+struct InputTrace {bool active=false;uint64_t at=0,dt=0,logged=0;Point target,world;} inputTrace;
+uint64_t nowMs();
+unsigned precisionInput(unsigned bits,const NavLeg& leg,Point player) {
+    const auto& zone=leg.target.zone;const auto side=zone.approach;
+    const auto across=[&](Point p) {return (p.x-zone.center.x)*side.z-(p.z-zone.center.z)*side.x;};
+    const bool axial=zone.valid && distanceXZ(side,{})>.9 && std::abs(across(leg.goal))<.01 && std::abs(across(leg.final))<.01;
+    if(leg.target.pushControl<1 || leg.target.pushControl>2 || !axial) {precision.active=false;return bits;}
+    const auto distance=distanceXZ(player,leg.goal);
+    // A cold start can inherit native momentum before we observe one stride.
+    if(!precision.active && distance>std::max(11.13,1+PedestalDrainFrames*precision.stride)) return bits;
+    if(!precision.active || distanceXZ(precision.goal,leg.goal)>.01) {
+        precision.active=true;precision.goal=leg.goal;precision.drain=PedestalDrainFrames;precision.pulse=0;
+    }
+    if(precision.pulse) {
+        if(bits==precision.bits) {--precision.pulse;return bits;}
+        precision.pulse=0;precision.drain=PedestalDrainFrames;
+    }
+    if(precision.drain) {--precision.drain;return 0;}
+    // A two-frame pulse first exceeds native deadzone (64/256). Cardinal
+    // pulses have total rise+coast displacement (n*n-2)/8 full-speed frames.
+    // Four times the largest observed stride bounds a partly ramped sample.
+    const auto stride=std::max(.01,4*precision.stride);
+    unsigned frames=2;
+    while(precision.stride>.001 && frames<8 && ((frames+1)*(frames+1)-2)*stride/8<std::max(0.0,distance-.5)) ++frames;
+    precision.bits=bits;precision.pulse=frames-1;precision.drain=PedestalDrainFrames;
+    return bits;
+}
+void tracePedestalInput(unsigned bits,int lx,int ly,unsigned first=0,unsigned second=0) {
+    if(!nativeGameThread() || !inputTrace.active || !engaged || !logCaptureHandler.load()) return;
+    const auto now=nowMs();if(inputTrace.logged && now-inputTrace.logged<50) return;
+    inputTrace.logged=now;
+    const auto player=playerPosition();double pan=0,front=0;
+    const double yaw=relativeBearing({1,0,0},pan,front)?std::atan2(front,pan):NAN;
+    const auto camera=read<uintptr_t>(address(0x1f11430));
+    // Native movement's camera-yaw getter uses target(+50)-eye(+66C),
+    // unlike navigation's target(+40)-eye(+65C). Compare both in radians.
+    const double x=camera?read<float>(camera+0x50)-read<float>(camera+0x66c):0;
+    const double z=camera?read<float>(camera+0x58)-read<float>(camera+0x674):0;
+    const double nativeYaw=std::isfinite(x) && std::isfinite(z) && std::hypot(x,z)>.001?std::atan2(x,z):NAN;
+    recordLog("pedestal input: t %llu dt %llu age %llu player %.3f %.3f target %.3f %.3f world %.3f %.3f stick %d %d keys %02x %02x yaw %.5f native-yaw %.5f bits %x",
+        now,inputTrace.dt,now-inputTrace.at,player.x,player.z,inputTrace.target.x,inputTrace.target.z,
+        inputTrace.world.x,inputTrace.world.z,lx,ly,first,second,yaw,nativeYaw,bits);
+}
 FieldControlsSnapshot messageGuard;
 std::array<unsigned,4> scans{0xc8,0xcb,0xd0,0xcd};
 unsigned diveScan=0; int diveButton=-1;
@@ -215,6 +264,7 @@ void startAutoWalk(bool announce) {
     }
     walking=leg.target; resumePhase=ResumeNone;
     epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;waypointReached=false;
+    precision={};precision.seen=playerPosition();inputTrace={};
     const auto now=nowMs(); improved=movingSince=now; unstickUntil=0;
     last=playerPosition();progressGoal=leg.goal; cancel=false; engaged=true;
     scans=movementKeys();
@@ -223,7 +273,9 @@ void startAutoWalk(bool announce) {
         announcement.headline=planConcat(announcement,planLiteral(announcement,L"Auto walking to "),planLiteral(announcement,leg.target.name.data()));
         commitTextPlan(announcement);
     }
-    updateAutoWalk();
+    // Precision counts native input events, not calls made while starting
+    // from inside one. Keep the cleared mask until that event's sole update.
+    if(walking.pushControl<1 || walking.pushControl>2) updateAutoWalk();
 }
 // Walking outside the battle means the player took over; battle commands and
 // confirming results do not.
@@ -262,7 +314,8 @@ void updateAutoWalk() {
         stop("context",explicitStop?nullptr:reason);if(explicitStop) resumePhase=ResumeNone;return;
     }
     if(previous && now-previous>600) {stop("field update interrupted",L"game paused");return;}
-    previous=now;
+    const auto frameMs=previous?now-previous:0;previous=now;
+    inputTrace.active=false;
     NavLeg leg;
     if(!navLeg(leg)) { stop("route lost",L"route lost",true); return; }
     // Withhold only synthetic input while the worker rebuilds a changed gate.
@@ -282,6 +335,9 @@ void updateAutoWalk() {
     if(!std::isfinite(player.x) || !std::isfinite(player.y) || !std::isfinite(player.z)) { stop("unreadable player",L"player position unavailable"); return; }
     const double delta=distanceXZ(player,last);
     if(delta>55.65) { stop("player relocated",L"player relocated"); return; }
+    precision.stride=std::max(precision.stride,distanceXZ(player,precision.seen));precision.seen=player;
+    inputTrace.active=leg.target.pushControl>=1 && leg.target.pushControl<=2;
+    inputTrace.at=now;inputTrace.dt=frameMs;inputTrace.target=leg.goal;inputTrace.world={};
     if(pedestalWalkLeg(leg,player)) {mask=0;stamp=now;last=player;return;}
     if(leg.arrived) {
         const auto& target=leg.target;
@@ -411,7 +467,8 @@ void updateAutoWalk() {
     }
     if(desired!=octant) { octant=desired; octantSince=now; }
     if(now<unstickUntil) desired=(desired+(unstickRight?2:6))&7;
-    mask=octMasks[desired] | (leg.target.swimDepth?16u:0u); stamp=now;
+    inputTrace.target=steer;inputTrace.world={steer.x-player.x,0,steer.z-player.z};
+    mask=precisionInput(octMasks[desired] | (leg.target.swimDepth?16u:0u),leg,player); stamp=now;
 }
 void autoWalkReaderModifier(bool held) {readerModifier=held;}
 void autoWalkPlayerInput(unsigned vk) {
@@ -467,6 +524,9 @@ void autoWalkKeyboard(uint8_t* keys) {
         if(diveScan) keys[diveScan]|=0x80; else { cancel=true; mask=0; }
     }
     for(unsigned i=0;i<scans.size();++i) if(bits&(1u<<i)) keys[scans[i]]|=0x80;
+    unsigned first=0,second=0;
+    for(unsigned i=0;i<scans.size();++i) if(bits&(1u<<i)) {if(!first) first=scans[i];else second=scans[i];}
+    tracePedestalInput(bits,0,0,first,second);
 }
 void autoWalkController(pad::State& state) {
     const auto consent=pedestalConsentButtons();
@@ -493,6 +553,7 @@ void autoWalkController(pad::State& state) {
     }
     state.lx=static_cast<int16_t>((bits&8?24000:0)-(bits&2?24000:0));
     state.ly=static_cast<int16_t>((bits&1?24000:0)-(bits&4?24000:0));
+    tracePedestalInput(bits,state.lx,state.ly);
 }
 namespace {
 void movementModeBefore(Event& e) {

@@ -449,11 +449,21 @@ int main() {
     *reinterpret_cast<uintptr_t*>(address(0x1efb504))=0; // Restore default movement bindings after the remap cases.
     bool regressionsPass=true;
     const auto regression=[&](bool value,const char* reason) {if(!value) {std::fprintf(stderr,"FAIL: %s\n",reason);regressionsPass=false;}};
+    const auto nextPrecisionPulse=[&] {
+        std::array<uint8_t,256> result{};
+        for(unsigned i=0;i<12;++i) {
+            clockValue+=33;updateAutoWalk();result=keyboard();
+            if(result[0xc8] || result[0xd0] || result[0xcb] || result[0xcd]) break;
+        }
+        return result;
+    };
     begin();leg.target.pushControl=2;leg.goal={0,0,10};player={0,0,9.25};frames(1);corner=keyboard();
     regression(autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a reached intermediate push waypoint releases input before worker advancement");
     frames(5);corner=keyboard();
     regression(!autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a missed worker waypoint requests recovery instead of holding forever");
     player={};startAutoWalk(false);corner=keyboard();
+    regression(!corner[0xc8] && !corner[0xd0] && !corner[0xcb] && !corner[0xcd],"a new push walk starts neutral until the native input event");
+    frames(1);corner=keyboard();
     regression(corner[0xc8]!=0,"a new walk to the same waypoint clears the previous hold");
     player={0,0,9.25};frames(1);leg.start=leg.goal;leg.goal={10,0,10};frames(1);corner=keyboard();
     regression(corner[0xcd]!=0,"worker waypoint advancement releases the hold and steers the next leg");
@@ -461,8 +471,10 @@ int main() {
     leg.target.pushControl=2;leg.target.zone.valid=true;leg.target.zone.contactRadius=7;
     leg.target.zone.center={.222,-10,144.104};leg.target.zone.approach={0,0,-1};
     player={.3,-10,132.9};startAutoWalk(false);frames(1);corner=keyboard();
+    regression(!corner[0xc8] && !corner[0xd0] && !corner[0xcb] && !corner[0xcd],"axial entry releases input before the native ramp drains");
+    corner=nextPrecisionPulse();
     regression(autoWalkActive() && corner[0xc8] && !corner[0xcb] && !corner[0xcd],
-        "native tick turns north from axial entry without waiting for a worker observation");
+        "native staging turns north after bounded drainage without waiting for a worker observation");
     begin({.9,0,-7.25});player={1.25,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
     leg.target.zone.valid=true;leg.target.zone.shape=1;leg.target.zone.approach={0,0,-1};leg.target.zone.contactRadius=7;
     frames(1);corner=keyboard();
@@ -476,9 +488,13 @@ int main() {
         leg.target.zone.range=contact?6.85:0;leg.target.zone.obstacleRadius=9;
         if(contact) leg.goal=leg.final={0,0,-6.35};
         clockValue+=100;updateAutoWalk();corner=keyboard();
+        regression(!corner[0xcb] && !corner[0xc8] && !corner[0xd0] && !corner[0xcd],"final push-side correction first drains inherited movement");
+        corner=nextPrecisionPulse();
         regression(corner[0xcb] && !corner[0xc8] && !corner[0xd0],
             "final push-side leg centres before entering the pedestal clearance radius");
         player.x=.9;clockValue+=100;updateAutoWalk();corner=keyboard();
+        regression(!corner[0xcb] && !corner[0xc8] && !corner[0xd0] && !corner[0xcd],"inward turn releases the previous lateral pulse");
+        corner=nextPrecisionPulse();
         regression(corner[0xc8] && !corner[0xcb] && !corner[0xcd],
             "aligned final push-side leg permits inward movement despite wider keep-out");
     }

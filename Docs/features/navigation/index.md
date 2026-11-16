@@ -1,5 +1,149 @@
 # Navigation, route validity, audio and movement
 
+## Kilika step-15 native input ramp repair — November16
+
+This supersedes the live-success assumptions in the staging records below.
+The supplied `.local/r17-step15-live.log`, 06:58:15–06:58:45, still loops
+laterally and ends at the existing whole-approach deadline on `376a236`.
+At 06:58:33.905, 0.631 is the distance to the effective radial-entry waypoint;
+the player remains about 10.89 units from the pedestal. The outside-contact
+stage accepts radius 7.1–9.0 with lateral error at most one unit. Consequently,
+that observation alone does not establish that the contact handoff was missed.
+
+The confirmed input defect is that continuous full-strength octant steering
+ignored native directional acceleration and deceleration. Hypothesis (b) holds
+at that boundary. The previous ideal plant changed velocity immediately when
+the command changed, so it could not test this behavior. This is evidence for
+the reported hunting mechanism, not proof that every live oscillation has the
+same cause; a new live input trace is still necessary to exclude camera or
+collision contributions.
+
+Scoped retained-code analysis used `reader_reference_20261003_235502`, without
+accessing an installed game or process. Installed native function `82D180`
+maintains four independent 0–256 directional ramps. `82D234–82D324` increases
+the held directions by 32 per field frame and decreases released directions
+by 32. `82D329–82D566` also filters analog input through these ramps.
+`82D56B–82D5FD` subtracts opposing ramps, computes vector magnitude, caps it
+at 256 and treats magnitude below 48 as idle. Reversing a key therefore does
+not instantly reverse motion. Neutral input can retain up to eight native
+ramp updates. A two-frame pulse reaches 64; its release falls below deadzone.
+A settled cardinal n-frame pulse, for n=2–8, covers `(n*n-2)/8` full-speed strides.
+These are native frame counts, not measured wall-clock or hardware latency.
+
+The actual approach input path is:
+
+1. `input.cpp::inputEvent`, after native input aggregation `471D10`, calls
+   `updateAutoWalk`, then `updatePedestalInput`. Precision push starts now leave
+   a neutral mask for that event's sole update; eager start updates previously
+   could spend two mod counter steps before another native ramp update.
+2. `auto_walk.cpp` computes the effective world-space steering error, calls
+   `relativeBearing`, rounds `atan2(pan,front)` to one of eight octants and
+   chooses Up/Right/Down/Left combinations. Pedestal routes bypass ordinary
+   250 ms octant hysteresis. This part has no magnitude control.
+3. `nav_memory.cpp::cameraBasis` reads the camera pointer at reference RVA
+   `1F11430` on the native owner. Its horizontal direction is camera
+   `(+40,+48) - (+65C,+664)`; right is `(forward.z,-forward.x)`. Native calls
+   do not inherit the worker's thread-local copied camera. Static lateral
+   signs agree with that basis; there is no proved mirrored-axis defect.
+4. `autoWalkKeyboard` adds the configured movement scan codes at the real
+   DirectInput keyboard read. `autoWalkController` emits axes ±24000 before
+   the controller bridge publishes. `controller.cpp::nativePad` preserves X
+   and negates Y while converting signed stick values to native fields.
+   The field consumer reads per-device history, not only aggregate held bits.
+   Installed `82D070` reads that history; `82D180` filters it and calls
+   `82B190` to set the movement direction at actor+168. This steering path
+   does not wait for visible character-facing alignment. Exact visual turn
+   rate and hardware cadence remain unmeasured.
+5. Native movement obtains its camera angle through `83F2D0 → 7BCF20 →
+   7C4990`, using the camera vector `(+50,+58) - (+66C,+674)`. The new trace
+   records that vector's yaw alongside the navigation vector's yaw, both
+   measured from world north in radians. Their live agreement is unverified.
+   No camera-source change is justified from the supplied one-second samples.
+
+Hypothesis (a)'s live camera mismatch or wall collision remains unresolved.
+The exact retained Kilika script is available, but `mapout.vpa` for the fire
+chamber was absent from both checked retained-evidence roots. There is no
+decoded chamber floor fixture establishing walls at x ±5–7, z 132–134.
+Hypothesis (c)'s heading gate is absent: `nav_zones.cpp::interactionEndpoint`
+and `pedestal_input.cpp::pedestalWalkLeg` use position, height, radius and
+push-side alignment; they do not require the player's facing angle for staging.
+
+The repair changes only push-mode 1/2 input along the validated axial staging
+suffix and contact leg. Detour steering retains its existing behavior. Near
+the waypoint, the walker releases input, drains ten native input events
+(eight ramp steps plus a conservative two-frame publication allowance), then
+issues short pulses separated by another drain. Pulse length uses remaining
+distance and observed stride; an unmeasured cold start probes with two frames.
+An initial one-step braking region covers inherited movement before the first
+stride observation. A new waypoint or changed octant cancels an old pulse and
+drains before replacement. The existing geometric staging handoff still
+releases in its transition update. These are nonblocking frame states, with
+no sleeps, native waits, locks, actor writes or new speech. Push legs remain
+north 2.3, east 4.5, north 2.5.
+
+Temporary `pedestal input:` diagnostics run through the existing copied log
+sink, only while a push approach/contact walk is active. Keyboard and pad
+emitters share a 50 ms throttle, at most 20 records per second. Each records
+monotonic time, native update interval (zero when initially unknown), command
+age at emission, live player X/Z, effective target X/Z, desired world error,
+actual emitted axes or configured scan codes, both camera-vector yaws and
+direction bits. A neutral record retains the desired world error but emits
+zero keys/axes. This is an emission trace, not confirmation that the game has
+already consumed the device state. Worker logging formats the owned packet.
+
+`pedestal_walk_fixture` now models native ramps, deadzone and one/two-frame
+keyboard/controller publication delay. Its 96 cases combine cold/warm starts,
+six fixed camera headings, 17/33 ms frames and 10/50 units per second. Warm
+starts continue the outgoing lateral stride at the positive-X loop position.
+They require centred south-side contact within 30 seconds and exactly one
+existing push announcement. Separate checks cover an interrupted camera turn,
+manual cancellation, rapid restart, trace fields/throttle and prior supplied
+pose replays. These are synthetic movement/latency models, not native locomotion
+replay or live collision evidence. The corrected fixture fails against the
+unchanged HEAD input driver on missing initial braking
+(`.local/r17-baseline-red-final.log`); the current focused fixture passes
+(`.local/r17-focused-final3.log`). The existing 192-case production route/input
+matrix also passes (`.local/r17-matrix-final.log`).
+
+The requested no-deploy build exits 0 (`.local/r17-build-final.log`), retaining
+the existing C4244 warning in `puzzle_guide_owned.cpp`. The full native suite
+exits 0 with 85 PASS groups and three existing missing-evidence SKIP groups
+(`.local/r17-tests-final.log`): readers lack `hudTextureClipBody.bin`,
+reachability lacks `collisionReplayBody.bin`, and utilities lack `maps_v3.json`.
+Existing test-harness C4456/D9026 warnings remain. The updated standalone
+walker assertions require neutral input on all four movement keys, then the
+first correctly directed pulse within 12 native updates; those assertions
+pass in the final full run. Changed files are `auto_walk.cpp`, fixtures
+`auto_walk_fixture.cpp`, `pedestal_fixture.cpp`, `pedestal_walk_fixture.cpp`,
+this record, `CODEX_MEMORY.md` and `CHANGELOG.md`.
+An independent Sol review identified stale pulse directions, eager counter
+updates, a warm-pipeline fixture gap and incomplete neutral-key assertions;
+those findings are repaired and tested. Runtime review found no further concrete
+defect. Gameplay, actual input consumption and audible speech remain unverified.
+No commit, deployment, packaging or game access is authorized.
+
+Current prioritized nonvisual procedure, only after separately authorized
+deployment:
+
+1. At Kilika step 15, select Pedestal and start Auto walk from the northeast,
+   then from either former lateral-loop position. Expect short pauses and
+   controlled corrections at the axial entry, then south-side contact and
+   the unchanged three push legs. Do not hold Confirm; it opens the sphere
+   prompt. Require one existing announcement per push leg, no repeated
+   approach announcement and no no-progress deadline. Continue steps 16–22
+   only after the pedestal reaches its depression.
+2. If hunting or wrong-side contact recurs, retain that attempt's bounded
+   `pedestal input:`, approach/contact and stop records. Compare commanded
+   bits with observed motion and compare the two yaw fields. Record whether
+   the loop coincides with large frame gaps, old command ages or a camera cut.
+   Offline checks cannot prove actual floor collision, consumption delay,
+   visual turn rate, audible speech or trial completion.
+3. During a pulse and during a neutral pause, test Backslash and physical
+   movement cancellation. Restart immediately once; old input must not return.
+   When progression permits, verify recess walks at steps 8, 10, 11 and 13
+   still avoid pushing. Those ordinary detour/recess paths retain their input
+   policy.
+
 ## Kilika step-15 native staging handoff — November16
 
 This record supersedes the three unsuccessful live repairs (`ffd6fc9`,
