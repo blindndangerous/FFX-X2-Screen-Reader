@@ -1,5 +1,21 @@
 # FFX current memory — November4
 
+November16 local trial-jump work is confined to `test/trial-jump` at `0d7166e`.
+Do not commit, deploy, touch the running game or send this local tool upstream.
+Development-only `trial kilika N` implements sphere starts 1–14 at the original
+pedestal spot and 15 at the settled native reset spot. It refuses 16–22 and
+crossing native door/flame/reveal phases: byte flags do not reconstruct collision
+or graphics. See the [local tool record and prioritized nonvisual procedure](Docs/features/runtime/console_f1_20261020.md#november16-local-trial-jump-tool).
+Final no-deploy build exited 0 (existing C4244 warning). Focused fixture exited 0,
+208 checks; release object excludes the command. Full suite exited 1: 82 PASS,
+2 SKIP; the utility host also needs missing private `collisionReplayBody.bin`.
+Readers additionally lack `hudTextureClipBody.bin`. Gameplay/audio and the real
+owned utility host remain unverified. Both local DLL copies match SHA256
+`35a6aeff2964352927018e7cfbfd9a3bc7d375897c0f0865187b9d8735030a9d`.
+The command warns “Test only, do not save”; no story, permanent treasure,
+collision or position writes occur. Native controller control bit 2 must be set.
+Branch/HEAD remain unchanged; all work is uncommitted. No delegation.
+
 November16 Kilika Round12 repairs are offline verified in the detached
 `ffx-wt-mergecheck` worktree. Deployed source remains `cd26e6b`; no commit,
 deployment or game access is authorized for this task. See the

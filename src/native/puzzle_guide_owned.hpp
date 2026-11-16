@@ -4,6 +4,9 @@
 namespace ffx {
 enum class OwnedGuideAction : unsigned {Step,Next,Previous,Expected,Path,Completed,TileCompleted};
 void resetOwnedPuzzleGuide();
+#ifdef FFX_DEV_UTILITIES
+void prepareOwnedKilikaJump(const UtilityScript&,unsigned step);
+#endif
 bool ownedPuzzleGuideActive();
 unsigned ownedPuzzleGuideRevision();
 // True when the entity is the target of the guide step last spoken or expected.

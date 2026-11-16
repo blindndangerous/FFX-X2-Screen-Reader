@@ -3,6 +3,7 @@
 #include "utility_memory.hpp"
 #include "utility_trials.hpp"
 #include "utility_warps.hpp"
+#include "utility_trial_jump.hpp"
 #include "events.hpp"
 #include "puzzle_solver.hpp"
 #include "mod_menu.hpp"
@@ -61,7 +62,7 @@ bool queueUtilityContext(const std::wstring& text,const UtilityContext& token) {
     if (command.empty()) return false;
     if (command == L"help"
 #ifdef FFX_DEV_UTILITIES
-        || command == L"warps" || command.rfind(L"warps ", 0) == 0
+        || command == L"trial" || command == L"warps" || command.rfind(L"warps ", 0) == 0
 #endif
     ) {
         utilityReply(executeUtility(command)); return false;
@@ -91,6 +92,7 @@ UtilityText executeUtilityNative(std::wstring_view command) {
         L"warp macalania-test: early-save testing only; advances story to the playable Macalania trial stage. Reload your original save after testing.\r\n"
         L"warp gagazet-test: early-save testing only; prepares the unfinished cave trials. Follow Prepare swimming party before entering the water. Reload your original save after testing.\r\n"
         L"warp force besaid: leave a running field script or dialogue and warp.\r\n"
+        L"trial: list puzzle jumps. trial kilika 14: start a supported Kilika step. Test only, do not save.\r\n"
         L"trial treasure: complete the Destruction Sphere objective while staying in the chamber.\r\n"
         L"trial collect: open its chest using the game script. trial finish: leave after collecting.\r\n"
         L"trial status: check progress. These utilities change the game only when you run a command.";
@@ -101,7 +103,10 @@ UtilityText executeUtilityNative(std::wstring_view command) {
         UtilityText result(L"Current script: ");result.narrow(script.name.c_str()).literal(L".");return result;
     }
     if (verb == L"warp") return L"The warp destination must be prepared by the development console.";
-    if (verb == L"trial") return trialCommand(arguments);
+    if (verb == L"trial") {
+        if(arguments==L"status" || arguments==L"treasure" || arguments==L"collect" || arguments==L"finish") return trialCommand(arguments);
+        return trialJumpCommand(arguments);
+    }
 #else
     if (verb == L"help") return L"F8 opens the accessibility mod menu. F6 toggles beacon; F7 toggles autodetail. I reads descriptions. In trials F9 selects the previous step, F10 the next, and F11 repeats the current step. Outside trials F11 repeats speech.";
 #endif
@@ -110,6 +115,7 @@ UtilityText executeUtilityNative(std::wstring_view command) {
 std::wstring executeUtility(const std::wstring& text) {
     const auto command=normalized(text);
 #ifdef FFX_DEV_UTILITIES
+    if(command==L"trial") return renderUtilityText(trialJumpCommand({}));
     if(command==L"warps" || command.rfind(L"warps ",0)==0) return listWarps(command==L"warps"?L"":command.substr(6));
 #endif
     if(command!=L"help") return L"Unknown command. Type help for available commands.";

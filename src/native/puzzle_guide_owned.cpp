@@ -15,6 +15,10 @@
 #include "navigation_cancel.hpp"
 #include "camera_direction.hpp"
 #include "navigation_order.hpp"
+#include "utility_trial_jump.hpp"
+#ifdef FFX_DEV_UTILITIES
+#include "nonblocking_snapshots.hpp"
+#endif
 #include <atomic>
 #include <cmath>
 #include <set>
@@ -27,6 +31,10 @@ struct State {unsigned epoch=0,revision=0,step=0,expected=0,part=0,begin=0,end=0
 ProcessStorage<State> storage;
 std::atomic<unsigned> revision{1};std::atomic<bool> enabled{false};
 std::atomic<bool> refreshPending{false};
+#ifdef FFX_DEV_UTILITIES
+struct Jump {unsigned epoch=0,serial=0,step=0,revision=0;uintptr_t chunk=0;};
+async::AtomicSnapshot<Jump> jump;
+#endif
 int value(const nav::Scene& observation,const State& state,unsigned low,unsigned high=1,unsigned element=0) {
     const auto& facts=observation.parts[state.part];if(!facts.guideReady) throw std::runtime_error("The puzzle observations are unavailable");
     for(unsigned i=0;i<facts.bindings.count;++i) {const auto& row=facts.bindings.rows[i];if(row.binding==low && row.high==high && row.element==element) return row.value;}
@@ -64,7 +72,18 @@ bool context(const nav::Scene& observation,State& state) {
         else if(visit==ZanarkandPhase::ReturnVisit) begin=route->returnStep;
         else end=0;
     }
-    if(state.epoch!=observation.epoch || state.revision!=current || state.route!=route || state.begin!=begin || state.end!=end) {state.visited.clear();state.step=state.expected=begin;state.pattern=state.progress=state.placed=state.removed=0;state.epoch=observation.epoch;state.revision=current;state.route=route;state.begin=begin;state.end=end;}
+    if(state.epoch!=observation.epoch || state.revision!=current || state.route!=route || state.begin!=begin || state.end!=end) {state.visited.clear();state.step=state.expected=begin;state.pattern=state.progress=state.placed=state.removed=0;state.epoch=observation.epoch;state.revision=current;state.route=route;state.begin=begin;state.end=end;
+#ifdef FFX_DEV_UTILITIES
+        Jump request;KilikaJumpState wanted;
+        if(jump.tryRead(request) && request.revision==current && request.epoch==observation.epoch && request.chunk==observation.primary &&
+            request.serial==observation.parts[selected].span.serial && !std::strcmp(route->script,"klyt1000") && kilikaJumpState(request.step,wanted)) {
+            bool matches=true;for(unsigned i=0;i<wanted.values.size();++i)
+                if(value(observation,state,0x0c000058+i)!=wanted.values[i]) matches=false;
+            if(matches) {const auto progress=kilikaJumpHistory(*route,request.step);
+                state.step=state.expected=progress.expected;state.placed=progress.placed;state.removed=progress.removed;}
+        }
+#endif
+    }
     return true;
 }
 void synchronizeTiles(const nav::Scene& observation,State& state) {
@@ -226,6 +245,12 @@ bool ownedGuidePedestalFace(const nav::Scene& observation,const Entity& pedestal
     } catch(...) {return false;}
 }
 void resetOwnedPuzzleGuide() {enabled=false;refreshPending=false;revision.fetch_add(1,std::memory_order_acq_rel);}
+#ifdef FFX_DEV_UTILITIES
+void prepareOwnedKilikaJump(const UtilityScript& script,unsigned step) {
+    jump.publish({generation(),script.allocationSerial,step,revision.load(std::memory_order_acquire)+1,script.chunk});
+    resetOwnedPuzzleGuide();
+}
+#endif
 bool ownedPuzzleGuideActive() {return enabled.load(std::memory_order_acquire);}
 unsigned ownedPuzzleGuideRevision() {return revision.load(std::memory_order_acquire);}
 bool ownedGuideStepTarget(const nav::Scene& observation,const Entity& e) {

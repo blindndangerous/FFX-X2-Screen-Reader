@@ -38,6 +38,7 @@ if /I "%~1"=="--controller" goto controller
 if /I "%~1"=="--input-adapter" goto inputadapter
 if /I "%~1"=="--warp-flag" goto warpflag
 if /I "%~1"=="--input" goto input
+if /I "%~1"=="--trial-jump" goto trialjump
 if /I "%~1"=="--from-input" goto input
 if /I "%~1"=="--movie" goto movie
 if /I "%~1"=="--dialogue" goto dialogue
@@ -74,6 +75,12 @@ cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:puzzle_guide_progress_fixture.exe "%
 if not "%errorlevel%"=="0" goto failed
 puzzle_guide_progress_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+:trialjump
+cl /nologo /W4 /WX /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES /Fe:trial_jump_fixture.exe "%TEST_SRC%trial_jump_fixture.cpp" "%TEST_SRC%..\utility_trial_jump.cpp" "%TEST_SRC%..\utility_text.cpp"
+if not "%errorlevel%"=="0" goto failed
+trial_jump_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--trial-jump" goto success
 :speech
 if not exist PrismRuntime mkdir PrismRuntime
 cl /nologo /W4 /EHsc /std:c++17 /MT /LD /Fe:PrismRuntime\prism.dll "%TEST_SRC%fake_prism.cpp" /link /DEF:"%TEST_SRC%fake_prism.def"
@@ -445,7 +452,7 @@ goto success
 :utilities_have
 python "%TEST_SRC%prepare_utilities.py"
 if not "%errorlevel%"=="0" goto failed
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES /Fe:utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES /Fe:utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utility_trial_jump.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
 utility_fixture.exe
 if not "%errorlevel%"=="0" goto failed
