@@ -165,27 +165,41 @@ std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const I
     // it; only the final leg to the push position goes inside.
     const double keep=std::max(zone.contactRadius,zone.obstacleRadius);
     const double clear=keep+margin-.1;
+    constexpr unsigned count=16;
+    constexpr double turn=6.283185307179586,countAngle=turn/count;
+    const double radius=(keep+margin)/std::cos(countAngle*.5);
     // A walk that starts touching the actor first steps straight out, so
     // its first move does not slide along the actor (in-game F25).
     std::vector<Point> prefix;
     const double from=distanceXZ(player,zone.center);
-    if(from>.01 && from<keep+1) {
-        const double scale=(keep+1.2)/from;
+    if(from>.01 && from<radius) {
+        const double scale=radius/from;
         const Point out{zone.center.x+(player.x-zone.center.x)*scale,player.y,zone.center.z+(player.z-zone.center.z)*scale};
         auto step=routePoints(mesh,player,out);
-        if(step.size()>=2 && clearsPedestal(step,zone,zone.contactRadius+.05)) {prefix=std::move(step);player=prefix.back();prefix.pop_back();}
+        if(step.size()!=2 || distanceXZ(step.back(),out)>.01 || !clearsPedestal(step,zone,zone.contactRadius+.05)) return {};
+        prefix=std::move(step);player=prefix.back();prefix.pop_back();
+    }
+    // Finish the detour on the destination's radial line, outside clearance.
+    // A monotonic but oblique last leg can still touch an off-side corner.
+    std::vector<Point> suffix;
+    const double to=distanceXZ(goal,zone.center);
+    if(to>.01 && to<radius) {
+        const double scale=radius/to;
+        const Point stage{zone.center.x+(goal.x-zone.center.x)*scale,goal.y,zone.center.z+(goal.z-zone.center.z)*scale};
+        auto step=routePoints(mesh,stage,goal);
+        if(step.size()!=2 || distanceXZ(step.front(),stage)>.01 || distanceXZ(step.back(),goal)>.01 ||
+            !clearsPedestal(step,zone,zone.contactRadius+.05)) return {};
+        suffix=std::move(step);goal=stage;suffix.erase(suffix.begin());
     }
     const auto joined=[&](std::vector<Point> route) {
-        if(route.empty() || prefix.empty()) return route;
-        route.insert(route.begin(),prefix.begin(),prefix.end());return route;
+        if(route.empty()) return route;
+        route.insert(route.begin(),prefix.begin(),prefix.end());
+        route.insert(route.end(),suffix.begin(),suffix.end());return route;
     };
     const auto direct=routePoints(mesh,player,goal);
     if(clearsPedestal(direct,zone,clear)) return joined(direct);
     // The floor mesh omits actor collisions. Try both arcs around the live
     // target cylinder, validating each leg against the actual connected floor.
-    constexpr unsigned count=16;
-    constexpr double turn=6.283185307179586,countAngle=turn/count;
-    const double radius=(keep+margin)/std::cos(countAngle*.5);
     const auto bearing=[&](Point p) {return std::atan2(p.z-zone.center.z,p.x-zone.center.x);};
     const auto index=[&](Point p) {
         return (static_cast<int>(std::round(bearing(p)/countAngle))+count)%count;

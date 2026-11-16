@@ -70,6 +70,32 @@ void contactPedestalFixtures(const Mesh& room) {
     check(fromTouch.size()>2 && inInteractionZone(staging,fromTouch.back()) && ox>0 && oz>0 &&
         std::abs(ox-oz)<.05*std::hypot(ox,oz) && runsOnClear(fromTouch,1,7),
         "a walk that starts touching the Kilika pedestal on its north-east side steps out, then goes around");
+    // B': escape the full clearance band before turning, leaving room for
+    // the route owner's one-unit waypoint handoff. Cover inside, edge and near.
+    auto fire=list[2].zone; fire.center={50,0,20};
+    for(const auto start:{Point{45.3,0,41.2},Point{45,0,40},touching,Point{46,0,46}}) {
+        for(const auto& destination:{list[1].zone,list[2].zone,fire}) {
+            const auto escape=interactionRoute(room,start,destination);
+            const double x=start.x-center.x,z=start.z-center.z;
+            const double dx=escape.size()>1?escape[1].x-start.x:0,dz=escape.size()>1?escape[1].z-start.z:0;
+            check(escape.size()>2 && distanceXZ(escape[1],center)>=8.4 && x*dx+z*dz>0 &&
+                std::abs(x*dz-z*dx)<.001 && keepsClear(std::vector<Point>(escape.begin()+1,escape.end()),center,5.5),
+                "nearby pedestal/storage/fire walks escape radially before turning");
+        }
+    }
+    // A: the observed alternating corners (-4,+6)/(-4,-6) must route to
+    // the west axis outside the learned keep-out, then approach radially.
+    staging.obstacle=center; staging.obstacleRadius=7.6;
+    for(double z:{6.0,-6.0}) {
+        const auto approach=interactionRoute(room,{center.x-4,0,center.z+z},staging);
+        check(approach.size()>2 && inInteractionZone(staging,approach.back()),
+            "both Kilika corner contacts retain a route to the west push side");
+        const auto before=approach[approach.size()-2],last=approach.back();
+        check(keepsClear(std::vector<Point>(approach.begin()+1,approach.end()-1),center,7.6) &&
+            std::abs(before.z-center.z)<.001 && before.x<center.x-10 &&
+            std::abs(last.z-center.z)<.001 && last.x<center.x-5,
+            "the final push-side leg starts outside clearance with zero perpendicular offset");
+    }
 }
 void zoneFixtures() {
     Mesh counter;
