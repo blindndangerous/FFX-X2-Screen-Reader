@@ -33,7 +33,7 @@ struct PedestalSnapshot {
 // held is the logical input consumed by the original trial script, not raw DI.
 struct PedestalMove { Point goal; unsigned held=0; PushMode mode=PushMode::Slide; };
 struct PedestalMoves {
-    std::array<PedestalMove,2> rows{};unsigned count=0;
+    std::array<PedestalMove,3> rows{};unsigned count=0;
     bool empty() const {return !count;}size_t size() const {return count;}
     PedestalMove* begin() {return rows.data();}PedestalMove* end() {return rows.data()+count;}
     const PedestalMove* begin() const {return rows.data();}const PedestalMove* end() const {return rows.data()+count;}
