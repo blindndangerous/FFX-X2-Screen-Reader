@@ -65,7 +65,9 @@ void suppress(unsigned mask) {
         write<uint16_t>(address(rva),static_cast<uint16_t>(read<uint16_t>(address(rva))&~mask));
 }
 void inject(unsigned bits) {
-    const auto held=read<uint16_t>(address(pedestal_rva::Held));
+    // Replace held directions, not OR them: a stale second direction turns
+    // the push diagonal, and the native push stops on 0.5 drift (klyt1000 2B07-2B2C).
+    const auto held=read<uint16_t>(address(pedestal_rva::Held))&~(bits?pedestalInputMask(0xf000):0u);
     published|=bits&~held;
     write<uint16_t>(address(pedestal_rva::Held),static_cast<uint16_t>(held|bits));
     write<uint16_t>(address(pedestal_rva::Pressed),static_cast<uint16_t>(read<uint16_t>(address(pedestal_rva::Pressed))|(bits&~injected)));
