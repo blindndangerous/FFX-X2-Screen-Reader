@@ -1,11 +1,15 @@
 # FFX current memory — November4
 
-November16 Kilika Round12 repairs are offline verified in the detached
-`ffx-wt-mergecheck` worktree. Deployed source remains `cd26e6b`; no commit,
-deployment or game access is authorized for this task. See the
-[repair record and prioritized gameplay procedure](Docs/features/navigation/index.md#kilika-round12--november16).
-Requested no-deploy build exited 0; native suite exited 0, 81 PASS / 3 SKIP,
-matching baseline. Gameplay completion and audible speech remain unverified.
+November16 follow-up addresses the user's step-15 stall report on `0d7166e`
+in the `ffx-wt-mergecheck` worktree. Final push-side steering centres before
+inward contact; progress follows waypoints; the pedestal session owns silent
+stall retries and one final reason. Ordinary live-pedestal clearance remains.
+No commit, deployment or game access is authorized. See the
+[follow-up record and prioritized gameplay procedure](Docs/features/navigation/index.md#kilika-step-15-stall-follow-up--november16).
+Requested no-deploy build exited 0; full native suite exited 0: 82 PASS / 3 SKIP
+(one additional PASS group over baseline). Receipts: `.kilika-build-final.log`
+and `.kilika-tests-final.log`. Existing compiler warnings remain. Gameplay
+completion and audible speech remain unverified.
 
 [Release1.0.2](Docs/release.md#release102--november4) is built, guarded-deployed,
 packaged and [published Latest](https://github.com/bladestorm360/FFX-X2-Screen-Reader/releases/tag/v1.0.2).

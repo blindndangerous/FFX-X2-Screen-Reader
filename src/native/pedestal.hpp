@@ -92,6 +92,8 @@ void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const Pedest
 void updatePedestalOwnedTarget(const NativeRouteTarget&);
 void cancelPedestal();
 void updatePedestalInput();
+// Native owner: defer an approach stall to this session's bounded retry budget.
+bool pedestalRetryNoProgress();
 void installPedestal();
 unsigned pedestalConfirmMask();
 unsigned pedestalInputMask(unsigned logical);

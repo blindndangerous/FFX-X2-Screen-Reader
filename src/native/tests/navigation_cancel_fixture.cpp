@@ -1,11 +1,11 @@
 // Reuse only the synthetic native/input and semantic speech adapters. Both
 // route retirement and Auto walk below link their production implementations.
+#include "../navigation_scene.hpp"
+#include "../navigation_observations.hpp"
 #define FFX_NAV_CUES_INTEGRATION_TEST
 #define main autoWalkComponentFixtureEntry
 #include "auto_walk_fixture.cpp"
 #undef main
-#include "../navigation_scene.hpp"
-#include "../navigation_observations.hpp"
 #include "test_speech_domains.hpp"
 
 namespace ffx {
@@ -45,6 +45,59 @@ int main() {
         check(speech.empty() && !autoWalkActive(),"clearNavRoute then updateAutoWalk before explicit stop stays silent");
         stopAutoWalk();
     }
+    // Real route geometry, waypoint advancement and input steering, with only
+    // movement/collision supplied by this synthetic host. No native push replay.
+    for(double heading:{0.0,22.5,67.5,117.0,203.0,316.0}) for(double stride:{.25,.7,1.3}) {
+        begin();player={44,0,44};
+        const double angle=heading*3.14159265358979323846/180;
+        forward={std::sin(angle),0,std::cos(angle)};
+        target={};target.name=L"Pedestal";target.pushControl=2;target.position={};
+        target.zone.valid=true;target.zone.shape=1;target.zone.height=100;
+        target.zone.contactRadius=7;target.zone.obstacleRadius=9.5;target.zone.approach={0,0,-1};
+        speechq::Header header{};header.generation=epoch;
+        const auto publish=[&] {
+            nativeOwner=false;observation.player=player;observation.forward=forward;
+            observation.right={forward.z,0,-forward.x};
+            updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;
+        };
+        const auto route=[&] {
+            publish();nativeOwner=false;
+            const auto points=interactionRoute(mesh,player,target.zone);
+            check(!points.empty(),"push-side fixture has a connected route");
+            routeNavAudio(points,target);nativeOwner=true;startAutoWalk(false);
+        };
+        route();bool inward=false,touched=false;
+        for(unsigned frame=0;frame<1800 && !touched;++frame) {
+            publish();clockValue+=100;updateAutoWalk();NavLeg current;
+            check(navLeg(current),"push approach keeps its real route leg");
+            if(current.arrived && !inward) {
+                stopAutoWalk();target.zone.contactRadius=target.zone.obstacleRadius=0;
+                target.zone.range=6.85;inward=true;route();
+            }
+            if(!autoWalkActive()) {
+                std::fprintf(stderr,"approach stopped: heading=%.1f stride=%.2f frame=%u player=%.3f,%.3f waypoint=%.3f,%.3f inward=%d arrived=%d\n",
+                    heading,stride,frame,player.x,player.z,current.goal.x,current.goal.z,inward,current.arrived);
+                if(!speech.empty()) std::fwprintf(stderr,L"last speech: %ls\n",speech.back().c_str());
+            }
+            check(autoWalkActive(),"northeast reset approach reaches contact without a no-progress stop");
+            const auto keys=keyboard();
+            const double front=!!keys[0xc8]-!!keys[0xd0],right=!!keys[0xcd]-!!keys[0xcb];
+            const double length=std::hypot(front,right);
+            if(!length) continue;
+            const Point next{player.x+stride*(front*forward.x+right*forward.z)/length,0,
+                player.z+stride*(front*forward.z-right*forward.x)/length};
+            if(distanceXZ(current.goal,current.final)>.01)
+                check(distanceXZ(next,{})>9.5,"detour movement retains the wider pedestal clearance before the final leg");
+            if(distanceXZ(next,{})<=7) {
+                check(next.z< -2 && std::abs(next.x)<1.5,"only centred south-side movement can touch the pedestal");
+                touched=true;
+            }
+            player=next;
+        }
+        check(touched,"northeast reset detour and final inward leg reach native contact");
+        stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+    }
+    std::puts("PASS: production pedestal detours reach aligned contact across six camera headings and three movement rates.");
     VirtualFree(reinterpret_cast<void*>(memory),0,MEM_RELEASE);
     std::puts("PASS: production route-clear/Auto walk interleaving stays silent for native and worker cancellation.");
 }

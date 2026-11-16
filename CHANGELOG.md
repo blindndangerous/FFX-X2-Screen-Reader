@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Kilika push approaches centre on the final push-side leg before walking into contact. Detour progress follows the current waypoint. Stalled approach retries stay silent until one final reason; diagnostics include player, pedestal and waypoint positions.
 - Kilika pedestal assistance keeps its push-side alignment and native slope contact bounds. Ordinary walks refresh the movable pedestal obstacle and turn without delayed detour steering or unchecked recovery sidesteps. Resumed walks and repeated approaches avoid duplicate announcements; lost routes retain their real stop reason.
 - The Kilika guide recognizes the reset tile and subsequent push state. Open message boxes prompt Enter instead of asking the player to wait for a scene. Gameplay confirmation remains pending.
 

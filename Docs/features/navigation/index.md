@@ -1,5 +1,74 @@
 # Navigation, route validity, audio and movement
 
+## Kilika step-15 stall follow-up — November16
+
+The user reports four spoken no-progress stops on `0d7166e`, from the northeast
+of the reset pedestal. That report supersedes the earlier offline-only Round12
+status below. This follow-up remains local and uncommitted; no game access or
+deployment is authorized.
+
+The route builder already allows the final radial push-side leg inside its
+wider keep-out. The input driver applied the detour's line-rejoin steering to
+that leg, however, without first centring on the planned push axis. It also
+judged progress by direct distance to the final destination, which can increase
+through a valid detour. Stops were announced before the pedestal session retried
+the approach, so silent starts still repeated the failure speech.
+
+The final leg now centres within the existing 0.65-unit route tolerance before
+moving inward. Other legs retain their clearance, immediate turns and avoidance
+of unchecked sidesteps. Native push directions and the existing side/contact
+ownership guards remain authoritative. Progress uses the current waypoint;
+reaching a short waypoint while moving counts, but changing waypoints alone
+cannot reset the 15-second timer. The pedestal session
+owns approach retries, retaining its eight-request bound, and emits one final
+no-progress reason after exhaustion. Silent Auto walk starts preserve their
+stop-speech latch. Both movement owners capture player, pedestal and current
+waypoint positions on a no-progress stop, using the existing bounded log packets.
+
+The regression fixtures first failed for premature inward steering, repeated
+stop speech, premature stall reporting and detour progress. A combined production
+geometry/waypoint/input fixture also exposed lateral correction oscillation at
+22.5 degrees with a 1.3-unit stride; using the endpoint's 0.65-unit tolerance
+avoids that synthetic limit cycle. The fixture covers six camera headings,
+three movement rates, a northeast start, retained clearance, aligned native
+contact and cancellation. The pedestal fixture exercises eight stalled attempts,
+one final reason and no further requests. These are synthetic input/collision
+hosts, not native game movement, actual floor replay or audible-output proof.
+
+Final verification: `cmd /c "src\proxy\build_dinput8.bat --no-deploy"` exited 0;
+`src\native\tests\run_tests.bat` exited 0 with 82 PASS lines / 3 SKIP lines,
+one additional PASS group over baseline. Receipts: `.kilika-build-final.log`
+and `.kilika-tests-final.log`; test outputs use the established
+`%TEMP%\ffx-r12-evidence\test-build` host with external evidence junctions.
+Skips remain readers (`hudTextureClipBody.bin`), reachability
+(`collisionReplayBody.bin`) and utilities (`maps_v3.json`). The unchanged
+build warning is C4244 at `puzzle_guide_owned.cpp:67`; the unchanged test harness
+also reports C4456 and D9026. Focused pedestal, combined route/input and steering/
+speech fixtures pass. The added short-waypoint regression also failed before
+its repair; stationary waypoint churn still cannot reset the stall timer.
+No game bytes were added to source; no game process or tester logs were accessed.
+The exact in-game stopping coordinate was not supplied, so this work cannot
+establish the complete live cause.
+
+Changed runtime files: `auto_walk.cpp`, `pedestal_input.cpp`, `pedestal.hpp`.
+Changed fixtures: `auto_walk_fixture.cpp`, `pedestal_fixture.cpp`,
+`navigation_cancel_fixture.cpp`. Updated documentation: `CHANGELOG.md`,
+`CODEX_MEMORY.md` and this record. No commit, deployment or package was created.
+
+Prioritized nonvisual gameplay procedure, only after separately authorized deployment:
+
+1. At step 15, leave the pedestal at its reset position and start from the
+   northeast, about 5.6 steps away. Expect one start announcement, a clear detour
+   to the south centre line, contact, then the native north and east pushes.
+   Follow the remaining north push and depression progression described below.
+2. If an approach stalls, expect silent retries, then one final no-progress
+   reason and released input. No retry or speech should follow that final stop.
+   Backslash, manual movement and focus loss must cancel the session. Retain the
+   timestamp and new player/pedestal/waypoint diagnostic if this fails.
+3. On guide steps 8, 10, 11 and 13, walk to the sphere/recess targets. Expect
+   clearance around the live pedestal, without pushing it. Any native touch
+   must still release directions and recover within the existing touch bound.
+
 ## Kilika Round12 — November16
 
 This worktree contains uncommitted repairs against deployed `cd26e6b`. No game

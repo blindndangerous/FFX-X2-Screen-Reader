@@ -389,6 +389,20 @@ void kilikaWalkFixtures() {
     check(walking,"a Kilika walk-in push starts its approach walk");
     walking=false; frame(0);
     check(routeRequests==asked+1 && walking,"a Kilika approach walk that ended short is requested again");
+    {
+        cancelPedestal();frame(0);target=kilika({at.x+44,at.y,at.z+44});frame(0);
+        const auto beforeSpeech=spoken.size(),beforeRequests=routeRequests;
+        for(unsigned i=0;i<8;++i) {
+            check(pedestalRetryNoProgress(),"an active push-side approach owns its no-progress retry");
+            walking=false;frame(0);
+            check(spoken.size()==beforeSpeech+(i==7?1:0),"approach retries stay silent until one final reason");
+        }
+        check(!walking && !capturePedestalNavigationState().armed && routeRequests==beforeRequests+7 &&
+            spoken.back()==L"Auto walk stopped: no progress","exhausted stalled approach reports its cause and stops requesting routes");
+        frame(0);frame(0);
+        check(spoken.size()==beforeSpeech+1 && routeRequests==beforeRequests+7,"finished push session cannot repeat stop speech or retry");
+        target=kilika({at.x-14,at.y,at.z+9});frame(0);
+    }
     // Integration review: Backslash pressed again during the walk stops it
     // through stopAutoWalk only ("Auto walk stopped"). The approach must not
     // ask for the route again, or the walk restarts on its own.

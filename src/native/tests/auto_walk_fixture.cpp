@@ -8,6 +8,7 @@ namespace ffx { bool gameKeyboardUsesScan(unsigned scan); }
 #include "../settings.hpp"
 #include "../text_plan.hpp"
 #include "../field_controls.hpp"
+#include "../log_capture.hpp"
 #include "ready_speech_adapter.hpp"
 #include <map>
 #include <cstdio>
@@ -31,6 +32,7 @@ uintptr_t memory=0;
 std::map<unsigned,Handler> hooks;
 std::vector<std::wstring> speech;
 bool lastInterrupt=false;
+char stallDiagnostic[512]{};
 uint64_t autoWalkClock() { return clockValue; }
 int __cdecl mode() { return dialogue; }
 void __cdecl caption(unsigned id,char* out,unsigned size) {
@@ -58,6 +60,8 @@ bool inBattle() { return battle; }
 bool modMenuActive() { return menu; }
 bool utilityConsoleActive() { return console; }
 bool consent=false;
+bool retryPedestalStall=false;
+bool pedestalRetryNoProgress() {return retryPedestalStall;}
 bool pedestalConsentKey(unsigned scan) { return consent && scan==0x1c; }
 bool pedestalConsentVk(unsigned vk) { return consent && vk==VK_RETURN; }
 uint64_t pedestalConsentButtons() { return consent?pad::bit(pad::South):0; }
@@ -441,6 +445,47 @@ int main() {
     battleStop();battle=false;dialogue=1;frames(620);dialogue=0;frames(15);check(!resumes,"a resume expires a minute after the battle");
     setAutoWalkResume(nullptr);
     std::puts("PASS: auto walk resumes once after a battle and stays cancelled by player movement, commands and the setting.");
+    *reinterpret_cast<uintptr_t*>(address(0x1efb504))=0; // Restore default movement bindings after the remap cases.
+    bool regressionsPass=true;
+    const auto regression=[&](bool value,const char* reason) {if(!value) {std::fprintf(stderr,"FAIL: %s\n",reason);regressionsPass=false;}};
+    for(bool contact:{false,true}) {
+        begin({0,0,-7.25});
+        player={1,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
+        leg.target.zone.valid=true;leg.target.zone.shape=1;leg.target.zone.center={};
+        leg.target.zone.approach={0,0,-1};leg.target.zone.contactRadius=contact?0:7;
+        leg.target.zone.range=contact?6.85:0;leg.target.zone.obstacleRadius=9;
+        if(contact) leg.goal=leg.final={0,0,-6.35};
+        clockValue+=100;updateAutoWalk();corner=keyboard();
+        regression(corner[0xcb] && !corner[0xc8] && !corner[0xd0],
+            "final push-side leg centres before entering the pedestal clearance radius");
+        player.x=0;clockValue+=100;updateAutoWalk();corner=keyboard();
+        regression(corner[0xc8] && !corner[0xcb] && !corner[0xcd],
+            "aligned final push-side leg permits inward movement despite wider keep-out");
+    }
+    begin();speech.clear();leg.target.zone.obstacle={4,5,6};leg.target.zone.obstacleRadius=7;
+    logCaptureHandler.store([](const LogCapture& packet) noexcept {
+        if(std::strstr(packet.format.data(),"auto walk no progress:") && packet.formatter)
+            packet.formatter(packet,stallDiagnostic,sizeof(stallDiagnostic));
+    });
+    frames(151);logCaptureHandler.store(nullptr);
+    regression(std::strstr(stallDiagnostic,"player 0.000 0.000 0.000, pedestal 4.000 5.000 6.000, waypoint 0.000 0.000 100.000")!=nullptr,
+        "no-progress diagnostic records owned player, pedestal and current waypoint positions");
+    regression(speech.size()==1 && !autoWalkActive(),"ordinary stalled walk reports its stop once");
+    startAutoWalk(false);frames(151);
+    regression(speech.size()==1 && !autoWalkActive(),"silent retry cannot repeat the same stop speech");
+    begin();speech.clear();retryPedestalStall=true;frames(151);
+    regression(!autoWalkActive() && speech.empty(),"pedestal session defers stall speech until its retry limit");
+    retryPedestalStall=false;
+    begin({0,0,100});speech.clear();leg.goal={0,0,-300};
+    for(unsigned i=0;i<160 && autoWalkActive();++i) {player.z-=1;clockValue+=100;updateAutoWalk();}
+    regression(autoWalkActive() && speech.empty(),"progress along a detour survives fifteen seconds moving away from the destination");
+    begin();speech.clear();
+    for(unsigned i=0;i<160 && autoWalkActive();++i) {player.z-=.5;leg.goal={0,0,player.z-1};clockValue+=100;updateAutoWalk();}
+    regression(autoWalkActive() && speech.empty(),"reaching short waypoints counts as progress through a long detour");
+    begin();speech.clear();
+    for(unsigned i=0;i<160 && autoWalkActive();++i) {leg.goal.x=i%3;clockValue+=100;updateAutoWalk();}
+    regression(!autoWalkActive() && speech.size()==1,"changing waypoints without player progress cannot rearm the stall timer");
+    check(regressionsPass,"Kilika regression cases");
     VirtualFree(reinterpret_cast<void*>(memory),0,MEM_RELEASE);
     std::puts("PASS: auto walk steering, native remaps, manual priority, controller, arrival, context cancellation, stale input and bounded recovery.");
     return 0;

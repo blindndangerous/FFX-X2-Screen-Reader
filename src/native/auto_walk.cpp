@@ -37,7 +37,8 @@ uint64_t previous=0,octantSince=0,improved=0,movingSince=0,unstickUntil=0,collis
 int octant=-1;
 bool unstickRight=false;
 double best=-1;
-Point last;
+Point last,progressGoal;
+bool stopAnnounced=false;
 FieldControlsSnapshot messageGuard;
 std::array<unsigned,4> scans{0xc8,0xcb,0xd0,0xcd};
 unsigned diveScan=0; int diveButton=-1;
@@ -100,6 +101,8 @@ constexpr uint64_t ArrivalHomeMs=1500,ArrivalBlockedMs=300,ArrivalSettleMs=300;
 constexpr double ArrivalHomeUnits=11.13,ArrivalCloseUnits=2.0;
 struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0;Point origin,seen;} arrival;
 void announceStop(const wchar_t* spokenReason) {
+    if(stopAnnounced) return;
+    stopAnnounced=true;
     TextPlan announcement;prepareTextPlan(announcement,"auto-walk",false);
     announcement.headline=planConcat(announcement,planLiteral(announcement,L"Auto walk stopped: "),planLiteral(announcement,spokenReason));
     commitTextPlan(announcement);
@@ -191,6 +194,7 @@ bool autoWalkActive() { return engaged && !cancel; }
 unsigned autoWalkRouteFailureRevision() {return routeFailures.load(std::memory_order_acquire);}
 void startAutoWalk(bool announce) {
     stop("new route");takeover={};
+    if(announce) stopAnnounced=false;
     NavLeg leg;
     if(!safe() || !navLeg(leg) || leg.pendingCollision || leg.arrived || leg.target.inactive) return;
     // Ordinary octant/hysteresis steering can leave a narrow butterfly detour.
@@ -208,7 +212,7 @@ void startAutoWalk(bool announce) {
     walking=leg.target; resumePhase=ResumeNone;
     epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;
     const auto now=nowMs(); improved=movingSince=now; unstickUntil=0;
-    last=playerPosition(); cancel=false; engaged=true;
+    last=playerPosition();progressGoal=leg.goal; cancel=false; engaged=true;
     scans=movementKeys();
     if(announce) {
         TextPlan announcement;prepareTextPlan(announcement,"auto-walk",false);
@@ -311,9 +315,21 @@ void updateAutoWalk() {
     }
     if(!leg.target.swimDepth) {
         if(delta>.1) { last=player; movingSince=now; }
-        const double distance=distanceXZ(player,leg.final);
+        // A detour can move away from its destination for longer than the cap.
+        // Measure advance toward the current waypoint without rearming on replans.
+        const double distance=distanceXZ(player,leg.goal);
+        if(distanceXZ(progressGoal,leg.goal)>.1) {
+            if(delta>.1 && distanceXZ(player,progressGoal)<=1.5) improved=now;
+            progressGoal=leg.goal;best=distance;
+        }
         if(best<0 || distance<best-1) { best=distance; improved=now; }
-        else if(now-improved>=15000) { stop("no progress",L"no progress"); return; }
+        else if(now-improved>=15000) {
+            const auto pedestal=leg.target.pushControl?leg.target.position:leg.target.zone.obstacle;
+            recordLog("auto walk no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
+                player.x,player.y,player.z,pedestal.x,pedestal.y,pedestal.z,leg.goal.x,leg.goal.y,leg.goal.z);
+            const bool retry=pedestalRetryNoProgress();
+            stop("no progress",retry?nullptr:L"no progress"); return;
+        }
     }
     const bool pedestalRoute=leg.target.pushControl || leg.target.zone.obstacleRadius>0;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
@@ -325,8 +341,20 @@ void updateAutoWalk() {
         recordLog("auto walk %s at %.2f %.2f %.2f",pedestalRoute?"pedestal replan":"bounded sidestep/replan",player.x,player.y,player.z);
     }
     Point steer=leg.goal;
+    const auto& zone=leg.target.zone;
+    const auto side=zone.approach;
+    const double along=(player.x-zone.center.x)*side.x+(player.z-zone.center.z)*side.z;
+    const double goalAlong=(leg.goal.x-zone.center.x)*side.x+(leg.goal.z-zone.center.z)*side.z;
+    const double goalAcross=(leg.goal.x-zone.center.x)*side.z-(leg.goal.z-zone.center.z)*side.x;
+    const bool finalPushSide=leg.target.pushControl>=1 && leg.target.pushControl<=2 && zone.valid && !zone.talk &&
+        distanceXZ(side,{})>.9 && distanceXZ(leg.goal,leg.final)<.01 && along>0 && goalAlong>0 && std::abs(goalAcross)<=.65;
     const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length2=x*x+z*z;
-    if(length2>.001) {
+    if(finalPushSide) {
+        // Only the last radial leg may enter clearance. Centre first, then walk
+        // straight in; the detour's line-rejoin lead can touch an off-side corner.
+        const double across=(player.x-zone.center.x)*side.z-(player.z-zone.center.z)*side.x;
+        if(std::abs(across)>.65) steer={player.x-across*side.z,player.y,player.z+across*side.x};
+    } else if(length2>.001) {
         const auto t=std::clamp(((player.x-leg.start.x)*x+(player.z-leg.start.z)*z)/length2,0.0,1.0);
         Point nearest{leg.start.x+t*x,player.y,leg.start.z+t*z};
         if(distanceXZ(nearest,player)>.35) {

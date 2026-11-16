@@ -21,7 +21,7 @@ struct Session {
     unsigned epoch=0,segment=0,consent=0;
     std::array<unsigned,3> directions{};
     bool walk=false,held=false,owned=false,started=false,single=false,stopping=false,approaching=false,crossing=false,contact=false,committed=false,waitingShape=false;
-    bool ended=false,walked=false;
+    bool ended=false,walked=false,stalled=false;
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
     unsigned requests=0,failures=0,announcedSegment=~0u;
@@ -277,7 +277,10 @@ bool approach() {
     // it at a touch), or when a request never started a walk.
     const auto now=GetTickCount64();
     if(active.approaching && !active.walked && now-active.requested<1500) return false;
-    if(active.requests>=8) {output(L"Pedestal push route unavailable. Walk to the push side by hand.",false,"pedestal-push");stop("approach walk failed");return false;}
+    if(active.requests>=8) {
+        output(active.stalled?L"Auto walk stopped: no progress":L"Pedestal push route unavailable. Walk to the push side by hand.",false,"pedestal-push");
+        stop("approach walk failed");return false;
+    }
     ++active.requests; active.walked=false; active.requested=now;
     active.approaching=requestNavigationAssistRoute(); active.walked=autoWalkActive(); return false;
 }
@@ -303,6 +306,10 @@ PedestalNavigationState capturePedestalNavigationState() {
     s.id=active.target.id;s.worker=active.target.worker;s.held=active.held;s.contact=active.contact;s.crossing=active.crossing;s.touch=active.touch;
     if(active.segment>active.plan.moves.size()) return {};
     s.plan=active.plan;s.plan.moves.erase(s.plan.moves.begin(),s.plan.moves.begin()+active.segment);return s;
+}
+bool pedestalRetryNoProgress() {
+    if(!nativeGameThread() || !armed || active.epoch!=generation() || !active.held || !active.approaching || active.owned || active.started) return false;
+    active.stalled=true;return true;
 }
 void cancelPedestal() {cancelRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) {observedCancel=cancelRevision.load(std::memory_order_acquire);stop("selection or context changed");}else {armed=false;manual=true;publishPedestalConsent(0);}}
 bool pedestalActiveCrossing(const Entity& target) {
@@ -389,7 +396,12 @@ void updatePedestalInput() {
         if(distanceXZ(snapshot.position,active.last)>.1) { active.last=snapshot.position; active.progress=now; }
         const auto player=playerPosition();
         if(distanceXZ(player,active.lastPlayer)>.1) { active.lastPlayer=player; active.progress=now; }
-        if(now-active.progress>15000) { stop("no progress",true); return; }
+        if(now-active.progress>15000 && !(active.approaching && !active.owned && !active.started)) {
+            const auto waypoint=active.plan.moves[active.segment].goal;
+            recordLog("pedestal no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
+                player.x,player.y,player.z,snapshot.position.x,snapshot.position.y,snapshot.position.z,waypoint.x,waypoint.y,waypoint.z);
+            stop("no progress",true); return;
+        }
         if(live.complete && active.target.pushControl<=3) {
             output(L"Pedestal push complete",false,"pedestal-push"); stop("destination reached"); return;
         }
