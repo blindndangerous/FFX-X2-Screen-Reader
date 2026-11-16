@@ -275,7 +275,7 @@ void updateAutoWalk() {
             if(!target.butterfly && !target.swimDepth) faceNavigationTarget(target);
             stop("arrived");return;
         }
-        if(!arrival.active) {arrival={};arrival.active=true;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0;}
+        if(!arrival.active) {arrival={};arrival.active=true;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || target.zone.obstacleRadius>0;}
         const Point center=target.pushControl?target.position:target.zone.center;
         if(!arrival.settling) {
             if(distanceXZ(player,arrival.seen)>.1) {arrival.seen=player;arrival.still=now;last=player;}
