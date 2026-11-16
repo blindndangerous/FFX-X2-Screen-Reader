@@ -1,5 +1,88 @@
 # Navigation, route validity, audio and movement
 
+## Kilika approach deadline and live contact follow-up — November16
+
+The user reports an orbit and a south-facing stop at step 15; another in-game
+attempt costs about 15 minutes of replay. This follow-up supersedes the earlier
+step-15 acceptance procedure below. Source work and offline verification only:
+no game access, deployment, commit or packaging is authorized.
+
+Confirmed mechanisms and repairs:
+
+- `pedestal_input.cpp` refreshed its progress clock on any player movement and
+  exempted active approaches from its 15-second stop. Auto walk waypoint progress
+  could keep an orbit alive without exhausting the eight-request retry limit.
+  Kilika/Besaid approaches now retain a 30-second deadline across route requests,
+  staging/contact changes, off-side touches and pending shapes. A separate
+  15-second clock requires at least one unit of improvement in best distance to
+  the final live contact point. Changing waypoints or moving sideways cannot
+  refresh it. A new segment or a native push of at least 1.5 units starts a new
+  approach budget; failed/short contacts do not. Accepted native contact starts
+  the existing native-push progress clock afresh.
+- `nav_interactions.cpp::refreshTargetZone` read the actor's live collision
+  centre while retaining the target's old position. Subsequent `freshTarget`
+  translated that already-current centre again; contact conversion also used
+  the old target position. The refresh now pairs both positions from one live
+  actor read. The owned scene builder already pairs them; it is unchanged.
+- `updatePedestalOwnedTarget` accepted a delayed staging shape after the Native
+  owner entered contact. That could replace the inward target with the outside
+  staging ring while the session still believed it was walking into contact.
+  Phase-mismatched shapes are now rejected and a fresh copied scene requested.
+  Cancellation, input revisions, script identity and native ownership still gate
+  movement. Native collision radius, 0.65-unit route alignment and the stricter
+  native push-side guard are unchanged; no tolerance was widened.
+
+Once per second during an approach, two bounded log packets copy elapsed/idle
+time, segment, staging/contact/pending phase, request count, contact distance/best,
+route availability, player/live-pedestal/waypoint positions, along/across offsets
+and contact radius. With no active route, the waypoint field is the contact point
+and `route 0` identifies that fallback. Timeout captures a final sample and one
+spoken no-progress reason, releases synthetic input and retires the session.
+Formatting and I/O remain on the existing logging worker; hooks do not wait.
+
+Regression evidence: the orbit, shifted live reset centre and delayed staging
+handback each failed before their repair. The synthetic pedestal fixture now
+passes moving orbit/replans within 30 seconds, an improving approach stopping at
+exactly 30 seconds, sideways oscillation stopping at 15 seconds, one final stop,
+no restart, shifted south-side staging/inward route/native contact, delayed shape
+rejection and one-second diagnostic cadence/content. The shifted case deliberately
+uses a two-unit X/one-unit Z displacement from the nominal reset point to expose
+mixed-centre handling. It does not establish that displacement in the user's game.
+Final verification: `src\native\tests\run_tests.bat` exited 0 with 84 PASS groups
+and 3 SKIP groups (two additional passing groups over the previous 82-group
+baseline). `cmd /c "src\proxy\build_dinput8.bat --no-deploy"` exited 0.
+Receipts: `.contact-tests-final.log`, `.contact-build-final.log`; focused pedestal
+receipt `.contact-focused.log`. The existing evidence root is
+`%TEMP%\ffx-r12-evidence`. Skips remain readers (`hudTextureClipBody.bin`),
+reachability (`collisionReplayBody.bin`) and utilities (`maps_v3.json`). Existing
+C4244 (`puzzle_guide_owned.cpp:67`), C4456 and D9026 warnings remain. Initial
+focused/full-suite attempts hit C1088/C1085 (disk full); generated local build
+objects and stale compiler scratch were cleared before the successful rerun.
+No source assertion failed in that interrupted full run. `git diff --check`
+passes. No game/process/probe, tester logs, deployment, commit or package access.
+
+Changed runtime files: `pedestal_input.cpp`, `nav_interactions.cpp`; fixture:
+`tests/pedestal_fixture.cpp`. `CHANGELOG.md`, `CODEX_MEMORY.md` and this record
+retain the handoff. Review was local; no independent agent was used. These
+fixtures prove the mechanisms above, not which one occurred in the user's replay.
+
+Current prioritized nonvisual gameplay procedure, after separately authorized deployment:
+
+1. With a Kilika Sphere loaded and the pedestal reset at step 15, start Auto walk
+   from the reported northeast position. Expect one start, a detour to the south
+   centre line, inward contact and the native north/east/north sequence. Also
+   start directly south at the reset spot. Leave Confirm alone: it opens the
+   sphere prompt. Complete steps 16–22 only after the pedestal reaches its goal.
+2. A looping/blocked approach must release input and give one no-progress reason
+   within 30 seconds, possibly at 15 seconds without contact-distance improvement.
+   Expect no automatic restart after that stop. Backslash, physical movement and
+   focus loss still cancel. Retain this attempt's timestamp and `pedestal approach`
+   diagnostics, plus contact/off-side/stop lines; a failure needs only that attempt.
+3. Check ordinary sphere/recess walks at steps 8, 10, 11 and 13 still avoid the
+   live pedestal and do not push it. Offline fixtures cannot prove actual native
+   collision timing, frame responsiveness, audible speech or the user's exact
+   stopping coordinate. These remain gameplay checks, not claims of completion.
+
 ## Kilika step-15 stall follow-up — November16
 
 The user reports four spoken no-progress stops on `0d7166e`, from the northeast

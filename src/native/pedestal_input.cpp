@@ -13,7 +13,18 @@
 #include <cmath>
 #include <algorithm>
 namespace ffx {
+#ifdef FFX_READER_TEST
+uint64_t pedestalClock();
+#endif
 namespace {
+uint64_t nowMs() {
+#ifdef FFX_READER_TEST
+    return pedestalClock();
+#else
+    return GetTickCount64();
+#endif
+}
+constexpr uint64_t ApproachBudgetMs=30000,ContactProgressMs=15000;
 struct Session {
     NativeRouteTarget target;
     UtilityScript script;
@@ -24,6 +35,8 @@ struct Session {
     bool ended=false,walked=false,stalled=false;
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
+    uint64_t approachAt=0,contactProgress=0,diagnosticAt=0;
+    double contactBest=-1;
     unsigned requests=0,failures=0,announcedSegment=~0u;
     unsigned walkInput=0,walkFailure=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
@@ -177,7 +190,7 @@ void strayTouch(Event& e) {
         if(read<uintptr_t>(interpreter+4)!=script.chunk || read<uint16_t>(interpreter+0x2e,0xffff)!=(control==1?7u:6u) ||
             read<uint16_t>(read<uintptr_t>(interpreter+0x90)+8,0xffff)!=4 || !contactPushSite(control,pc(interpreter,script))) continue;
         suppress(pedestalInputMask(0xf000)); haltAutoWalk();
-        const auto now=GetTickCount64();if(now-strayAt>10000) strayResumes=0;
+        const auto now=nowMs();if(now-strayAt>10000) strayResumes=0;
         strayAt=now; strayResume=strayResumes<2; ++strayResumes; strayFrames=0;
         recordLog("pedestal touched by auto walk: %s",strayResume?"resuming the walk":"walk not resumed");
         return;
@@ -188,8 +201,10 @@ void disabled(Event& e) {
     if(ownsDisable(e) && (!active.walk || active.owned || onPushSide())) {
         active.signal=read<uintptr_t>(interpreter+0x90); active.owned=active.started=true; active.contact=false; haltAutoWalk();
         active.pushFrom=active.target.position;
+        PedestalSnapshot contact;if(capturePedestalSnapshot(active.script,active.target,contact)) active.pushFrom=contact.position;
+        active.progress=nowMs();
         {const auto player=playerPosition();
-         recordLog("pedestal push contact: player offset %.2f %.2f, segment %u",player.x-active.target.position.x,player.z-active.target.position.z,active.segment);}
+         recordLog("pedestal push contact: player offset %.2f %.2f, segment %u",player.x-active.pushFrom.x,player.z-active.pushFrom.z,active.segment);}
         // The same interpreter reads its direction immediately after disabling
         // control. Replace approach input before that read, not next frame.
         if(active.target.pushControl<=2) {
@@ -275,7 +290,7 @@ bool approach() {
     if(active.approaching && autoWalkInputRevision()!=active.walkInput) {stop("approach walk stopped by the player");return false;}
     // Ask again when the walk ended short of the zone (another hook stopped
     // it at a touch), or when a request never started a walk.
-    const auto now=GetTickCount64();
+    const auto now=nowMs();
     if(active.approaching && !active.walked && now-active.requested<1500) return false;
     if(active.requests>=8) {
         output(active.stalled?L"Auto walk stopped: no progress":L"Pedestal push route unavailable. Walk to the push side by hand.",false,"pedestal-push");
@@ -298,6 +313,35 @@ void freshTarget(Point position) {
     }
     nav::requestNavigationScene();
 
+}
+void resetApproach() {
+    active.approachAt=active.contactProgress=active.diagnosticAt=0;active.contactBest=-1;
+}
+bool monitorApproach(const PedestalSnapshot& snapshot,Point player,uint64_t now) {
+    if(active.target.pushControl>2 || active.owned || active.started) return true;
+    if(!active.approachAt) active.approachAt=active.contactProgress=now;
+    const auto goal=active.plan.moves[active.segment].goal,p=snapshot.position;
+    const double gx=goal.x-p.x,gz=goal.z-p.z;
+    const Point side=std::abs(gx)>=std::abs(gz)?Point{gx>0?-1.0:1.0,0,0}:Point{0,0,gz>0?-1.0:1.0};
+    const auto& zone=active.target.zone;
+    const double radius=active.contact?zone.range+.15:zone.contactRadius;
+    const Point contact{p.x+side.x*std::max(0.0,radius-.25),p.y,p.z+side.z*std::max(0.0,radius-.25)};
+    const double distance=distanceXZ(player,contact);
+    // Keep the best contact distance across staging, replans and off-side touches.
+    if(active.contactBest<0 || distance<active.contactBest-1) {active.contactBest=distance;active.contactProgress=now;}
+    const bool deadline=now-active.approachAt>=ApproachBudgetMs,stalled=now-active.contactProgress>=ContactProgressMs;
+    if(!active.diagnosticAt || now-active.diagnosticAt>=1000 || deadline || stalled) {
+        active.diagnosticAt=now;NavLeg leg;const bool routed=navLeg(leg);
+        const auto waypoint=routed?leg.goal:contact;
+        recordLog("pedestal approach: elapsed %llu ms, idle %llu ms, segment %u, phase %s, requests %u, distance %.3f, best %.3f, route %u",
+            now-active.approachAt,now-active.contactProgress,active.segment,active.waitingShape?"pending":active.contact?"contact":"staging",active.requests,distance,active.contactBest,routed?1u:0u);
+        recordLog("pedestal approach geometry: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f, along %.3f, across %.3f, radius %.3f",
+            player.x,player.y,player.z,p.x,p.y,p.z,waypoint.x,waypoint.y,waypoint.z,
+            (player.x-p.x)*side.x+(player.z-p.z)*side.z,(player.x-p.x)*side.z-(player.z-p.z)*side.x,radius);
+    }
+    if(!deadline && !stalled) return true;
+    output(L"Auto walk stopped: no progress",false,"pedestal-push");
+    stop(deadline?"approach deadline":"no contact progress");return false;
 }
 }
 PedestalNavigationState capturePedestalNavigationState() {
@@ -346,7 +390,9 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         active.pawn=read<uintptr_t>(address(0xf00740));
         if(!active.pawn || active.pawn!=playerActor() || !read<uint16_t>(active.pawn+2)) {stop("controlled actor unavailable");return;}
         if(!publishPedestalConsent(consent)) {stop("consent bindings unavailable");recordLog("pedestal consent bindings unavailable");return;}
-        active.last=target.position; active.lastPlayer=playerPosition(); active.progress=GetTickCount64(); armed=true;
+        active.last=target.position; active.lastPlayer=playerPosition(); active.progress=nowMs();
+        if(active.held) active.approachAt=active.contactProgress=active.progress;
+        armed=true;
     }catch(...) {stop("unavailable verified state");}
 }
 void armPedestal(const Entity& target,bool walk) {
@@ -355,6 +401,10 @@ void armPedestal(const Entity& target,bool walk) {
 }
 void updatePedestalOwnedTarget(const NativeRouteTarget& target) {
     if(!nativeGameThread() || !armed || active.epoch!=generation() || target.worker!=active.target.worker || target.id!=active.target.id || target.pushControl!=active.target.pushControl || target.pushLocal!=active.target.pushLocal) return;
+    // A worker may return a shape captured before the Native owner changed phase.
+    if(target.pushControl<=2 && target.zone.valid && active.contact!=(target.zone.contactRadius==0)) {
+        nav::requestNavigationScene();return;
+    }
     active.target=target; learnedTouch(active.target);
     if(target.zone.valid && !target.inactive) active.waitingShape=false;
 }
@@ -385,7 +435,7 @@ void updatePedestalInput() {
     const auto logical=pedestalLogicalInput(raw&~active.consent);
     if(logical&0x0fff) { stop("manual native action"); return; }
     if(active.epoch!=generation() || !context() || manual.exchange(false)) { stop("context or manual input"); return; }
-    const auto now=GetTickCount64();
+    const auto now=nowMs();
     if(active.previous && now-active.previous>600) { stop("input interrupted"); return; }
     active.previous=now;
     try {
@@ -395,7 +445,8 @@ void updatePedestalInput() {
         const auto live=pedestalPlan(active.target.pushControl,active.target.pushLocal,snapshot);
         if(distanceXZ(snapshot.position,active.last)>.1) { active.last=snapshot.position; active.progress=now; }
         const auto player=playerPosition();
-        if(distanceXZ(player,active.lastPlayer)>.1) { active.lastPlayer=player; active.progress=now; }
+        if(distanceXZ(player,active.lastPlayer)>.1) { active.lastPlayer=player;if(active.target.pushControl>2) active.progress=now; }
+        if(!monitorApproach(snapshot,player,now)) return;
         if(now-active.progress>15000 && !(active.approaching && !active.owned && !active.started)) {
             const auto waypoint=active.plan.moves[active.segment].goal;
             recordLog("pedestal no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
@@ -419,6 +470,7 @@ void updatePedestalInput() {
             }
             ++active.segment; active.started=active.stopping=active.contact=active.approaching=active.ended=false; injected=0;
             active.requests=active.failures=0;
+            resetApproach();
             freshTarget(snapshot.position);
             active.target.zone.valid=false;
             active.waitingShape=true;
@@ -445,7 +497,7 @@ void updatePedestalInput() {
                     L"Pedestal push keeps stopping after a short move. Walk into the pedestal from the push side by hand.",false,"pedestal-push");
                 stop(moved<.3?"push did not start":"push keeps stopping short"); return;
             }
-            if(moved>=1.5) active.failures=0;
+            if(moved>=1.5) {active.failures=0;resetApproach();}
             // Plan the rest from where the pedestal is now. A push can end
             // past its goal or off the axis, and the plan made at arm time
             // then names the wrong side (in game: "Push south 1.5 steps").

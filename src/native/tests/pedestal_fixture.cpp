@@ -36,6 +36,8 @@ namespace ffx {
 void refreshSwimmingGoal(Entity& target) { target.inactive=true; }
 uintptr_t base=0;
 unsigned epoch=1,starts=0,faces=0;
+uint64_t pedestalTime=1000;
+uint64_t pedestalClock() {return pedestalTime;}
 unsigned fixtureConsent=0x40;
 bool padOwned=false;
 std::atomic<int> scene{0};int dialogue=0;
@@ -46,6 +48,7 @@ std::array<unsigned,16> remap{};
 struct Listener { Handler before,after; };
 std::map<unsigned,std::vector<Listener>> hooks;
 std::vector<std::wstring> spoken;
+std::vector<std::string> approachDiagnostics;
 std::vector<Point> route;
 int __cdecl mode() { return dialogue; }
 uint16_t __cdecl nativeRemap(unsigned,unsigned,uint16_t raw) {
@@ -181,6 +184,7 @@ unsigned frame(unsigned held=0xffffffff) {
 }
 Entity setup(unsigned controlKind,unsigned local,Point p) {
     cancelPedestal(); frame(0); ++epoch; values.clear(); spoken.clear(); route.clear(); walking=false;
+    pedestalTime+=1000;
     enabled=focused=verified=true; battle=menu=console=false; scene=dialogue=0;
     fixtureConsent=controlKind==5 || controlKind==6?0x20:0x40; padOwned=false;inputDeviceMark.store(0);observeInputDevice(false);
     for(unsigned i=0;i<16;++i) remap[i]=i;
@@ -294,6 +298,85 @@ void ruleTests() {
     try { (void)pedestalPlan(1,7,snapshot({},{{0x5c0000cc,1} })); }
     catch(const std::out_of_range&) { missingRejected=true; }
     check(missingRejected,"missing required pedestal binding remains rejected");
+}
+void boundedApproachFixtures() {
+    const Point reset{.2215,-10,144.1042};
+    const auto begin=[&](Point player) {
+        auto target=setup(2,6,reset);values[0x0c00005a]=2;
+        position(playerActor(),player);refreshTargetZone(target,worker(6),1);armPedestal(target,true);frame(0);
+        return target;
+    };
+    // Player movement and repeated route starts must not buy an endless orbit.
+    begin({reset.x+60,reset.y,reset.z});
+    const auto orbitStart=pedestalTime;
+    for(unsigned i=1;i<=300 && capturePedestalNavigationState().armed;++i) {
+        const double angle=i*.08;
+        position(playerActor(),{reset.x+60*std::cos(angle),reset.y,reset.z+60*std::sin(angle)});
+        pedestalTime+=100;if(i%40==0) walking=false;frame(0);
+    }
+    check(!capturePedestalNavigationState().armed && !walking && pedestalTime-orbitStart<=30000,
+        "orbiting reset approach stops and releases input within 30 seconds across replans");
+    const auto requestsAfter=routeRequests,speechAfter=spoken.size();frame(0);frame(0);
+    check(spoken.size()==speechAfter && routeRequests==requestsAfter && !spoken.empty() &&
+        spoken.back()==L"Auto walk stopped: no progress",
+        "timed-out orbit gives one final reason and cannot restart itself");
+
+    begin({reset.x+200,reset.y,reset.z-4});
+    const auto improvingStart=pedestalTime;
+    for(unsigned i=1;i<=300 && capturePedestalNavigationState().armed;++i) {
+        position(playerActor(),{reset.x+200-i*.15,reset.y,reset.z-4});
+        pedestalTime+=100;if(i%40==0) walking=false;frame(0);
+    }
+    check(!capturePedestalNavigationState().armed && pedestalTime-improvingStart==30000 && !walking,
+        "even improving approaches share a hard 30-second deadline across retries");
+
+    begin({reset.x,reset.y,reset.z-40});
+    for(unsigned i=1;i<=150;++i) {
+        // A changing waypoint and continuous sideways oscillation are not contact progress.
+        position(playerActor(),{reset.x+(i%2?3.0:-3.0),reset.y,reset.z-40});
+        pedestalTime+=100;frame(0);
+    }
+    check(!capturePedestalNavigationState().armed && !walking,
+        "sideways movement without final-contact improvement stops after 15 seconds");
+    approachDiagnostics.clear();
+    logCaptureHandler.store([](const LogCapture& packet) noexcept {
+        if(std::strstr(packet.format.data(),"pedestal approach") && packet.formatter) {
+            char text[1024]{};packet.formatter(packet,text,sizeof(text));approachDiagnostics.emplace_back(text);
+        }
+    });
+    begin({reset.x,reset.y,reset.z-40});
+    for(unsigned i=1;i<=30;++i) {
+        position(playerActor(),{reset.x,reset.y,reset.z-40+i*.3});pedestalTime+=100;frame(0);
+    }
+    logCaptureHandler.store(nullptr);
+    check(approachDiagnostics.size()==8 && approachDiagnostics.front().find("elapsed 0 ms")!=std::string::npos &&
+        approachDiagnostics[6].find("elapsed 3000 ms")!=std::string::npos &&
+        approachDiagnostics[7].find("pedestal 0.221 -10.000 144.104")!=std::string::npos &&
+        approachDiagnostics[7].find("along 31.000, across 0.000, radius 4.000")!=std::string::npos,
+        "approach logs copy elapsed time, live geometry, alignment and radius once per second");
+    cancelPedestal();frame(0);
+    std::puts("PASS: pedestal orbit, contact-progress and whole-approach deadline fixtures");
+}
+void liveResetContactFixture() {
+    const Point reset{.2215,-10,144.1042},live{2.2215,-10,145.1042};
+    auto target=setup(2,6,reset);values[0x0c00005a]=2;
+    position(read<uintptr_t>(worker(6)+0x9c),live);
+    position(playerActor(),{live.x,live.y,live.z-4.25});
+    refreshTargetZone(target,worker(6),1);OwnedNavTarget staging;check(captureOwnedNavTarget(target,staging),"copy reset staging shape");
+    armPedestal(target,true);frame(0);
+    check(capturePedestalNavigationState().contact,"south staging at a shifted live reset pedestal enters contact phase");
+    NativeRouteTarget copied;check(pedestalTargetForTest(copied) && distanceXZ(copied.position,live)<.001 &&
+        distanceXZ(copied.zone.center,live)<.001 && !route.empty() &&
+        std::abs(route.back().x-live.x)<.001 && route.back().z<live.z-2,
+        "south reset contact route uses the live actor centre once, not the reset tile or a double offset");
+    updatePedestalOwnedTarget(staging.native);frame(0);
+    check(pedestalTargetForTest(copied) && copied.zone.contactRadius==0 && copied.zone.range>0 && walking,
+        "a delayed staging observation cannot replace the active south contact walk");
+    position(playerActor(),{live.x,live.y,live.z-3.9});disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0x1000 && capturePedestalNavigationState().armed,
+        "centred south-side native contact claims the north push at the reset spot");
+    restore();cancelPedestal();frame(0);
+    std::puts("PASS: live shifted reset-centre south approach and native contact");
 }
 // In-game F25 and F26 (Kilika step 15 and the sphere steps next to it).
 void kilikaWalkFixtures() {
@@ -665,6 +748,6 @@ int main() {
     check(capturePedestalNavigationState().held,"pending route retains explicit held consent");frame(0);check(!capturePedestalNavigationState().armed,"released consent retires a pending route before delayed movement can start");delayRoute=false;
     nativeOwner=false;cancelPedestal();nativeOwner=true;
     check(!pedestalActivePlan(target,heldPlan),"foreign cancellation immediately retires consent without touching Native fields");frame(0);
-    kilikaWalkFixtures();
+    liveResetContactFixture();boundedApproachFixtures();kilikaWalkFixtures();
     std::puts("PASS: all-trial pedestal sides, Space push/native contact lifecycle, remaps and cancellation");
 }

@@ -1,6 +1,18 @@
 # FFX current memory — November4
 
-November16 follow-up addresses the user's step-15 stall report on `0d7166e`
+Latest November16 orbit/south-contact follow-up adds a 30-second whole-approach
+deadline, a 15-second final-contact improvement check, live-centre pairing and
+rejection of delayed staging shapes after contact entry. One-second bounded
+diagnostics record timing, live geometry, alignment and radius. Orbit, shifted
+reset-centre and delayed-shape regressions reproduced before repair; focused
+pedestal fixtures pass. Full native suite exited 0: 84 PASS groups / 3 SKIP groups;
+no-deploy build exited 0. Receipts: `.contact-tests-final.log` and
+`.contact-build-final.log`. Existing compiler/harness warnings remain. Actual
+gameplay/contact timing and audible speech are unverified. No commit, deployment
+or game access occurred or is authorized. See the [current record and prioritized gameplay
+procedure](Docs/features/navigation/index.md#kilika-approach-deadline-and-live-contact-follow-up--november16).
+
+Earlier November16 follow-up addresses the user's step-15 stall report on `0d7166e`
 in the `ffx-wt-mergecheck` worktree. Final push-side steering centres before
 inward contact; progress follows waypoints; the pedestal session owns silent
 stall retries and one final reason. Ordinary live-pedestal clearance remains.

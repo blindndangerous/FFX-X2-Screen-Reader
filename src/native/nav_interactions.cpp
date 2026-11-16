@@ -246,6 +246,8 @@ void refreshTargetZone(Entity& entity,uintptr_t worker,unsigned channels) {
     auto& zone=entity.zone;
     zone={}; zone.worker=entity.worker; zone.shape=1;
     zone.center={read<float>(actor+0xc),read<float>(actor+0x10),read<float>(actor+0x14)};
+    // Staging, contact conversion and subsequent live deltas share this centre.
+    entity.position=zone.center;
     // Native 43D3B0 recomputes +4E8 from these live bounds/scales, then
     // dispatches channel 2 on contact. Stop just outside it for manual pushing.
     zone.contactRadius=radius; zone.height=-1;
