@@ -1,4 +1,19 @@
-# FFX current memory — November4
+# FFX current memory — November16
+
+November16 whole-mod toggle is implemented, uncommitted in `feat/mod-toggle`
+(`ffx-wt-modtoggle`; base `0d7166e`). Ctrl+Shift+F12 toggles the default-On mod
+using one flag, persistent hooks, native-owner cancellation/key handback and
+fresh state arrival. FFX-2 gets the shared toggle listener, not screen reading.
+The standard native suite exits0:84 PASS /3 SKIP (baseline81/3); separate ATEL
+and hook-threading fixtures pass, including full stale receipt recovery and
+controller/speech-pressure replay prevention. Final no-deploy build exits0;
+the final three input fixtures pass after the held-key rearm repair. Existing
+Kilika C4244 and fixture shadow warnings remain. Full changed-file/gate locations
+and receipts: `build/modtoggle-report.txt` (local artifact).
+ATEL-dependent helpers need a fresh observed resource load after re-enable;
+live gameplay, physical key/audio response and FFX-2 remain unverified. No
+commit, deployment, game/probe or Tester Logs access. See the
+[architecture, exact recovery limit and prioritized gameplay procedure](Docs/features/runtime/index.md#whole-mod-toggle--november16).
 
 November16 Kilika Round12 repairs are offline verified in the detached
 `ffx-wt-mergecheck` worktree. Deployed source remains `cd26e6b`; no commit,

@@ -18,7 +18,7 @@ if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" (
     echo ERROR: SDL3 build failed; see the output above.
     exit /b 1
 )
-set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
+if not defined TEST_BUILD set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
 if /I "%~1"=="--review" goto review
@@ -59,6 +59,13 @@ if /I "%~1"=="--startup" goto startup
 if /I "%~1"=="--accessibility" goto accessibility
 if /I "%~1"=="--speech" goto speech
 if /I "%~1"=="--menu-speech" goto menuspeech
+if /I "%~1"=="--atel-resources" goto atelresources
+:modtoggle
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:mod_toggle_fixture.exe "%TEST_SRC%mod_toggle_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+mod_toggle_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--mod-toggle" goto success
 :menuspeech
 cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:menu_speech_fixture.exe "%TEST_SRC%menu_speech_fixture.cpp" "%TEST_SRC%..\battle_lists.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
@@ -78,7 +85,7 @@ if not "%errorlevel%"=="0" goto failed
 if not exist PrismRuntime mkdir PrismRuntime
 cl /nologo /W4 /EHsc /std:c++17 /MT /LD /Fe:PrismRuntime\prism.dll "%TEST_SRC%fake_prism.cpp" /link /DEF:"%TEST_SRC%fake_prism.def"
 if not "%errorlevel%"=="0" goto failed
-cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_SPEECH_WAKE_TEST /Fe:runtime_tests.exe "%TEST_SRC%runtime_tests.cpp" "%TEST_SRC%..\prism_backend.cpp" "%TEST_SRC%..\speech.cpp" "%TEST_SRC%..\log_capture.cpp" "%TEST_SRC%..\speech_capture.cpp" "%TEST_SRC%..\speech_queue.cpp" "%TEST_SRC%..\speech_domains.cpp" "%TEST_SRC%..\log_history.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\settings.cpp" /link user32.lib
+cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_SPEECH_WAKE_TEST /Fe:runtime_tests.exe "%TEST_SRC%runtime_tests.cpp" "%TEST_SRC%..\mod_toggle.cpp" "%TEST_SRC%..\prism_backend.cpp" "%TEST_SRC%..\speech.cpp" "%TEST_SRC%..\log_capture.cpp" "%TEST_SRC%..\speech_capture.cpp" "%TEST_SRC%..\speech_queue.cpp" "%TEST_SRC%..\speech_domains.cpp" "%TEST_SRC%..\log_history.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\settings.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
 runtime_tests.exe
 if not "%errorlevel%"=="0" goto failed
@@ -457,6 +464,11 @@ goto success
 :sdlowner
 call "%~dp0run_sdl_owner_tests.bat"
 exit /b %errorlevel%
+:atelresources
+cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:atel_resources_fixture.exe "%TEST_SRC%atel_resources_fixture.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\navigation_targets.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+atel_resources_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 :success
 popd
 exit /b 0

@@ -5,6 +5,7 @@ namespace ffx {
 void startAutoWalk(bool announce=true);
 unsigned autoWalkRouteFailureRevision();
 void stopAutoWalk();
+void cancelAutoWalk(); // Includes a walk suspended for battle; native owner only.
 // Stops for a lost route. Unlike stopAutoWalk it is not a player command, so a
 // pending battle resume survives; a walk it ends is never resumed.
 void releaseAutoWalk();

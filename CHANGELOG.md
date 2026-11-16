@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added **Ctrl+Shift+F12** to toggle the whole screen reader mod. It starts on each launch; turning it on announces **Screen reader mod on** and re-reads current supported state without backlog, while turning it off says **Screen reader mod off**. When off, speech, cues and assistance stop and normal keys pass to the game. The listener works in FFX-2, but FFX-2 screen reading remains unsupported.
 - Kilika pedestal assistance keeps its push-side alignment and native slope contact bounds. Ordinary walks refresh the movable pedestal obstacle and turn without delayed detour steering or unchecked recovery sidesteps. Resumed walks and repeated approaches avoid duplicate announcements; lost routes retain their real stop reason.
 - The Kilika guide recognizes the reset tile and subsequent push state. Open message boxes prompt Enter instead of asking the player to wait for a scene. Gameplay confirmation remains pending.
 
