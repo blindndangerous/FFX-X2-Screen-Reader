@@ -312,12 +312,7 @@ bool inInteractionZone(const InteractionZone& zone,Point p) { return interaction
 bool inInteractionZone(const NativeInteractionZone& zone,Point p) { return zone.competing.count<=zone.competing.rows.size() && interactionEndpoint(zone,p,false); }
 static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach);
 std::vector<Point> interactionRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
-    auto route=zoneRoute(mesh,player,zone,horizontalApproach);
-    // A pedestal obstacle added for safety never removes a destination.
-    if(route.empty() && (zone.talk || zone.contactRadius>0) && zone.obstacleRadius>0) {
-        auto plain=zone; plain.obstacleRadius=0; route=zoneRoute(mesh,player,plain,horizontalApproach);
-    }
-    return route;
+    return zoneRoute(mesh,player,zone,horizontalApproach);
 }
 static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
     if(!zone.valid || !mesh.events.ready) return {};

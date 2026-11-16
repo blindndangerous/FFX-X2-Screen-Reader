@@ -30,7 +30,7 @@ void contactPedestalFixtures(const Mesh& room) {
     check(keepsClear(toStorage,center,5) && inInteractionZone(list[2].zone,toStorage.back()),
         "a walk past the Kilika pedestal to a storage recess goes around it");
     auto inner=list[1].zone; inner.range=4;
-    check(!interactionRoute(room,{50,0,25},inner).empty(),"a talk zone wholly inside pedestal contact keeps its old route");
+    check(interactionRoute(room,{50,0,25},inner).empty(),"an unreachable talk zone never discards the pedestal keep-out");
     // In-game F26: walking around the Kilika pedestal to its push side
     // touched it five times. Only the last, inward leg may come close.
     InteractionZone staging; staging.valid=true; staging.shape=1; staging.center=center; staging.contactRadius=5; staging.approach={-1,0,0};
