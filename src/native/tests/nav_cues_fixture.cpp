@@ -100,7 +100,7 @@ void pump() {
     updateOwnedNavAudio(sceneFacts,fixtureFloor,live,sceneHeader,L"Fixture push action");
 }
 void fixtureRouteNavAudio(const std::vector<Point>& points,const Entity& target) {
-    fixtureTarget=target; pump(); routeNavAudio(points,target);
+    fixtureTarget=target; pump(); routeNavAudio(points,target,autoWalk);
 }
 void fixtureUpdateNavTarget(const Entity& target) {
     const bool same=target.actor==fixtureTarget.actor && target.worker==fixtureTarget.worker && target.id==fixtureTarget.id &&
@@ -389,5 +389,51 @@ int main(int argc,char**) {
     check(!legAllocations && !legFrees && std::wcslen(copiedLeg.target.name.data())==600 && copiedLeg.target.zone.competing.count==500 &&
         copiedLeg.target.zone.competing[499].worker==499 && copiedLeg.target.zone.competing[499].range==499.25,"long name/all500 competitor facts copied with Native heap0/0");
     std::printf("METRIC actual POD NavLeg1000 warm copies=%0.3fus, Native heap0/0; component fixture only.\n",copiedCost);
+    // A copied in-range pose is provisional while native input is still coasting.
+    fixtureFloor={};fixtureFloor.openPlane=true;autoWalk=true;player={0,0,0};
+    target={};target.name=L"Lower Kilika Sphere recess";target.position={0,0,20};
+    target.zone.valid=target.zone.talk=true;target.zone.shape=3;target.zone.center=target.position;
+    target.zone.width=target.zone.depth=3;target.zone.height=5;
+    fixtureTarget=target;pump();routeNavAudio({player,target.position},target);const auto manualArrival=said.size();
+    player={0,0,20};pump();check(said.size()==manualArrival+1,
+        "a manually followed selection beacon still announces arrival when the Auto walk setting is enabled");
+    player={0,0,0};
+    fixtureRouteNavAudio({player,target.position},target);const auto pendingArrival=said.size();
+    player={0,0,17.1};pump();
+    check(navLeg(leg) && leg.arrived && said.size()==pendingArrival,
+        "ordinary assisted arrival stops input provisionally without announcing an unsettled native pose");
+    const auto superseded=leg.arrivalSerial;
+    fixtureRouteNavAudio({player,target.position},target);check(navLeg(leg),"replacement arrival leg");
+    navArrivalConfirmation.store(superseded);pump();
+    check(said.size()==pendingArrival,"a superseded native arrival token cannot announce a new route");
+    navArrivalConfirmation.store(leg.arrivalSerial);pump();pump();
+    check(said.size()==pendingArrival+1,"settled native arrival confirms one ordinary route announcement");
+    clearNavRoute();pump();navArrivalConfirmation.store(superseded);pump();
+    check(said.size()==pendingArrival+1,"cancellation rejects a late native arrival confirmation");
+    target.worker=35;target.inactive=false;player={0,0,15};
+    fixtureRouteNavAudio({player,target.position},target);player={0,0,17.1};pump();
+    const auto beforeLost=said.size();target.inactive=true;fixtureUpdateNavTarget(target);pump();
+    check(said.size()==beforeLost+1 && said.back()==L"Route lost: destination inactive",
+        "a provisional ordinary arrival still reports one failure if its target becomes inactive before settling");
+    target.inactive=false;player={0,0,15};fixtureRouteNavAudio({player,target.position},target);
+    player={0,0,17.1};pump();check(navLeg(leg),"confirmed route before target motion");
+    const auto beforeMotion=said.size();navArrivalConfirmation.store(leg.arrivalSerial);
+    target.position.x=target.zone.center.x=.2;fixtureUpdateNavTarget(target);pump();
+    check(said.size()==beforeMotion+1 && said.back()==L"Lower Kilika Sphere recess: route destination reached",
+        "a settled native confirmation is consumed before same-target motion can replace its token");
+    player={0,0,15};fixtureRouteNavAudio({player,target.position},target);
+    player={0,0,17.1};pump();check(navLeg(leg),"confirmed route before destination disappears");
+    const auto beforeGone=said.size();navArrivalConfirmation.store(leg.arrivalSerial);
+    updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");
+    check(said.size()==beforeGone+1 && said.back()==L"Lower Kilika Sphere recess: route destination reached",
+        "a settled native arrival completes before a missing-target observation can strand its token");
+    player={0,0,15};fixtureRouteNavAudio({player,target.position},target);
+    player={0,0,17.1};pump();check(navLeg(leg),"unconfirmed route before destination disappears");
+    const auto beforeUnconfirmedGone=said.size();const auto goneSerial=leg.arrivalSerial;
+    sceneFacts.capturedAt=1000;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");
+    sceneFacts.capturedAt=1600;updateOwnedNavAudio(sceneFacts,fixtureFloor,{},sceneHeader,L"");
+    navArrivalConfirmation.store(goneSerial);pump();
+    check(said.size()==beforeUnconfirmedGone+1 && said.back()==L"Route lost: destination gone",
+        "an unconfirmed disappearance reports one failure and rejects a later native confirmation");
     puts("PASS: event-driven route legs, strict endpoints, moving targets, butterfly hazard deltas, depth transitions, route loss, focus and teardown.");
 }

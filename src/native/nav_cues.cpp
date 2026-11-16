@@ -24,7 +24,7 @@ namespace ffx {
 namespace {
 constexpr unsigned Domain=11,Slots=4,PointLimit=65536,Writing=0x80000000u;
 constexpr unsigned MissingObservations=2;constexpr ULONGLONG MissingMs=500;
-struct RouteCapture {OwnedNavTarget target;std::array<Point,PointLimit> points;unsigned count=0,epoch=0,revision=0,collisionSerial=0;};
+struct RouteCapture {OwnedNavTarget target;std::array<Point,PointLimit> points;unsigned count=0,epoch=0,revision=0,collisionSerial=0;bool assisted=false;};
 enum : unsigned {RoutePacket,TargetPacket,CameraPacket};
 struct Packet {unsigned kind=RoutePacket,slot=0,ticket=0;};
 struct CameraCapture {unsigned kind=CameraPacket;nav::CopiedCamera camera;unsigned revision=0,serial=0,audioContext=0,collisionSerial=0,epoch=0;};
@@ -33,6 +33,7 @@ async::AtomicSnapshot<CameraCapture> latestCamera;
 ProcessStorage<std::array<RouteCapture,Slots>> captures;
 std::array<std::atomic<unsigned>,Slots> tickets{};
 std::atomic<unsigned> nextTicket{0},clearRevision{1};
+unsigned nextArrivalSerial=0; // Preparation owner only; never reused by a replan.
 std::atomic<bool> known{false};
 std::atomic<DWORD> preparationOwner{0};
 bool onOwner() {return !nativeGameThread() && preparationOwner.load(std::memory_order_acquire)==GetCurrentThreadId();}
@@ -61,7 +62,7 @@ struct State {
     bool arrived=false,allowed=false,ready=false;
     // Consecutive observations without the route's destination, and when the
     // first of them was captured.
-    unsigned missing=0;ULONGLONG missingSince=0;
+    unsigned missing=0,arrivalSerial=0;ULONGLONG missingSince=0;
     speechq::Header header{};
     nav::CopiedCamera camera;
 } ;
@@ -78,6 +79,7 @@ void publishLeg() {
     auto& s=owned();LegSnapshot p;std::memset(&p,0,sizeof(p));p.revision=s.revision;
     if(s.legs.size()>1 && s.nextLeg<s.legs.size() && !s.destination.empty() && (s.routeEpoch==s.epoch || s.arrived)) {
         p.valid=1;p.leg.start=s.legs[s.nextLeg-1];p.leg.goal=s.legs[s.nextLeg];p.leg.final=s.legs.back();p.leg.epoch=s.epoch;p.leg.arrived=s.arrived;p.leg.collisionSerial=s.routeCollisionSerial;
+        p.leg.arrivalSerial=s.arrivalSerial;
         OwnedNavTarget copied;std::memset(&copied,0,sizeof(copied));if(!captureOwnedNavTarget(s.target,copied)) {publishEmpty();return;}p.leg.target=copied.native;
     }
     publishSnapshot(p);
@@ -99,10 +101,13 @@ bool sameTarget(const Entity& a,const Entity& b) {
     return equal && a.swimReady==b.swimReady && std::abs(a.swimClearance-b.swimClearance)<.1 && a.swimApproach==b.swimApproach &&
         a.inactive==b.inactive && distanceXZ(a.position,b.position)<.1 && std::abs(a.position.y-b.position.y)<.1;
 }
-void setRoute(const std::vector<Point>& points,const Entity& target,bool newRoute=false) {
+void setRoute(const std::vector<Point>& points,const Entity& target,bool newRoute=false,bool assisted=false) {
     reconcile();auto& s=owned();s.epoch=generation();s.legs=points;s.nextLeg=1;s.routeEpoch=s.epoch;s.arrived=false;s.missing=0;
     s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;
-    s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();publishLeg();
+    s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();
+    const bool confirm=(newRoute?assisted:s.arrivalSerial!=0) && target.zone.valid && target.zone.talk && !target.zone.crossing && !target.pushControl && !target.butterfly && !target.swimDepth && !target.swimApproach;
+    s.arrivalSerial=confirm?(++nextArrivalSerial?nextArrivalSerial:++nextArrivalSerial):0;
+    publishLeg();
     if(newRoute) navRouteStopReported=false;
 }
 void advance() {
@@ -133,7 +138,7 @@ void advance() {
         const auto pointRange=setting(Setting::AutoWalk)?1.0:11.13;
         if(s.nextLeg+1==s.legs.size() && (s.target.swimDepth?navigationTargetReached(s.target,s.player):
             (s.target.zone.valid?navigationTargetReached(s.target,s.player):distanceXZ(s.player,goal)<=pointRange) && (horizontal || std::abs(s.player.y-goal.y)<=8))) {
-            s.arrived=true;emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
+            s.arrived=true;
         } else if(!s.target.swimDepth || distanceXZ(s.player,goal)>.1) {
             double pan=0,front=1;
             if(relativeBearing({goal.x-s.player.x,0,goal.z-s.player.z},pan,front)) {audio.beacon=true;audio.pan=static_cast<float>(pan);audio.front=static_cast<float>(front);audio.steps=static_cast<float>(steps);}
@@ -141,7 +146,15 @@ void advance() {
     }
     if(!current()) return;
     publishLeg();publishNavAudio(audio);
-    if(s.arrived && s.routeEpoch) {if(setting(Setting::Beacon) && setting(Setting::Arrival)) navAudioArrival();s.routeEpoch=0;}
+    if(s.arrived && s.routeEpoch && (!s.arrivalSerial || navArrivalConfirmation.load(std::memory_order_acquire)==s.arrivalSerial)) {
+        emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
+        if(setting(Setting::Beacon) && setting(Setting::Arrival)) navAudioArrival();s.routeEpoch=0;
+    }
+}
+void finishConfirmedArrival() {
+    const auto& s=owned();
+    if(s.arrived && s.routeEpoch && s.arrivalSerial && s.routeCollisionSerial==s.collisionSerial &&
+        navArrivalConfirmation.load(std::memory_order_acquire)==s.arrivalSerial) advance();
 }
 void process(const speechq::Header& header,const std::wstring& bytes) {
     preparationOwner.store(GetCurrentThreadId(),std::memory_order_release);
@@ -170,7 +183,7 @@ void process(const speechq::Header& header,const std::wstring& bytes) {
     struct Return {unsigned slot,ticket;~Return(){release(slot,ticket);}} returned{packet.slot,packet.ticket};
     const auto& c=captures.get()[packet.slot];if(c.epoch!=generation() || c.revision!=clearRevision.load(std::memory_order_acquire) || c.collisionSerial!=navCollisionSerial()) return;
     reconcile();auto& s=owned();s.header=header;Entity target;if(!restoreOwnedNavTarget(c.target,target)) return;
-    if(packet.kind==RoutePacket) {std::vector<Point> points(c.points.begin(),c.points.begin()+c.count);setRoute(points,target,true);}
+    if(packet.kind==RoutePacket) {std::vector<Point> points(c.points.begin(),c.points.begin()+c.count);setRoute(points,target,true,c.assisted);}
     else if(packet.kind==TargetPacket) updateNavTarget(target);
     if(s.ready) advance();else nav::requestNavigationScene();
 }
@@ -180,11 +193,12 @@ void maintenance() {
         const auto& c=captures.get()[slot];if(c.epoch!=generation() || c.revision!=clearRevision.load(std::memory_order_acquire)) release(slot,token);}
 }
 void reset(unsigned) {maintenance();if(state.ready()) {clearOwned();owned().collision={};owned().live.clear();owned().ready=false;}}
-bool captureRoute(unsigned kind,const std::vector<Point>& points,const Entity& target) {
+bool captureRoute(unsigned kind,const std::vector<Point>& points,const Entity& target,bool assisted=false) {
     if(!captures.ready() || points.size()>PointLimit) return false;
     unsigned slot=Slots,token=(nextTicket.fetch_add(1)+1)&~Writing;if(!token) token=(nextTicket.fetch_add(1)+1)&~Writing;
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire)) {slot=i;break;}}
     if(slot==Slots) return false;auto& c=captures.get()[slot];c.epoch=generation();c.revision=clearRevision.load(std::memory_order_acquire);c.count=static_cast<unsigned>(points.size());c.collisionSerial=navCollisionSerial();
+    c.assisted=assisted;
     if(!captureOwnedNavTarget(target,c.target)) {release(slot,token|Writing);return false;}
     std::copy(points.begin(),points.end(),c.points.begin());tickets[slot].store(token,std::memory_order_release);
     if(!speechq::captureDomain(Domain,Packet{kind,slot,token},c.epoch)) {release(slot,token);return false;}return true;
@@ -209,7 +223,8 @@ void clearNavRoute() {navRouteStopReported=true;clearRevision.fetch_add(1,std::m
 void loseNavRoute(const wchar_t* reason) {
     // A pending battle resume speaks its own outcome ("not found" when the
     // destination is really gone), so a route lost while it waits stays silent.
-    const bool announce=onOwner() && current() && known.load(std::memory_order_acquire) && !owned().arrived && !autoWalkResumePending() && claimNavRouteStopSpeech();
+    const bool announce=onOwner() && current() && known.load(std::memory_order_acquire) &&
+        !(owned().arrived && !owned().routeEpoch) && !autoWalkResumePending() && claimNavRouteStopSpeech();
     releaseAutoWalk();clearNavRoute();
     if(announce) emit(L"Route lost: "+std::wstring(reason),"navigation-route-lost");
 }
@@ -229,17 +244,20 @@ void captureNavCamera() {
 }
 void resetNavAudio() {pauseNavAudio();clearNavRoute();publishPositionalCue(0,0,false,generation());}
 void refreshNavCollision() {nav::requestNavigationScene();captureWallCues();}
-void routeNavAudio(const std::vector<Point>& points,const Entity& target) {
-    if(!onOwner()) {if(!captureRoute(RoutePacket,points,target)) output(L"Navigation route is busy. Try again after it recovers.",false,"navigation-pressure");nav::requestNavigationScene();return;}
-    setRoute(points,target,true);if(owned().ready) advance();
+void routeNavAudio(const std::vector<Point>& points,const Entity& target) {routeNavAudio(points,target,false);}
+void routeNavAudio(const std::vector<Point>& points,const Entity& target,bool assisted) {
+    if(!onOwner()) {if(!captureRoute(RoutePacket,points,target,assisted)) output(L"Navigation route is busy. Try again after it recovers.",false,"navigation-pressure");nav::requestNavigationScene();return;}
+    setRoute(points,target,true,assisted);if(owned().ready) advance();
 }
 void updateNavTarget(const Entity& target) {
     if(!onOwner()) {if(!captureRoute(TargetPacket,{},target)) output(L"Navigation updates are busy. Updates resume when it recovers.",false,"navigation-pressure");return;}
-    reconcile();auto& s=owned();if(s.routeEpoch!=s.epoch || target.actor!=s.target.actor || target.worker!=s.target.worker || target.id!=s.target.id || target.pushControl!=s.target.pushControl || target.pushLocal!=s.target.pushLocal || sameTarget(s.target,target)) return;
+    reconcile();auto& s=owned();
+    finishConfirmedArrival();
+    if(s.routeEpoch!=s.epoch || target.actor!=s.target.actor || target.worker!=s.target.worker || target.id!=s.target.id || target.pushControl!=s.target.pushControl || target.pushLocal!=s.target.pushLocal || sameTarget(s.target,target)) return;
     s.target=target;if(target.inactive) {loseNavRoute(L"destination inactive");return;}
     const auto route=navigationRouteOwned(s.collision,s.player,target,s.live);
     if(route.empty()) {loseNavRoute(L"destination outside the connected floor");}
-    else {s.legs=route;s.nextLeg=1;s.arrived=false;s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;publishLeg();}
+    else setRoute(route,target);
 }
 void updateNavAudio(Point,bool) {nav::requestNavigationScene();captureWallCues();}
 void updateOwnedNavAudio(const nav::Scene& observation,const Mesh& mesh,const std::vector<Entity>& targets,const speechq::Header& header,const std::wstring& pedestal) {
@@ -247,6 +265,7 @@ void updateOwnedNavAudio(const nav::Scene& observation,const Mesh& mesh,const st
     if(nativeGameThread()) return;preparationOwner.store(GetCurrentThreadId(),std::memory_order_release);reconcile();auto& s=owned();s.epoch=observation.epoch;s.revision=clearRevision.load(std::memory_order_acquire);s.player=observation.player;s.audioContext=observation.audioContext;s.allowed=observation.allowed;s.ready=true;s.header=header;s.pedestal=pedestal;
     s.collisionSerial=observation.collisionSerial;s.copiedCollision=observation.geometry.collision;
     s.collision=mesh;s.live=targets;s.camera={observation.forward,observation.right,observation.cameraValid};nav::CameraScope camera(observation.forward,observation.right,observation.cameraValid);
+    finishConfirmedArrival();
     if(s.routeEpoch==s.epoch) {
         const auto target=std::find_if(targets.begin(),targets.end(),[&](const Entity& e) {return e.actor==s.target.actor && e.worker==s.target.worker && e.id==s.target.id && e.pushControl==s.target.pushControl && e.pushLocal==s.target.pushLocal;});
         // Guide point routes have no entity owner; they retain their copied goal.

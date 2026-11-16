@@ -64,6 +64,8 @@ std::wstring pedestalInstruction(const Entity&);
 bool inInteractionZone(const InteractionZone&,Point);
 bool inInteractionZone(const NativeInteractionZone&,Point);
 std::vector<Point> interactionRoute(const Mesh&,Point,const InteractionZone&,bool horizontalApproach=false);
+// Owned failure evidence only; bounded rows, no native reads or speech.
+std::vector<std::string> interactionRouteDiagnostics(const Mesh&,Point,const Entity&,const std::vector<Entity>&);
 // Besaid and Kilika pedestals start their push script on body contact. Give
 // every other target's zone that pedestal as an obstacle to walk around.
 void avoidContactPedestals(std::vector<Entity>&);

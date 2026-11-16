@@ -16,9 +16,12 @@ inline unsigned navCollisionSerial() noexcept {return navCollisionRevision.load(
 // Native route failures and their later worker retirement share one announcement.
 inline std::atomic<bool> navRouteStopReported{false};
 inline bool claimNavRouteStopSpeech() noexcept {return !navRouteStopReported.exchange(true,std::memory_order_acq_rel);}
+// Native publishes only the settled ordinary-interaction route token. The
+// preparation owner checks it before emitting arrival speech and audio.
+inline std::atomic<unsigned> navArrivalConfirmation{0};
 struct NavAudioState {unsigned contextSerial=navAudioContextSerial(); float pan=0,front=1,steps=0; unsigned walls=0; bool beacon=false,active=false; };
 struct NavLeg { Point start,goal,final; NativeRouteTarget target; unsigned epoch=0; bool arrived=false;
-    unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false; };
+    unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false;unsigned arrivalSerial=0; };
 bool navLeg(NavLeg&);
 void publishNavAudio(const NavAudioState&);
 void pauseNavAudio();
@@ -38,6 +41,7 @@ void navAudioTimingBeep(float frequency,unsigned epoch,Setting gate);
 void navAudioCancelGagazetBeep();
 void navAudioCancelOverdriveBeep();
 void routeNavAudio(const std::vector<Point>&,const Entity&);
+void routeNavAudio(const std::vector<Point>&,const Entity&,bool assisted);
 void updateNavAudio(Point,bool moving);
 void resetNavAudio();
 void clearNavRoute();

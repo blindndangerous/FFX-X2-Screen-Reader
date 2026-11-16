@@ -46,6 +46,7 @@ if /I "%~1"=="--minigames" goto minigames
 if /I "%~1"=="--minigame-completion" goto minigamecompletion
 if /I "%~1"=="--navigation-audio" goto navigationaudio
 if /I "%~1"=="--navigation-cues" goto navigationcues
+if /I "%~1"=="--navigation-observations" goto navigationcues
 if /I "%~1"=="--navigation-geometry" goto navigationgeometry
 if /I "%~1"=="--sin-routes" goto sinroutes
 if /I "%~1"=="--sin-later-maps" goto sinlatermaps
@@ -253,6 +254,11 @@ if not "%errorlevel%"=="0" goto failed
 nav_audio_fixture.exe
 if not "%errorlevel%"=="0" goto failed
 :navigationcues
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:navigation_observations_fixture.exe "%TEST_SRC%navigation_observations_fixture.cpp" "%TEST_SRC%..\navigation_observations.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+navigation_observations_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--navigation-observations" goto success
 cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:nav_cues_fixture.exe "%TEST_SRC%nav_cues_fixture.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\owned_retirement.cpp"
 if not "%errorlevel%"=="0" goto failed
 nav_cues_fixture.exe

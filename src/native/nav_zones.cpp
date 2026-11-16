@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <queue>
+#include <cstdio>
 namespace ffx {
 namespace {
 std::vector<Point> crossWaterRoute(const Mesh&,Point,const InteractionZone&,bool);
@@ -309,14 +310,66 @@ void avoidContactPedestals(Entity& e,const std::vector<Entity>& entities) {
     // Push/contact walks own their deliberate entry. Ordinary routes refresh
     // the obstacle even when their copied destination already has a keep-out.
     if(e.pushControl || !e.zone.valid || e.zone.contactRadius>0) return;
+    // Ordinary targets only acquire this keep-out from the live contact row.
+    // Retire it when that row disappears or its native contact is disabled.
+    e.zone.obstacle={};e.zone.obstacleRadius=0;
     for(const auto& pedestal:entities) {
-        if(pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
+        if(pedestal.inactive || pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
             // Push routes keep their own contact staging and obstacles.
             e.zone.obstacle=pedestal.zone.center; e.zone.obstacleRadius=std::max(pedestal.zone.contactRadius,pedestal.zone.obstacleRadius);
     }
 }
 bool inInteractionZone(const InteractionZone& zone,Point p) { return interactionEndpoint(zone,p,false); }
 bool inInteractionZone(const NativeInteractionZone& zone,Point p) { return zone.competing.count<=zone.competing.rows.size() && interactionEndpoint(zone,p,false); }
+std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point player,const Entity& target,const std::vector<Entity>& entities) {
+    auto current=target;avoidContactPedestals(current,entities);const auto& zone=current.zone;
+    std::vector<int> components(mesh.triangles.size(),-1),pending;
+    int component=0;
+    const auto walkable=[](const Triangle& t) {return t.valid && (t.collision==0 || t.collision==2);};
+    for(unsigned i=0;i<mesh.triangles.size();++i) {
+        nav::checkComputation();if(components[i]>=0 || !walkable(mesh.triangles[i])) continue;
+        components[i]=component;pending={static_cast<int>(i)};
+        while(!pending.empty()) {
+            nav::checkComputation();const auto at=pending.back();pending.pop_back();
+            for(int next:mesh.triangles[at].neighbours) {
+                if(next<0 || static_cast<size_t>(next)>=components.size() || components[next]>=0 || !walkable(mesh.triangles[next])) continue;
+                Point portal;if(!floorPortal(mesh.triangles[at],mesh.triangles[next],portal)) continue;
+                components[next]=component;pending.push_back(next);
+            }
+        }
+        ++component;
+    }
+    const auto floor=findTriangle(mesh,player);
+    const auto id=[&](int polygon) {return polygon>=0 && static_cast<size_t>(polygon)<components.size()?components[polygon]:-1;};
+    std::vector<std::string> rows;char line[512];
+    std::snprintf(line,sizeof(line),"interaction-route-failure worker=%d player-floor=%d component=%d native-floor=%d player=%.3f,%.3f,%.3f floors=%zu components=%d events-ready=%u directed-events=%u",
+        target.worker,floor,id(floor),mesh.playerTriangle,player.x,player.y,player.z,mesh.triangles.size(),component,mesh.events.ready,mesh.events.count);rows.emplace_back(line);
+    std::snprintf(line,sizeof(line),"interaction-zone shape=%u center=%.3f,%.3f,%.3f range=%.3f height=%.3f width=%.3f depth=%.3f angle=%.3f competitors=%zu active-obstacles=%u obstacle=%.3f,%.3f,%.3f radius=%.3f",
+        zone.shape,zone.center.x,zone.center.y,zone.center.z,zone.range,zone.height,zone.width,zone.depth,zone.angle,zone.competing.size(),zone.obstacleRadius>0?1u:0u,zone.obstacle.x,zone.obstacle.y,zone.obstacle.z,zone.obstacleRadius);rows.emplace_back(line);
+    const auto anchors=interactionAnchors(zone,player);unsigned goals=0,shown=0;
+    for(unsigned i=0;i<mesh.triangles.size();++i) {
+        nav::checkComputation();const auto& triangle=mesh.triangles[i];if(!triangle.valid) continue;
+        bool intersects=false,eligible=false;
+        for(const auto anchor:anchors) {
+            auto p=onFloor(triangle,anchor);if(mesh.fixedHeight) p.y=player.y;
+            if(zone.crossing && zone.shape==2?lineEndpoint(zone,p,mesh.fixedHeight):insideShape(zone,p,true,mesh.fixedHeight)) intersects=true;
+            if(zone.crossing && zone.shape==2?lineEndpoint(zone,p,mesh.fixedHeight):interactionEndpoint(zone,p,mesh.fixedHeight)) eligible=true;
+        }
+        if(!intersects) continue;++goals;if(shown++>=64) continue;
+        std::snprintf(line,sizeof(line),"zone-polygon=%u component=%d collision=%u group=%u eligible=%u player-component=%u",
+            i,components[i],triangle.collision,triangle.collisionGroup,eligible?1u:0u,id(floor)>=0 && components[i]==id(floor)?1u:0u);rows.emplace_back(line);
+    }
+    std::snprintf(line,sizeof(line),"zone-polygons=%u shown=%u",goals,std::min(goals,64u));rows.emplace_back(line);
+    unsigned sources=0;
+    for(const auto& pedestal:entities) {
+        nav::checkComputation();if(pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
+        if(sources++>=16) continue;
+        std::snprintf(line,sizeof(line),"contact-pedestal worker=%d inactive=%u center=%.3f,%.3f,%.3f radius=%.3f min-y=%.3f max-y=%.3f",
+            pedestal.worker,pedestal.inactive?1u:0u,pedestal.zone.center.x,pedestal.zone.center.y,pedestal.zone.center.z,pedestal.zone.contactRadius,pedestal.zone.contactMinY,pedestal.zone.contactMaxY);rows.emplace_back(line);
+    }
+    if(sources>16) rows.emplace_back("contact-pedestals truncated after 16 rows");
+    return rows;
+}
 static std::vector<Point> zoneRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach);
 std::vector<Point> interactionRoute(const Mesh& mesh,Point player,const InteractionZone& zone,bool horizontalApproach) {
     return zoneRoute(mesh,player,zone,horizontalApproach);

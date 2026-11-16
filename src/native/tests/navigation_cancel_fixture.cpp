@@ -121,6 +121,76 @@ int main() {
         stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
     }
     std::puts("PASS: production pedestal detours and live step-15 loop coordinates reach aligned contact across six headings, four strides and 33/198 ms observations.");
+    // A lower-recess observation can enter the zone before native movement
+    // settles. Exercise the real walker/cues handshake, including failed entry.
+    unsigned arrivalCases=0;uint64_t longestArrival=0;
+    for(double speed:{10.0,50.0}) for(unsigned frameMs:{17u,33u})
+    for(unsigned latency:{1u,2u}) for(bool warm:{false,true}) for(bool blocked:{false,true}) {
+        begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+        player={0,0,16.8};target={};target.worker=35;target.name=L"Lower Kilika Sphere recess";
+        target.position={0,0,20};target.zone.valid=target.zone.talk=true;
+        target.zone.shape=3;target.zone.center=target.position;
+        target.zone.width=target.zone.depth=3;target.zone.height=5;
+        observation.epoch=epoch;observation.allowed=true;observation.collisionSerial=navCollisionSerial();
+        observation.audioContext=navAudioContextSerial();observation.cameraValid=true;observation.forward=forward;
+        speechq::Header header{};header.generation=epoch;
+        const auto publish=[&] {
+            nativeOwner=false;observation.player=player;
+            updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;
+        };
+        publish();nativeOwner=false;routeNavAudio({player,{0,0,17.5}},target,true);nativeOwner=true;
+        startAutoWalk(false);speech.clear();
+        player={0,0,17.1};publish();NavLeg current;
+        check(navLeg(current) && current.arrived && speech.empty(),"transient lower-recess entry has no premature success speech");
+        player={0,0,16.8};std::array<unsigned,3> pending{};std::array<double,4> ramps{};
+        if(warm) {pending.fill(4);ramps[2]=256;}
+        const auto began=clockValue;
+        for(unsigned frame=0;frame<300 && autoWalkActive();++frame) {
+            clockValue+=frameMs;updateAutoWalk();const auto keys=keyboard();
+            const unsigned bits=(keys[0xc8]?1u:0)|(keys[0xcb]?2u:0)|(keys[0xd0]?4u:0)|(keys[0xcd]?8u:0);
+            const auto consumed=pending[0];
+            for(unsigned i=0;i+1<latency;++i) pending[i]=pending[i+1];pending[latency-1]=bits;
+            for(unsigned i=0;i<4;++i) ramps[i]=std::clamp(ramps[i]+(consumed&(1u<<i)?32:-32),0.0,256.0);
+            const auto x=ramps[3]-ramps[1],z=ramps[0]-ramps[2],length=std::hypot(x,z);
+            if(!blocked && length>=48) {
+                const auto scale=std::min(1.0,length/256)*speed*frameMs/1000;
+                player.x+=scale*x/length;player.z+=scale*z/length;
+            }
+            publish();
+        }
+        publish();
+        check(!autoWalkActive() && speech.size()==1,"ordinary lower-recess arrival has one final outcome");
+        if(blocked) check(speech.back()==L"Auto walk stopped: not in interaction range",
+            "failed lower-recess correction emits failure without a preceding arrival");
+        else check(inInteractionZone(target.zone,player) && speech.back()==L"Lower Kilika Sphere recess: route destination reached",
+            "successful lower-recess correction settles inside the zone before its sole arrival");
+        if(blocked) {target.inactive=true;publish();check(speech.size()==1,
+            "worker invalidation after a native arrival failure cannot repeat the failure");}
+        check(clockValue-began<=2500,"ordinary arrival correction has a bounded whole recovery and settle time");
+        longestArrival=std::max(longestArrival,clockValue-began);++arrivalCases;
+    }
+    std::printf("PASS: %u ordinary arrival ramp cases, cold/warm, 17/33ms, one/two-frame pipeline and blocked recovery; longest simulated recovery %llums.\n",arrivalCases,static_cast<unsigned long long>(longestArrival));
+    // Replans within one walk cannot restart settlement indefinitely. Exact
+    // coincidence also needs no turn when the native facing setter declines.
+    for(bool moving:{false,true}) {
+        begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+        player={0,0,20};target={};target.worker=35;target.name=L"Lower Kilika Sphere recess";
+        target.position=target.zone.center=player;target.zone.valid=target.zone.talk=true;
+        target.zone.shape=3;target.zone.width=target.zone.depth=3;target.zone.height=5;
+        observation.epoch=epoch;observation.allowed=true;observation.collisionSerial=navCollisionSerial();
+        observation.audioContext=navAudioContextSerial();speechq::Header header{};header.generation=epoch;
+        const auto publish=[&] {nativeOwner=false;observation.player=player;updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;};
+        publish();nativeOwner=false;routeNavAudio({player,player},target,true);nativeOwner=true;
+        startAutoWalk(false);speech.clear();faceResult=moving;
+        for(unsigned frame=0;frame<40 && autoWalkActive();++frame) {
+            if(moving) target.position.x=target.zone.center.x=frame%2?.2:-.2;
+            publish();clockValue+=17;updateAutoWalk();
+        }
+        publish();faceResult=true;
+        check(!autoWalkActive() && speech.size()==1 && speech.back()==L"Lower Kilika Sphere recess: route destination reached",
+            "same-walk moving-target tokens and exact-centre facing refusal each finish with one settled arrival");
+    }
+    nativeOwner=false;clearNavRoute();nativeOwner=true;
     VirtualFree(reinterpret_cast<void*>(memory),0,MEM_RELEASE);
     std::puts("PASS: production route-clear/Auto walk interleaving stays silent for native and worker cancellation.");
 }

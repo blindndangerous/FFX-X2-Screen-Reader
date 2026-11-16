@@ -267,6 +267,7 @@ void navAudioTimingBeep(float frequency,unsigned,Setting gate) {check(gate==Sett
 Mesh readMesh() { return {}; }
 void resetNavAudio() {}
 void routeNavAudio(const std::vector<Point>&,const Entity&) {}
+void routeNavAudio(const std::vector<Point>& points,const Entity& target,bool) {routeNavAudio(points,target);}
 Point playerPosition() { return fixturePlayer; }
 bool pedestalActiveCrossing(const Entity&) { return false; }
 bool pedestalActiveContact(const Entity&) { return false; }

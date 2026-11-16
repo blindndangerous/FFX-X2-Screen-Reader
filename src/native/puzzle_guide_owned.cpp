@@ -144,7 +144,7 @@ std::wstring path(const nav::Scene& observation,const Mesh& mesh,const std::vect
     if(mesh.triangles.empty() && !mesh.openPlane) return L"The current collision map is unavailable. Read the puzzle step or use the pathfinder.";
     const auto points=navigationRouteOwned(mesh,observation.player,target,entities);
     if(points.empty()) return platform?L"No walking path to that platform in the current map state. Use its lift, pedestal, or rail control first.":L"No walking path in the current map state. Complete the preceding sphere or platform action first.";
-    routeNavAudio(points,target);
+    routeNavAudio(points,target,setting(Setting::AutoWalk)!=0);
     if(setting(Setting::AutoWalk)) {
         const bool reached=target.zone.valid && inInteractionZone(target.zone,observation.player);
         const auto kind=target.pushControl?reached?nav::Intent::ArmAndFace:nav::Intent::ArmAndStart:nav::Intent::Start;

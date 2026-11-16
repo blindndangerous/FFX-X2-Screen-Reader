@@ -131,6 +131,7 @@ void refreshNavCollision() {}
 bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
 #endif
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
+void routeNavAudio(const std::vector<Point>& points,const Entity& target,bool) {routeNavAudio(points,target);}
 // Semantic immediate handback adapter: production scheduling/data-age is
 // exercised separately by navigation_service_fixture. This host only preserves
 // original trial input/PC/consent cases using the real pure routing algorithm.

@@ -17,10 +17,12 @@ std::atomic<QueryConsumer> queryConsumer{nullptr};std::atomic<SceneConsumer> sce
 std::atomic<bool> started{false},waiting{false};
 // This field belongs to the native capture owner, never the preparation owner.
 unsigned lastCaptured=0,lastRevision=0;
+unsigned pressureRevision=0;
 bool pressure=false,captureUnavailable=false;
 struct Packet {unsigned kind=0,slot=0,ticket=0;QueryObservation query;};
 unsigned nonzero(std::atomic<unsigned>& counter) {const auto next=counter.fetch_add(1,std::memory_order_acq_rel)+1;return next?next:counter.fetch_add(1,std::memory_order_acq_rel)+1;}
 void release(unsigned slot,unsigned ticket) {if(slot<Slots) tickets[slot].compare_exchange_strong(ticket,0,std::memory_order_release,std::memory_order_relaxed);}
+bool sceneSlotsDrained() {for(const auto& ticket:tickets) if(ticket.load(std::memory_order_acquire)) return false;return true;}
 void process(const speechq::Header& header,const std::wstring& owned) {
     if(owned.size()*sizeof(wchar_t)!=sizeof(Packet)) return;
     Packet p;std::memcpy(&p,owned.data(),sizeof(p));
@@ -65,6 +67,7 @@ bool submitNavigationQuery(Query query,bool shift,unsigned policyRevision,unsign
 bool captureRequestedNavigationScene(bool geometry,bool changed) {
     if(!nativeGameThread() || !started.load(std::memory_order_acquire)) return false;
     const auto want=requested.load(std::memory_order_acquire),currentRevision=revision.load(std::memory_order_acquire);
+    if(pressure && (pressureRevision!=currentRevision || sceneSlotsDrained())) pressure=false;
     if(!want && !lastRevision) return false;
     if(!changed && want==lastCaptured && currentRevision==lastRevision) return false;
     // Field facts/getters are unavailable while a native battle/menu/resource
@@ -72,7 +75,7 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
     if(scene || inBattle() || !nativeReaderResourcesReady()) {lastCaptured=want;lastRevision=currentRevision;return false;}
     unsigned slot=Slots,token=nonzero(nextTicket)&~Writing;if(!token) token=nonzero(nextTicket)&~Writing;
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire,std::memory_order_relaxed)) {slot=i;break;}}
-    if(slot==Slots) {if(!pressure) output(L"Navigation data is busy. Updates resume when it recovers.",false,"navigation-pressure");pressure=true;return false;}
+    if(slot==Slots) {if(!pressure) {output(L"Navigation data is busy. Updates resume when it recovers.",false,"navigation-pressure");pressure=true;pressureRevision=currentRevision;}return false;}
     auto& frame=frames.get()[slot];frame.requested=want;frame.revision=currentRevision;frame.capturedAt=GetTickCount64();
     if(!captureNavigationScene(frame.scene,currentRevision,geometry) || frame.scene.epoch!=generation() || currentRevision!=revision.load(std::memory_order_acquire)) {
         release(slot,token|Writing);
@@ -87,7 +90,7 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
     tickets[slot].store(token,std::memory_order_release);
     Packet p;p.kind=1;p.slot=slot;p.ticket=token;
     if(!speechq::captureDomain(Domain,p,frame.scene.epoch)) {release(slot,token);return false;}
-    lastCaptured=want;lastRevision=currentRevision;pressure=captureUnavailable=false;return true;
+    lastCaptured=want;lastRevision=currentRevision;captureUnavailable=false;return true;
 }
 void navigationWaitingForData(bool value) {waiting.store(value,std::memory_order_release);}
 bool navigationDataPending() {return waiting.load(std::memory_order_acquire);}

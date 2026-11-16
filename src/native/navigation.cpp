@@ -211,8 +211,11 @@ void pathfind(const Pending& event,bool assist=false) {
     const int start=findTriangle(s.mesh,player),end=target.zone.valid?start:findTriangle(s.mesh,target.position);
     if(start<0 || end<0) {resetNavAudio();emit(event,label(target)+(start<0?L": player is outside the mapped floor":L": destination is outside the mapped floor"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;}
     const auto points=navigationRouteOwned(s.mesh,player,target,s.entities);
-    if(points.empty()) {resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;}
-    routeNavAudio(points,target);
+    if(points.empty()) {
+        if(target.zone.valid) for(const auto& row:interactionRouteDiagnostics(s.mesh,player,target,s.entities)) recordLog("%s",row.c_str());
+        resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;
+    }
+    routeNavAudio(points,target,setting(Setting::AutoWalk) && !target.inactive);
     if(!assist && target.inactive && setting(Setting::AutoWalk)) {
         recordLog("auto walk refused: destination inactive worker=%d id=%u",target.worker,target.id);
         emit(event,nav::inactiveRouteText(label(target),routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0)),"navigation-action-refused");return;

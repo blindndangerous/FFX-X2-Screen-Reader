@@ -47,31 +47,40 @@ bool stopAnnounced=false;
 // values below 48 do not move. Neutral must drain eight frames plus the
 // keyboard/controller publication pipeline before another precision pulse.
 constexpr unsigned PedestalDrainFrames=10;
-struct Precision {bool active=false;unsigned drain=0,pulse=0,bits=0;double stride=0;Point seen,goal;} precision;
+struct Precision {bool active=false;unsigned drain=0,pulse=0,bits=0,sampleFrames=0;double stride=0,fullStride=0;Point seen,goal,sampleOrigin;} precision;
 struct InputTrace {bool active=false;uint64_t at=0,dt=0,logged=0;Point target,world;} inputTrace;
 uint64_t nowMs();
-unsigned precisionInput(unsigned bits,const NavLeg& leg,Point player) {
+unsigned precisionInput(unsigned bits,const NavLeg& leg,Point player,bool ordinaryArrival=false) {
     const auto& zone=leg.target.zone;const auto side=zone.approach;
     const auto across=[&](Point p) {return (p.x-zone.center.x)*side.z-(p.z-zone.center.z)*side.x;};
     const bool axial=zone.valid && distanceXZ(side,{})>.9 && std::abs(across(leg.goal))<.01 && std::abs(across(leg.final))<.01;
-    if(leg.target.pushControl<1 || leg.target.pushControl>2 || !axial) {precision.active=false;return bits;}
+    if(!ordinaryArrival && (leg.target.pushControl<1 || leg.target.pushControl>2 || !axial)) {precision.active=false;return bits;}
     const auto distance=distanceXZ(player,leg.goal);
     // A cold start can inherit native momentum before we observe one stride.
     if(!precision.active && distance>std::max(11.13,1+PedestalDrainFrames*precision.stride)) return bits;
     if(!precision.active || distanceXZ(precision.goal,leg.goal)>.01) {
-        precision.active=true;precision.goal=leg.goal;precision.drain=PedestalDrainFrames;precision.pulse=0;
+        precision.active=true;precision.goal=leg.goal;precision.drain=PedestalDrainFrames;precision.pulse=0;precision.sampleFrames=0;precision.fullStride=0;
     }
     if(precision.pulse) {
         if(bits==precision.bits) {--precision.pulse;return bits;}
-        precision.pulse=0;precision.drain=PedestalDrainFrames;
+        precision.pulse=0;precision.drain=PedestalDrainFrames;precision.sampleFrames=0;
     }
     if(precision.drain) {--precision.drain;return 0;}
+    // Ordinary corrections measure the complete pulse and coast; a maximum
+    // partial frame alone made their short recovery window mostly neutral.
+    if(ordinaryArrival && precision.sampleFrames) {
+        const double travel=distanceXZ(player,precision.sampleOrigin);const auto n=precision.sampleFrames;
+        if(travel>.001) precision.fullStride=std::max(precision.stride,travel*8/(n*n-2));
+        precision.sampleFrames=0;
+    }
+    if(ordinaryArrival && bits!=precision.bits) precision.fullStride=0;
     // A two-frame pulse first exceeds native deadzone (64/256). Cardinal
     // pulses have total rise+coast displacement (n*n-2)/8 full-speed frames.
     // Four times the largest observed stride bounds a partly ramped sample.
-    const auto stride=std::max(.01,4*precision.stride);
+    const auto stride=std::max(.01,ordinaryArrival && precision.fullStride>0?precision.fullStride:4*precision.stride);
     unsigned frames=2;
-    while(precision.stride>.001 && frames<8 && ((frames+1)*(frames+1)-2)*stride/8<std::max(0.0,distance-.5)) ++frames;
+    while(precision.stride>.001 && frames<8 && ((frames+1)*(frames+1)-2)*stride/8<std::max(0.0,distance-(ordinaryArrival?.1:.5))) ++frames;
+    if(ordinaryArrival) {precision.sampleOrigin=player;precision.sampleFrames=frames;}
     precision.bits=bits;precision.pulse=frames-1;precision.drain=PedestalDrainFrames;
     return bits;
 }
@@ -150,8 +159,11 @@ bool safe() {return !unsafeReason();}
 // turn can be lost while the character is still moving). Pedestals are never walked into: that
 // would push them. An arrival that never gets inside the zone is reported, not ended as reached.
 constexpr uint64_t ArrivalHomeMs=1500,ArrivalBlockedMs=300,ArrivalSettleMs=300;
+// At 33ms with two-frame input latency, flush/calibration/correction can take
+// 1716ms. Ordinary interactions keep a separate two-second recovery budget.
+constexpr uint64_t InteractionHomeMs=2000;
 constexpr double ArrivalHomeUnits=11.13,ArrivalCloseUnits=2.0;
-struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0;Point origin,seen;} arrival;
+struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0,began=0;unsigned frames=0;Point origin,seen;} arrival;
 void announceStop(const wchar_t* spokenReason) {
     if(stopAnnounced) return;
     stopAnnounced=true;
@@ -249,7 +261,7 @@ void startAutoWalk(bool announce) {
     stop("new route");takeover={};
     if(announce) stopAnnounced=false;
     NavLeg leg;
-    if(!safe() || !navLeg(leg) || leg.pendingCollision || leg.arrived || leg.target.inactive) return;
+    if(!safe() || !navLeg(leg) || leg.pendingCollision || (leg.arrived && !leg.arrivalSerial) || leg.target.inactive) return;
     // Ordinary octant/hysteresis steering can leave a narrow butterfly detour.
     // This timed activity retains manual movement and the verified route cues.
     if(leg.target.butterfly) { output(L"Follow the butterfly route manually",false,"auto-walk"); return; }
@@ -339,29 +351,45 @@ void updateAutoWalk() {
     inputTrace.active=leg.target.pushControl>=1 && leg.target.pushControl<=2;
     inputTrace.at=now;inputTrace.dt=frameMs;inputTrace.target=leg.goal;inputTrace.world={};
     if(pedestalWalkLeg(leg,player)) {mask=0;stamp=now;last=player;return;}
+    if(!leg.arrived && arrival.active && leg.arrivalSerial) {arrival.settling=false;arrival.frames=0;}
     if(leg.arrived) {
         const auto& target=leg.target;
         if(target.butterfly || target.swimDepth || !target.zone.valid || target.zone.crossing) {
             if(!target.butterfly && !target.swimDepth) faceNavigationTarget(target);
             stop("arrived");return;
         }
-        if(!arrival.active) {arrival={};arrival.active=true;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || target.zone.obstacleRadius>0;}
-        const Point center=target.pushControl?target.position:target.zone.center;
+        if(!arrival.active) {arrival={};arrival.active=true;arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || target.zone.obstacleRadius>0;}
+        const Point center=target.pushControl?target.position:leg.arrivalSerial?leg.final:target.zone.center;
         if(!arrival.settling) {
             if(distanceXZ(player,arrival.seen)>.1) {arrival.seen=player;arrival.still=now;last=player;}
             double pan=0,front=0;
-            const bool done=distanceXZ(player,center)<=ArrivalCloseUnits || distanceXZ(player,arrival.origin)>=ArrivalHomeUnits ||
-                now-arrival.still>=ArrivalBlockedMs || now-arrival.since>=ArrivalHomeMs || !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front);
+            const bool done=distanceXZ(player,center)<=(leg.arrivalSerial?.25:ArrivalCloseUnits) || distanceXZ(player,arrival.origin)>=ArrivalHomeUnits ||
+                (!leg.arrivalSerial && (now-arrival.still>=ArrivalBlockedMs || now-arrival.since>=ArrivalHomeMs)) ||
+                (leg.arrivalSerial && now-arrival.began>=InteractionHomeMs) || !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front);
             if(!done) {
                 const auto degrees=std::atan2(pan,front)*180/3.14159265358979323846;
-                mask=octMasks[(static_cast<int>(std::round(degrees/45))+8)&7];stamp=now;return;
+                const auto bits=octMasks[(static_cast<int>(std::round(degrees/45))+8)&7];
+                mask=leg.arrivalSerial?precisionInput(bits,leg,player,true):bits;stamp=now;return;
             }
             recordLog("auto walk homed %.2f units toward the target",distanceXZ(player,arrival.origin));
-            arrival.settling=true;arrival.since=now;
+            arrival.settling=true;arrival.frames=0;arrival.since=now;
         }
         mask=0;stamp=now;
-        arrival.faced=faceNavigationTarget(target) || arrival.faced;
-        if(now-arrival.since<ArrivalSettleMs) return;
+        const bool faced=faceNavigationTarget(target);arrival.faced=faced || arrival.faced;
+        ++arrival.frames;
+        if(now-arrival.since<ArrivalSettleMs || (leg.arrivalSerial && arrival.frames<PedestalDrainFrames)) return;
+        if(leg.arrivalSerial) {
+            const bool inside=inInteractionZone(target.zone,player);
+            if(!inside && !target.zone.obstacleRadius && now-arrival.began<InteractionHomeMs) {
+                arrival.settling=false;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;return;
+            }
+            if(!inside) {stop("arrived outside the interaction zone",L"not in interaction range",true);return;}
+            // Exact coincidence needs no turn; any other position must face
+            // successfully on this settled frame, rather than latch an old pose.
+            if(!faced && distanceXZ(player,target.zone.center)>=.001) {stop("could not face destination",L"could not face destination",true);return;}
+            navArrivalConfirmation.store(leg.arrivalSerial,std::memory_order_release);
+            refreshNavCollision();stop("arrived");return;
+        }
         if(!arrival.faced && !target.pushControl) {stop("arrived outside the interaction zone",L"not in interaction range");return;}
         stop("arrived");return;
     }

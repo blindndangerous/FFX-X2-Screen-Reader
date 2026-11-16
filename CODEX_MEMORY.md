@@ -1,5 +1,24 @@
 # FFX current memory — November4
 
+November16 steps16–17 repair follows the user's live confirmation that `19cca78`
+completes all three step15 legs and says “Pedestal push complete.” Inactive
+contact pedestals no longer propagate or retain ordinary-target keep-outs.
+Ordinary assisted talk routes defer arrival speech until native settling
+confirms the current interaction zone. Their bounded correction uses completed
+pulse/coast calibration and a 2000ms home budget; step15 retains its existing
+input, timing and speech. A synthetic32-case native-ramp matrix passes with one
+outcome per case, longest simulated recovery2376ms; this is not gameplay proof.
+Busy notices remain latched through intermittent captures until full drain or
+observation revision change. Explicit failed routes log player/native floor IDs,
+components, target-zone polygons and obstacle sources on the owned worker.
+Final no-deploy build and full native suite exit0:87 PASS groups,3 existing
+missing-evidence SKIPs (readers, reachability, utilities). The192-case step15
+route/input matrix and96-case step15 ramp matrix remain green. Final receipts:
+`.local/r18-build-final.log`, `.local/r18-tests-final.log` and
+`.local/r18-verification.json`. Existing C4244/C4456/D9026 warnings remain.
+No commit, deployment, packaging, game or Tester Logs access occurred. See the
+[cause, changed files, offline limits and prioritized procedure](Docs/features/navigation/index.md#kilika-steps-16-17-after-the-completed-push--november16).
+
 November16 step-15 input-path investigation supersedes the prior live-success
 assumptions. Retained native Installed82D180 has four 0–256 directional ramps,
 32/frame with deadzone48; the old instantaneous plant missed movement retained

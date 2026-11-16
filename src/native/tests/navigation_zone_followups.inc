@@ -105,6 +105,16 @@ void contactPedestalFixtures(const Mesh& room) {
     avoidContactPedestals(list);
     check(distanceXZ(list[2].zone.obstacle,list[0].position)<.001,
         "a moved pedestal replaces a destination's stale obstacle position");
+    list[0].inactive=true;
+    avoidContactPedestals(list);
+    check(list[1].zone.obstacleRadius==0 && list[2].zone.obstacleRadius==0,
+        "disabled pedestal contact retires previously copied keep-outs on both recess targets");
+    const auto afterPush=interactionRoute(room,{60,0,42},list[2].zone);
+    check(!afterPush.empty() && inInteractionZone(list[2].zone,afterPush.back()),
+        "a player beside a completed pedestal can leave for another recess without a radial escape");
+    list[0].inactive=false;avoidContactPedestals(list);
+    check(list[2].zone.obstacleRadius==5,
+        "resetting the pedestal restores its active contact keep-out");
 }
 void zoneFixtures() {
     Mesh counter;
@@ -124,6 +134,11 @@ void zoneFixtures() {
     target.zone={}; check(destinationUnreachable(counter,player,target),"filter excludes a disconnected destination");
     check(!destinationUnreachable(Mesh{},player,target),"unknown floor cannot silently hide a destination");
     zone.range=2; check(interactionRoute(counter,player,zone).empty(),"no route is invented when a zone misses every connected floor");
+    target.zone=zone;target.worker=35;
+    const auto failure=interactionRouteDiagnostics(counter,player,target,{});
+    const auto has=[&](const char* text) {return std::any_of(failure.begin(),failure.end(),[&](const std::string& row) {return row.find(text)!=std::string::npos;});};
+    check(has("player-floor=0 component=0") && has("zone-polygon=2 component=1") && has("active-obstacles=0"),
+        "failed-zone diagnostics distinguish the player component from disconnected target polygons and show obstacles");
     zone.range=5; zone.center.y=100; check(interactionRoute(counter,player,zone).empty(),"talk height excludes a separate floor");
     zone.center.y=0; zone.height=-1;
     check(!inInteractionZone(zone,{12,6,5}),"negative circular height uses native three-dimensional range");
@@ -214,4 +229,34 @@ void zoneFixtures() {
     zone.center.y=0; check(interactionRoute(water,{1,-50,1},zone).empty(),"free swimming cannot route to ship-deck interactions at another height");
     zone.valid=false; check(interactionRoute(counter,player,zone).empty(),"unresolved geometry never manufactures an interaction destination");
     contactPedestalFixtures(room);
+    // Synthetic connected slope/pocket; target and completed-actor positions
+    // come from retained klyt1000, not a captured live floor or player pose.
+    Mesh lower;
+    lower.triangles={triangle({45,10,200},{70,10,200},{0,-11.584564,290}),
+        triangle({70,10,200},{70,-11.584564,290},{0,-11.584564,290})};
+    lower.triangles[0].neighbours[0]=1;lower.triangles[1].neighbours[0]=0;
+    for(unsigned i=0;i<2;++i) for(unsigned j=0;j<3;++j) lower.triangles[i].vertices[j]=ids[i][j];
+    Entity completed;completed.worker=6;completed.pushControl=2;completed.inactive=true;
+    completed.position=completed.zone.center={50.010990,20.009766,205.152710};
+    completed.zone.valid=true;completed.zone.contactRadius=7;
+    Entity lowerRecess;lowerRecess.worker=35;lowerRecess.name=L"Lower Kilika Sphere recess";
+    lowerRecess.position=lowerRecess.zone.center={59.965549,9.990234,209.560730};
+    lowerRecess.zone.valid=lowerRecess.zone.talk=true;lowerRecess.zone.shape=3;
+    lowerRecess.zone.width=lowerRecess.zone.depth=10;lowerRecess.zone.height=10;
+    Entity door=lowerRecess;door.worker=36;door.name=L"Antechamber door recess";
+    door.position=door.zone.center={11.262055,-11.584564,282.272369};
+    door.zone.width=door.zone.depth=7;door.zone.height=7;
+    const Point pocket{44,8.8,205};
+    for(auto destination:{lowerRecess,door}) {
+        // Reproduce a target copy retained from before completion.
+        destination.zone.obstacle=completed.position;destination.zone.obstacleRadius=7;
+        check(interactionRoute(lower,pocket,destination.zone).empty(),
+            "the old phantom pedestal demands an impossible radial escape from this connected pocket");
+        avoidContactPedestals(destination,{completed});
+        const auto repaired=interactionRoute(lower,pocket,destination.zone);
+        check(!repaired.empty() && inInteractionZone(destination.zone,repaired.back()),
+            "both post-push Kilika recesses have connected routes ending inside their interaction zones");
+        const auto nearby=interactionRoute(lower,repaired.back(),destination.zone);
+        check(nearby.size()==2,"a post-push recess remains reachable when already beside it");
+    }
 }

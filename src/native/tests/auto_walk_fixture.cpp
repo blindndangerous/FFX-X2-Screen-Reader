@@ -137,6 +137,9 @@ bool commitTextPlan(const TextPlan& plan) {
 unsigned faceCalls=0;
 bool faceResult=true;
 bool faceNavigationTarget(const NativeRouteTarget&) { ++faceCalls; return faceResult; }
+#ifndef FFX_NAV_CUES_INTEGRATION_TEST
+bool inInteractionZone(const NativeInteractionZone&,Point) {return faceResult;}
+#endif
 void log(const char*,...) {}
 }
 using namespace ffx;

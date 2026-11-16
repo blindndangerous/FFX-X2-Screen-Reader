@@ -139,6 +139,7 @@ void updateOwnedNavAudio(const nav::Scene&,const Mesh&,const std::vector<Entity>
 void updateNavAudio(Point,bool) { ++navUpdates; }
 void updateNavTarget(const Entity&) { ++targetUpdates; }
 void routeNavAudio(const std::vector<Point>& points,const Entity& target) {OwnedNavTarget captured;if(points.empty() || !captureOwnedNavTarget(target,captured)) {fixtureRoute=false;return;}fixtureLeg.start=points.front();fixtureLeg.goal=points.size()>1?points[1]:points.front();fixtureLeg.final=points.back();fixtureLeg.target=captured.native;fixtureLeg.epoch=generation();fixtureLeg.arrived=points.size()<2;fixtureRoute=true;}
+void routeNavAudio(const std::vector<Point>& points,const Entity& target,bool) {routeNavAudio(points,target);}
 void drainController() {}
 void captureSpeech(bool) {}
 void protectTutorialSpeech(bool) {}

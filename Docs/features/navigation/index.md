@@ -1,5 +1,132 @@
 # Navigation, route validity, audio and movement
 
+## Kilika steps 16-17 after the completed push — November16
+
+The user confirms that `19cca78` completes all three step-15 legs and says
+“Pedestal push complete” in gameplay. This repair preserves that push path and
+its speech. The supplied evidence is `.local/r18-step16-17-live.log` and
+`.local/r18-steps16-22.log`. Enter presses after failed walks belong to the test
+driver; their subsequent sphere exchanges are not mod progression failures.
+
+The confirmed routing defect is an inactive contact pedestal remaining an
+obstacle. `navigation_scene.cpp::pedestalZone` derives inactivity from the copied
+native contact channel, but `nav_zones.cpp::avoidContactPedestals` previously
+ignored it. It also left a previously copied obstacle intact when its source
+ceased to qualify. `contactRoute` then required a straight outward escape to the
+clearance ring before routing anywhere else. In a connected narrow pocket that
+escape can leave the mapped floor, producing “no reachable interaction zone”
+for both a distant door and a nearby recess. The live log independently lists
+the post-push pedestal as inactive. Retained `klyt1000` positions and a synthetic
+connected slope/pocket reproduce the refusal and its repair for both named
+targets. Ordinary targets now rebuild their keep-out from currently active
+contact pedestals; push targets retain their own staging and obstacle rules.
+
+The first step-16 failure also exposes premature arrival reporting.
+`zoneRoute` already checks that the returned endpoint is inside the interaction
+zone. However, `nav_cues.cpp::advance` announced success on a transient copied
+in-zone pose, and the propagated obstacle disabled ordinary inward homing in
+`auto_walk.cpp`. Native settling could subsequently fail after that success.
+The 367 ms live interval matches the existing 300 ms settlement path. The log
+does not contain coordinates proving native coasting, an invalid endpoint, or a
+disconnected player polygon; those precise live mechanisms remain unmeasured.
+
+Ordinary assisted talk routes now carry a unique arrival token. They publish
+provisional arrival to the input owner, then announce success only after native
+settling confirms current zone membership and facing. Exact coincidence needs
+no turn. Recovery follows the verified route endpoint rather than an off-floor
+actor centre, uses bounded pulses and waits through ten native input updates.
+Its pulse estimate comes from completed pulse-and-coast displacement using the
+retained native ramp formula. The ordinary home budget is 2000 ms; the legacy
+push/home behavior retains 1500 ms. The 300 ms movement-stall timer does not
+mistake intentional ordinary input draining for a wall. The 32 synthetic ramp
+cases cover 10/50 units per second, 17/33 ms frames, one/two-frame publication
+latency, cold/warm opposite input and blocked movement. Their longest simulated
+recovery and settling interval is 2376 ms, below the fixture's 2500 ms bound.
+These are simulated input-owner intervals, not gameplay or request-latency
+measurements.
+
+Tokens retire on cancellation/replan, preserve same-walk settling across target
+updates, and complete before a subsequent target move/disappearance can replace
+a confirmed result. Failed correction and later worker retirement share one
+failure announcement. Passive selection beacons keep their existing arrival
+behavior even when the Auto walk setting is enabled. Step-15 contact/push routes,
+swimming, crossing and butterfly arrival protocols do not use this handshake.
+
+The repeated busy notice was a separate lifetime bug: each successful scene
+capture reset the pressure latch even if the worker had drained only one of four
+held slots. The latch now rearms after a fully drained pool or a new observation
+revision. A standalone synthetic observation fixture proves the old repeated
+notice, intermittent refill suppression, drained recovery and revision reset.
+
+Explicit failed interaction routes now log the player floor polygon and floor
+component, native floor ID, target geometry, up to 64 intersecting target-zone
+polygons with their components/collision groups/endpoint eligibility, the active
+keep-out, and up to 16 contact-pedestal source rows including inactive sources.
+Counts disclose truncation. Components describe collision-passable floor portals;
+one-way event constraints are reported separately by readiness/count. All scans,
+formatting and logging use owned data on the preparation worker. No native wait,
+queue wait, lock, I/O or new game pointer is introduced.
+
+Changed runtime files under `src/native`: `auto_walk.cpp`, `nav_audio.hpp`,
+`nav_cues.cpp`, `nav_zones.cpp`, `navigation.cpp`, `navigation.hpp`,
+`navigation_observations.cpp` and `puzzle_guide_owned.cpp`.
+Changed fixture files under `src/native/tests`: `auto_walk_fixture.cpp`,
+`nav_cues_fixture.cpp`, `navigation_cancel_fixture.cpp`,
+`navigation_zone_followups.inc`, new `navigation_observations_fixture.cpp`,
+`pedestal_fixture.cpp`, `reader_fixture.cpp`, `utility_fixture.cpp` and
+`run_tests.bat`. The three small fixture adapters preserve the existing
+two-argument audio-route host while accepting explicit assisted-route intent.
+Documentation changes are this record and `CODEX_MEMORY.md`.
+
+Final `cmd /c "src\proxy\build_dinput8.bat --no-deploy"` and
+`src\native\tests\run_tests.bat` both exit 0. The suite records 87 PASS groups
+and three existing evidence-dependent SKIPs: readers (`hudTextureClipBody.bin`),
+reachability (`collisionReplayBody.bin`) and utilities (`maps_v3.json`). The
+192-case step-15 route/input matrix and 96-case step-15 ramp matrix pass, as do
+the new ordinary-arrival, token-lifetime, geometry/diagnostic and pressure cases.
+The existing C4244 build warning and C4456/D9026 harness warnings remain; no new
+compiler warning was introduced. Final receipts are `.local/r18-build-final.log`,
+`.local/r18-tests-final.log` and `.local/r18-verification.json`.
+Focused receipts are `.local/r18-geometry-final.log`, `.local/r18-arrival-final.log`,
+`.local/r18-cues-runner.log` and `.local/r18-cues-final.log`; red receipts include
+`.local/r18-geometry-red.log`, `.local/r18-cues-red.log` and
+`.local/r18-cues-retirement-red.log`. A bounded `gpt-6-luna` delegation supplied
+the busy-latch repair and synthetic fixture, with baseline red/current green
+execution; the primary agent reviewed and integrated it. An independent agent
+using the inherited primary model reviewed arrival lifetime/callers and ran the
+ramp matrix; its findings were repaired and incorporated into maintained tests.
+No unresolved delegated runtime finding remains after integration. No game,
+Tester Logs, deployment, packaging, commit or remote write was used.
+
+Prioritized nonvisual gameplay procedure, for a separately authorized test:
+
+1. Retain the working step-15 setup. Confirm all three push legs and exactly one
+   “Pedestal push complete”; movement input must still cancel assistance.
+2. After that completion, select Lower Kilika Sphere recess and press backslash.
+   Expect a route and one settled arrival, without the subsequent out-of-range
+   failure. Press Enter only after successful arrival/within-range feedback,
+   then take the third Kilika Sphere and close the native prompt.
+3. From that lower recess, select Antechamber door recess and press backslash.
+   Expect a connected route and one arrival. Insert the carried Kilika Sphere
+   only after arrival. If routing refuses, retain the new explicit failure dump;
+   the supplied older logs cannot identify the actual player component.
+4. Check the nearby lower recess again when the guide calls for it. An in-range
+   target should report its range/facing or settle successfully; no inactive
+   pedestal escape or repeated busy announcement should intervene. A persistent
+   blocked correction must produce one failure and no preceding success.
+5. Continue steps 18–22 in order: take the Destruction Sphere, put it in the empty
+   lower recess, collect the revealed treasure, recover the door's Kilika Sphere,
+   then exit. The lower sphere must be taken before door insertion, and the lower
+   recess must be empty before accepting the Destruction Sphere. Do not press
+   Enter after a failed walk; that was the supplied driver's sphere ping-pong.
+
+Offline limits: no live player coordinates/floor/remaps were captured, no original
+Kilika floor was replayed, and native movement/collision/facing/audio remain
+synthetic boundaries. The route-pocket fixture proves the mod's phantom-obstacle
+failure mechanism on a connected floor; it does not prove which live polygon
+failed. Actual gameplay timing, collision response and audible output remain
+unverified. No commit, deployment or game access is authorized by this task.
+
 ## Kilika step-15 native input ramp repair — November16
 
 This supersedes the live-success assumptions in the staging records below.
