@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Kilika pedestal pushes hold reached staging waypoints until route advancement and allow coarse movement strides to finish outside-contact alignment. Native contact guards and speech remain unchanged; gameplay confirmation is pending.
 - Pedestal approaches stop within 30 seconds across retries, or after 15 seconds without getting closer to contact. Live collision and target centres stay paired, and delayed staging observations cannot overwrite a contact walk. Once-per-second diagnostics record timing, live positions, alignment and contact radius. Gameplay confirmation remains pending.
 - Kilika push approaches centre on the final push-side leg before walking into contact. Detour progress follows the current waypoint. Stalled approach retries stay silent until one final reason; diagnostics include player, pedestal and waypoint positions.
 - Kilika pedestal assistance keeps its push-side alignment and native slope contact bounds. Ordinary walks refresh the movable pedestal obstacle and turn without delayed detour steering or unchecked recovery sidesteps. Resumed walks and repeated approaches avoid duplicate announcements; lost routes retain their real stop reason.

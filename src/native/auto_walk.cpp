@@ -38,6 +38,8 @@ int octant=-1;
 bool unstickRight=false;
 double best=-1;
 Point last,progressGoal;
+Point reachedWaypoint;
+bool waypointReached=false;
 bool stopAnnounced=false;
 FieldControlsSnapshot messageGuard;
 std::array<unsigned,4> scans{0xc8,0xcb,0xd0,0xcd};
@@ -210,7 +212,7 @@ void startAutoWalk(bool announce) {
         output(L"Auto walk unavailable: Dive has no configured control",false,"auto-walk"); return;
     }
     walking=leg.target; resumePhase=ResumeNone;
-    epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;
+    epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;waypointReached=false;
     const auto now=nowMs(); improved=movingSince=now; unstickUntil=0;
     last=playerPosition();progressGoal=leg.goal; cancel=false; engaged=true;
     scans=movementKeys();
@@ -332,6 +334,18 @@ void updateAutoWalk() {
         }
     }
     const bool pedestalRoute=leg.target.pushControl || leg.target.zone.obstacleRadius>0;
+    if(leg.target.pushControl>=1 && leg.target.pushControl<=2 && distanceXZ(leg.goal,leg.final)>.01) {
+        if(waypointReached && distanceXZ(reachedWaypoint,leg.goal)>.01) waypointReached=false;
+        const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length=std::hypot(x,z);
+        const auto dx=player.x-leg.goal.x,dz=player.z-leg.goal.z;
+        const bool passed=length>.001 && dx*x+dz*z>=0 && std::abs(dx*z-dz*x)/length<=1;
+        if((distanceXZ(player,leg.goal)<=1 || passed) && std::abs(player.y-leg.goal.y)<=8) {
+            if(!waypointReached) {waypointReached=true;reachedWaypoint=leg.goal;refreshNavCollision();}
+        }
+        // The worker may miss a waypoint crossed between observations. Hold
+        // the reached point instead of steering back and forth through it.
+        if(waypointReached) {mask=0;stamp=now;return;}
+    } else waypointReached=false;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
         if(leg.target.butterfly) { stop("butterfly route stalled",L"butterfly route stalled"); return; }
         refreshNavCollision();
@@ -347,13 +361,14 @@ void updateAutoWalk() {
     const double goalAlong=(leg.goal.x-zone.center.x)*side.x+(leg.goal.z-zone.center.z)*side.z;
     const double goalAcross=(leg.goal.x-zone.center.x)*side.z-(leg.goal.z-zone.center.z)*side.x;
     const bool finalPushSide=leg.target.pushControl>=1 && leg.target.pushControl<=2 && zone.valid && !zone.talk &&
-        distanceXZ(side,{})>.9 && distanceXZ(leg.goal,leg.final)<.01 && along>0 && goalAlong>0 && std::abs(goalAcross)<=.65;
+        distanceXZ(side,{})>.9 && distanceXZ(leg.goal,leg.final)<.01 && along>0 && goalAlong>0 && std::abs(goalAcross)<=1;
     const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length2=x*x+z*z;
     if(finalPushSide) {
         // Only the last radial leg may enter clearance. Centre first, then walk
         // straight in; the detour's line-rejoin lead can touch an off-side corner.
+        // Match staging's one-unit band; .65 can be skipped by a digital stride.
         const double across=(player.x-zone.center.x)*side.z-(player.z-zone.center.z)*side.x;
-        if(std::abs(across)>.65) steer={player.x-across*side.z,player.y,player.z+across*side.x};
+        if(std::abs(across)>1) steer={player.x-across*side.z,player.y,player.z+across*side.x};
     } else if(length2>.001) {
         const auto t=std::clamp(((player.x-leg.start.x)*x+(player.z-leg.start.z)*z)/length2,0.0,1.0);
         Point nearest{leg.start.x+t*x,player.y,leg.start.z+t*z};

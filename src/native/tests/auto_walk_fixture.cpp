@@ -448,9 +448,22 @@ int main() {
     *reinterpret_cast<uintptr_t*>(address(0x1efb504))=0; // Restore default movement bindings after the remap cases.
     bool regressionsPass=true;
     const auto regression=[&](bool value,const char* reason) {if(!value) {std::fprintf(stderr,"FAIL: %s\n",reason);regressionsPass=false;}};
+    begin();leg.target.pushControl=2;leg.goal={0,0,10};player={0,0,9.25};frames(1);corner=keyboard();
+    regression(autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a reached intermediate push waypoint releases input before worker advancement");
+    frames(5);corner=keyboard();
+    regression(autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a delayed worker cannot make a reached push waypoint hunt again");
+    player={};startAutoWalk(false);corner=keyboard();
+    regression(corner[0xc8]!=0,"a new walk to the same waypoint clears the previous hold");
+    player={0,0,9.25};frames(1);leg.start=leg.goal;leg.goal={10,0,10};frames(1);corner=keyboard();
+    regression(corner[0xcd]!=0,"worker waypoint advancement releases the hold and steers the next leg");
+    begin({.9,0,-7.25});player={1.25,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
+    leg.target.zone.valid=true;leg.target.zone.shape=1;leg.target.zone.approach={0,0,-1};leg.target.zone.contactRadius=7;
+    frames(1);corner=keyboard();
+    regression(corner[0xcb] && !corner[0xc8] && !corner[0xd0],
+        "a valid off-axis staging goal still centres before entering clearance");
     for(bool contact:{false,true}) {
         begin({0,0,-7.25});
-        player={1,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
+        player={1.25,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
         leg.target.zone.valid=true;leg.target.zone.shape=1;leg.target.zone.center={};
         leg.target.zone.approach={0,0,-1};leg.target.zone.contactRadius=contact?0:7;
         leg.target.zone.range=contact?6.85:0;leg.target.zone.obstacleRadius=9;
@@ -458,7 +471,7 @@ int main() {
         clockValue+=100;updateAutoWalk();corner=keyboard();
         regression(corner[0xcb] && !corner[0xc8] && !corner[0xd0],
             "final push-side leg centres before entering the pedestal clearance radius");
-        player.x=0;clockValue+=100;updateAutoWalk();corner=keyboard();
+        player.x=.9;clockValue+=100;updateAutoWalk();corner=keyboard();
         regression(corner[0xc8] && !corner[0xcb] && !corner[0xcd],
             "aligned final push-side leg permits inward movement despite wider keep-out");
     }

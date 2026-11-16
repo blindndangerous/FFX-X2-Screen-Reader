@@ -174,7 +174,7 @@ bool onPushSide() {
     const double edge=active.target.pushControl==1?2.3:2;
     // Claim only a contact well inside the native limit across the axis. In
     // game F26 a contact near the corner took control but never pushed, and
-    // the walk-in staging point is within .65 of the axis anyway.
+    // the walk-in staging point is within 1 unit of the axis anyway.
     const double across=edge-.5;
     if(std::abs(gx)>=std::abs(gz)) return (gx>0?-x:x)>edge && std::abs(z)<across;
     return (gz>0?-z:z)>edge && std::abs(x)<across;

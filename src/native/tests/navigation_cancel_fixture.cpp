@@ -47,13 +47,21 @@ int main() {
     }
     // Real route geometry, waypoint advancement and input steering, with only
     // movement/collision supplied by this synthetic host. No native push replay.
-    for(double heading:{0.0,22.5,67.5,117.0,203.0,316.0}) for(double stride:{.25,.7,1.3}) {
-        begin();player={44,0,44};
+    for(unsigned scenario:{0u,1u,2u,3u})
+    for(unsigned observationFrames:{1u,6u})
+    for(double heading:{0.0,22.5,67.5,117.0,203.0,316.0}) for(double stride:{.25,.7,1.3,1.65}) {
+        const bool liveReset=scenario!=0;
+        const Point pedestal=liveReset?Point{.222,-10.005,144.104}:Point{};
+        begin();player=liveReset?Point{47.568,-9.999,184.646}:Point{44,0,44};
+        // Both sides of the live loop around the (0.222, 133.398) ring waypoint.
+        if(scenario==2) player={5.630,-10.008,132.756};
+        if(scenario==3) player={-5.745,-10.008,133.989};
         const double angle=heading*3.14159265358979323846/180;
         forward={std::sin(angle),0,std::cos(angle)};
-        target={};target.name=L"Pedestal";target.pushControl=2;target.position={};
+        target={};target.name=L"Pedestal";target.pushControl=2;target.position=pedestal;
         target.zone.valid=true;target.zone.shape=1;target.zone.height=100;
-        target.zone.contactRadius=7;target.zone.obstacleRadius=9.5;target.zone.approach={0,0,-1};
+        target.zone.center=pedestal;
+        target.zone.contactRadius=7;target.zone.obstacleRadius=liveReset?0:9.5;target.zone.approach={0,0,-1};
         speechq::Header header{};header.generation=epoch;
         const auto publish=[&] {
             nativeOwner=false;observation.player=player;observation.forward=forward;
@@ -66,17 +74,20 @@ int main() {
             check(!points.empty(),"push-side fixture has a connected route");
             routeNavAudio(points,target);nativeOwner=true;startAutoWalk(false);
         };
-        route();bool inward=false,touched=false;
+        route();bool inward=false,touched=false;const auto began=clockValue;
         for(unsigned frame=0;frame<1800 && !touched;++frame) {
-            publish();clockValue+=100;updateAutoWalk();NavLeg current;
+            if(frame%observationFrames==0) publish();
+            clockValue+=33;updateAutoWalk();NavLeg current;
             check(navLeg(current),"push approach keeps its real route leg");
-            if(current.arrived && !inward) {
+            // pedestal_input::approach checks the live endpoint on Native;
+            // it does not wait for the worker's arrival publication.
+            if(inInteractionZone(target.zone,player) && !inward) {
                 stopAutoWalk();target.zone.contactRadius=target.zone.obstacleRadius=0;
                 target.zone.range=6.85;inward=true;route();
             }
             if(!autoWalkActive()) {
-                std::fprintf(stderr,"approach stopped: heading=%.1f stride=%.2f frame=%u player=%.3f,%.3f waypoint=%.3f,%.3f inward=%d arrived=%d\n",
-                    heading,stride,frame,player.x,player.z,current.goal.x,current.goal.z,inward,current.arrived);
+                std::fprintf(stderr,"approach stopped: live=%d observation-frames=%u heading=%.1f stride=%.2f frame=%u player=%.3f,%.3f waypoint=%.3f,%.3f inward=%d arrived=%d\n",
+                    liveReset,observationFrames,heading,stride,frame,player.x,player.z,current.goal.x,current.goal.z,inward,current.arrived);
                 if(!speech.empty()) std::fwprintf(stderr,L"last speech: %ls\n",speech.back().c_str());
             }
             check(autoWalkActive(),"northeast reset approach reaches contact without a no-progress stop");
@@ -84,20 +95,22 @@ int main() {
             const double front=!!keys[0xc8]-!!keys[0xd0],right=!!keys[0xcd]-!!keys[0xcb];
             const double length=std::hypot(front,right);
             if(!length) continue;
-            const Point next{player.x+stride*(front*forward.x+right*forward.z)/length,0,
+            const Point next{player.x+stride*(front*forward.x+right*forward.z)/length,player.y,
                 player.z+stride*(front*forward.z-right*forward.x)/length};
             if(distanceXZ(current.goal,current.final)>.01)
-                check(distanceXZ(next,{})>9.5,"detour movement retains the wider pedestal clearance before the final leg");
-            if(distanceXZ(next,{})<=7) {
-                check(next.z< -2 && std::abs(next.x)<1.5,"only centred south-side movement can touch the pedestal");
+                check(distanceXZ(next,pedestal)>(liveReset?7:9.5),"detour movement retains the wider pedestal clearance before the final leg");
+            if(distanceXZ(next,pedestal)<=7) {
+                check(inward,"outside staging hands off before native contact");
+                check(next.z-pedestal.z< -2 && std::abs(next.x-pedestal.x)<1.5,"only centred south-side movement can touch the pedestal");
                 touched=true;
             }
             player=next;
         }
         check(touched,"northeast reset detour and final inward leg reach native contact");
+        check(clockValue-began<30000,"push staging and contact converge within the whole-approach budget");
         stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
     }
-    std::puts("PASS: production pedestal detours reach aligned contact across six camera headings and three movement rates.");
+    std::puts("PASS: production pedestal detours and live step-15 loop coordinates reach aligned contact across six headings, four strides and 33/198 ms observations.");
     VirtualFree(reinterpret_cast<void*>(memory),0,MEM_RELEASE);
     std::puts("PASS: production route-clear/Auto walk interleaving stays silent for native and worker cancellation.");
 }

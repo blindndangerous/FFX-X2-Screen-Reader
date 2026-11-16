@@ -1,5 +1,96 @@
 # Navigation, route validity, audio and movement
 
+## Kilika step-15 staging convergence — November16
+
+The user's live test of `04d23b0` remained in staging until the 15-second
+contact-progress stop. The authorized excerpt is `.local/r15-step15-live.log`.
+The pedestal was at `(0.222, -10.005, 144.104)` with radius 7. The player crossed
+between approximately X -5.7 and +5.6 near Z 133.4 while the intermediate
+clearance waypoint stayed at `(0.222, -10.008, 133.398)`.
+
+Two feedback problems reproduce in the production route/input fixture:
+
+- `nav_cues.cpp::advance` advances intermediate waypoints from worker observations,
+  using a one-unit reach/pass test. `auto_walk.cpp::updateAutoWalk` previously kept
+  steering through the same point between observations. A crossing missed by
+  the worker caused the native input owner to turn back through it repeatedly.
+  The native input owner now uses the same reach/pass test and releases synthetic
+  movement at a reached intermediate push waypoint. It requests a fresh scene
+  once and retains that hold until the waypoint changes. Native processing
+  continues immediately; cancellation, invalidation and progress limits still run.
+- Final staging accepted only a 0.7-unit radial band and 0.65-unit lateral error.
+  A 1.65-unit digital stride can skip both, creating a reversal cycle even with
+  immediate worker observations. Staging now accepts radius plus 0.1 through
+  radius plus 2, with lateral error at most 1 unit on the required face. The
+  final input correction uses that same one-unit alignment. The original inner
+  collision exclusion remains. The stricter contact-time claim remains below
+  1.5 units across for Kilika and 1.8 for Besaid; native script predicates,
+  contact radius, talk zones and converted contact endpoint checks are unchanged.
+  A floor-projected staging goal within the new alignment band also selects this
+  centring branch; a separate 0.9-unit goal-offset regression fails otherwise.
+
+The logged `distance` is deliberately measured to final contact, rather than to
+the displayed intermediate waypoint. It drives the approach timeout, not steering
+or staging arrival. Its different value is not a mismatched steering target.
+At radius 7, the displayed intermediate point is the route's outside ring:
+`(7 + 3.5) / cos(pi / 16) = 10.706` units from the pedestal. Its Z coordinate
+therefore agrees with the supplied live centre.
+
+Regression coverage includes the exact reported northeast start and both sides
+of the lateral loop, plus the previous wider-clearance case. The combined host
+links production routing, waypoint publication and input steering. It exercises
+192 combinations: four starts, six camera headings, four movement strides through
+1.65 units, and observations every 33 or 198 milliseconds. Each case must hand
+off staging before contact, retain detour clearance, touch only below the
+1.5-unit lateral claim limit, and finish the approach within 30 simulated seconds.
+The native pedestal fixture separately exercises seven-unit live collision
+bounds, the enlarged outside staging handoff and northward native input.
+Existing native fixtures retain the north/east/north plan and reject corner
+contact. Speech strings, announcements and duplicate suppression are unchanged.
+Focused input assertions also cover holding through delayed observations,
+restarting toward the same waypoint and releasing the hold on the next leg.
+
+The initial reproduction failed before repair. Delayed-observation cases also
+failed without the native waypoint hold. Widening lateral alignment alone left a
+radial reversal; outward-only correction and bounded prediction experiments also
+left counterexamples. Those experiments were removed. The retained repair changes
+only waypoint holding and synthetic outside-staging eligibility/alignment.
+Focused navigation/audio checks pass in `.local/r15-staging-band-probe.log`.
+The final `src\native\tests\run_tests.bat` run exits 0: 84 PASS groups, 3 SKIP
+groups and no failures (`.local/r15-tests-final.log`). The unchanged missing
+evidence is `hudTextureClipBody.bin`, `collisionReplayBody.bin` and `maps_v3.json`.
+The documented installer suite also exits 0: 667 assertions and warnings-as-errors
+UI compilation pass; PRISM-dependent cases skip because the locked runtime is
+absent (`.local/r15-installer-tests.log`).
+`cmd /c "src\proxy\build_dinput8.bat --no-deploy"` exits 0 for the final source
+(`.local/r15-build-final.log`). Existing build C4244 and test-harness C4456/D9026
+warnings remain; `git diff --check` passes. The 0.9-unit projected-goal test failed
+before its matching steering predicate repair (`.local/r15-projected-goal-red.log`)
+and passes in the final full suite.
+Sol independently reviewed the final runtime and fixture changes without an
+actionable correctness finding; the primary agent owns build/test verification.
+
+This is offline evidence with synthetic movement on a free plane. The one-second
+live samples do not establish exact native stride, worker cadence, inertia or
+camera changes. Actual collision response, audible speech and gameplay completion
+remain unverified. No game access, deployment, commit or packaging is authorized.
+
+This procedure supersedes the earlier step-15 procedures below:
+
+1. After separately authorized deployment, start step 15 with the loaded reset
+   pedestal. Select Pedestal and start Auto walk from the reported northeast
+   position, then from either side of the former staging loop. Expect one start,
+   a south-side approach, an outside staging handoff and the native north 2.3,
+   east 4.5, north 2.5 sequence. Leave Confirm alone; it opens the sphere prompt.
+   Proceed to steps 16–22 only after the pedestal reaches the depression.
+2. Check Backslash and physical movement cancel immediately, without restart.
+   A blocked approach must release input and speak one no-progress reason within
+   30 seconds, or after 15 seconds without contact-distance improvement. Retain
+   only the failing attempt's timestamps and approach/contact/stop diagnostics.
+3. When earlier progression is available, verify ordinary sphere/recess walks at
+   steps 8, 10, 11 and 13 still avoid pushing the pedestal. Offline tests cannot
+   establish native frame timing, real floor collisions or audible output.
+
 ## Kilika approach deadline and live contact follow-up — November16
 
 The user reports an orbit and a south-facing stop at step 15; another in-game

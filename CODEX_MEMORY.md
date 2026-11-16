@@ -1,5 +1,20 @@
 # FFX current memory — November4
 
+Latest November16 step-15 live-staging follow-up reproduces skipped intermediate
+waypoint observations and digital-stride reversals at the supplied reset/loop
+coordinates. Native input now holds reached intermediate push waypoints, while
+outside staging and final correction share a one-unit alignment and a wider
+outside radial band. Native contact claims, push legs and speech are unchanged.
+The 192-case route/input matrix and final full native suite pass: 84 PASS groups,
+3 missing-evidence SKIP groups, exit 0. The documented installer suite passes
+667 assertions and UI compilation, with PRISM-dependent cases skipped. The final
+no-deploy build exits 0; existing compiler/harness warnings remain. Receipts:
+`.local/r15-tests-final.log`, `.local/r15-installer-tests.log` and
+`.local/r15-build-final.log`. Sol review found no actionable defect. Gameplay,
+actual native movement timing and audible output remain unverified.
+No commit, deployment or game access occurred or is authorized. See the
+[cause, evidence and current gameplay procedure](Docs/features/navigation/index.md#kilika-step-15-staging-convergence--november16).
+
 Latest November16 orbit/south-contact follow-up adds a 30-second whole-approach
 deadline, a 15-second final-contact improvement check, live-centre pairing and
 rejection of delayed staging shapes after contact entry. One-second bounded

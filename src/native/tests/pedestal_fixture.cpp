@@ -376,6 +376,18 @@ void liveResetContactFixture() {
     check((read<uint16_t>(address(0xf27080))&0xf000)==0x1000 && capturePedestalNavigationState().armed,
         "centred south-side native contact claims the north push at the reset spot");
     restore();cancelPedestal();frame(0);
+    target=setup(2,6,reset);values[0x0c00005a]=2;
+    for(const auto actor:{read<uintptr_t>(worker(6)+0x9c),playerActor()}) {
+        write<float>(actor+0x5c,3.5f);write<float>(actor+0x64,3.5f);
+    }
+    position(playerActor(),{reset.x+.9,reset.y,reset.z-8.5});
+    refreshTargetZone(target,worker(6),1);armPedestal(target,true);frame(0);
+    check(capturePedestalNavigationState().contact && walking,
+        "coarse-stride reset staging hands off while safely outside seven-unit contact");
+    position(playerActor(),{reset.x+.9,reset.y,reset.z-6.9});disable(6,4,0x274b);
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0x1000,
+        "coarse-stride staging still claims only an aligned north push");
+    restore();cancelPedestal();frame(0);
     std::puts("PASS: live shifted reset-centre south approach and native contact");
 }
 // In-game F25 and F26 (Kilika step 15 and the sphere steps next to it).

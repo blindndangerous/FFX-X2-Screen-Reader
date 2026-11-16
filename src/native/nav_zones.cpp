@@ -271,10 +271,12 @@ template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bo
         const double distance=std::hypot(x,z);
         // Stage outside collision even when a previous manual touch left its
         // contact flag set. The assisted inward walk must create a fresh edge.
-        if(distance<zone.contactRadius+.1 || distance>zone.contactRadius+.8) return false;
+        // A 1.9-unit outside band accommodates coarse digital strides; its
+        // lateral tolerance remains inside the stricter native contact claim.
+        if(distance<zone.contactRadius+.1 || distance>zone.contactRadius+2) return false;
         if(distanceXZ(zone.approach,{})>.1) {
             const double along=x*zone.approach.x+z*zone.approach.z;
-            return along>0 && std::abs(x*zone.approach.z-z*zone.approach.x)<=.65;
+            return along>0 && std::abs(x*zone.approach.z-z*zone.approach.x)<=1;
         }
         return std::min(std::abs(x),std::abs(z))<=.65;
     }
