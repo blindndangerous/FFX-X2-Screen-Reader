@@ -217,7 +217,7 @@ PedestalPlan measuredPlan(unsigned control,unsigned local,const PedestalSnapshot
     const auto plan=pedestalPlan(control,local,s);
     trackPedestalAllocations=false;
     check(pedestalAllocations==0,reason);
-    check(plan.moves.size()<=2,"production pedestal plan stays within two fixed move rows");
+    check(plan.moves.size()<=3,"production pedestal plan stays within three fixed move rows");
     return plan;
 }
 void ruleTests() {
@@ -232,9 +232,15 @@ void ruleTests() {
         "correct push-side guidance agrees with original Besaid motion");
     s.values[0x5c0000cc]=0; check(!pedestalPlan(1,7,s).blocked.empty(),"Besaid final push requires inserted sphere");
     s=snapshot({.2215,-10,144.1042},{{0x0c00005a,1},{0x0c000064,0}}); p=measuredPlan(2,6,s,"Kilika production plan allocates no heap");
-    check(p.moves.size()==2 && p.moves[0].goal.x>50 && p.moves[1].goal.z>196,"Kilika turns before crossing original depression edge");
-    check(describePedestalApproach(p,s.position,{s.position.x+4,s.position.y,s.position.z}).find(L"Push from the west side.")!=std::wstring::npos,
-        "Kilika alignment begins on the west side before the northbound turn");
+    check(p.moves.size()==3 && p.moves[0].goal.x==s.position.x && p.moves[0].goal.z==170 && p.moves[0].held==0x1000 &&
+        p.moves[1].goal.x>50 && p.moves[1].goal.z>=170 && p.moves[2].goal.z>196,"Kilika clears the floor boundary before crossing original depression edge");
+    check(describePedestalApproach(p,s.position,{s.position.x+4,s.position.y,s.position.z}).find(L"Push from the south side.")!=std::wstring::npos,
+        "Kilika alignment begins on the south side before the eastbound turn");
+    auto boundary=snapshot({20.46,-10,144.6},{{0x0c00005a,1},{0x0c000064,0}});
+    const auto boundaryPlan=measuredPlan(2,6,boundary,"Kilika boundary recovery plan allocates no heap");
+    check(boundaryPlan.moves.size()==3 && boundaryPlan.moves[0].goal.x==boundary.position.x &&
+        boundaryPlan.moves[0].goal.z==170 && boundaryPlan.moves[0].held==0x1000,
+        "Kilika stopped at the diagonal floor boundary plans north to 170 first");
     // klyt1000 w6 entry 4 (2CE3) finishes the trial for socket 0x5a of 1, 2 or
     // 3: a Kilika Sphere. The guide's step 11 insert writes 2. 4 is the
     // Glyph Sphere the pedestal starts with, and 0 is empty.
@@ -295,9 +301,9 @@ void kilikaWalkFixtures() {
     // F26 (b): a push contact after another hook already stopped the walk
     // must not stop it again. That bumps the manual input revision, which
     // rejected the mod's own queued route ("manual input revision (612, 613)").
-    auto target=kilika({at.x-3,at.y,at.z}); walking=false;
+    auto target=kilika({at.x,at.y,at.z-3}); walking=false;
     auto stops=walkStops; disable(6,4,0x274b);
-    check(walkStops==stops && (read<uint16_t>(address(0xf27080))&0xf000)==0x2000,
+    check(walkStops==stops && (read<uint16_t>(address(0xf27080))&0xf000)==0x1000,
         "a Kilika push contact does not stop a walk that already stopped");
     // F26 (c): the push ended with the pedestal still in place. Do not hold
     // the direction against it; walk back out and in again.
@@ -318,7 +324,7 @@ void kilikaWalkFixtures() {
     // count, so the third one stops with its own message.
     {
         const auto pedestal=base+0x1300000+6*0x880;
-        target=kilika({at.x-7.5,at.y,at.z});
+        target=kilika({at.x,at.y,at.z-7.5});
         for(unsigned i=0;i<3;++i) {
             refreshTargetZone(target,worker(6),1); OwnedNavTarget copied{}; captureOwnedNavTarget(target,copied);
             updatePedestalOwnedTarget(copied.native); frame(0);
@@ -336,7 +342,7 @@ void kilikaWalkFixtures() {
     // pedestal's live position after every push.
     {
         const auto pedestal=base+0x1300000+6*0x880;
-        target=kilika({at.x-7.5,at.y,at.z});
+        target=kilika({at.x,at.y,at.z-7.5});
         disable(6,4,0x274b); frame(0);
         const Point after{50.0109901428-.5,at.y,at.z+16};
         position(pedestal,after); restore(); frame(0);
@@ -348,7 +354,7 @@ void kilikaWalkFixtures() {
     }
     // F26: a contact near the corner (1.7 across the push axis, inside the
     // native 2) took control but did not push. Treat it as off the push side.
-    kilika({at.x-3,at.y,at.z+1.7});
+    kilika({at.x+1.7,at.y,at.z-3});
     write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);
     check((read<uint16_t>(address(0xf27080))&0xf000)==0 && capturePedestalNavigationState().armed,
         "a Kilika walk-in contact near the corner is not pushed and stays armed");
@@ -476,11 +482,11 @@ int main() {
     // backslash walk to the pedestal is the consent, and only a contact from
     // the planned side is pushed.
     target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=2;
-    position(playerActor(),{.2215-3,-10,144.1042}); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
+    position(playerActor(),{.2215,-10,144.1042-3}); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
     disable(6,4,0x274b);
-    // The first Kilika row pushes east (+x), raw 0x2000.
-    check((read<uint16_t>(address(0xf27080))&0xf000)==0x2000,"Kilika contact from the planned side pushes without the push key");
-    check(frame(0)==0x2000,"Kilika push keeps its direction without the push key");
+    // The first Kilika row pushes north (+z), raw 0x1000.
+    check((read<uint16_t>(address(0xf27080))&0xf000)==0x1000,"Kilika contact from the planned side pushes without the push key");
+    check(frame(0)==0x1000,"Kilika push keeps its direction without the push key");
     restore();
     target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=2;
     position(playerActor(),{.2215+2,-10,144.1042+2}); refreshTargetZone(target,worker(6),1); armPedestal(target,true);
@@ -495,9 +501,9 @@ int main() {
     target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1; ready(target);
     check(frame(0)==0 && !walking,"selecting a Besaid pedestal without backslash starts nothing");
     restore();
-    target=setup(2,6,{.2215,-10,144.1042}); values[0x0c00005a]=1; ready(target);
+    target=setup(2,6,{.2215,-10,170}); values[0x0c00005a]=1; ready(target);
     const auto pedestal=read<uintptr_t>(worker(6)+0x9c);
-    position(pedestal,{49.1,-10,144.1042}); target.position={49.1,-10,144.1042};
+    position(pedestal,{49.1,-10,170}); target.position={49.1,-10,170};
     refreshTargetZone(target,worker(6),1);
     check(target.zone.approach.x== -1 && target.zone.approach.z==0,
         "armed current segment keeps its west-side approach at .9 residual despite live plan threshold");

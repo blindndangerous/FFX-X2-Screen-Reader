@@ -19,7 +19,7 @@ struct Session {
     UtilityScript script;
     PedestalPlan plan;
     unsigned epoch=0,segment=0,consent=0;
-    std::array<unsigned,2> directions{};
+    std::array<unsigned,3> directions{};
     bool walk=false,held=false,owned=false,started=false,single=false,stopping=false,approaching=false,crossing=false,contact=false,committed=false,waitingShape=false;
     bool ended=false,walked=false;
     uintptr_t signal=0,pawn=0;
@@ -432,7 +432,7 @@ void updatePedestalInput() {
             // past its goal or off the axis, and the plan made at arm time
             // then names the wrong side (in game: "Push south 1.5 steps").
             if(!live.moves.empty() && live.moves.size()<=active.directions.size()) {
-                unsigned index=0;std::array<unsigned,2> directions{};bool valid=true;
+                unsigned index=0;std::array<unsigned,3> directions{};bool valid=true;
                 for(const auto& next:live.moves) {
                     const auto bits=pedestalInputMask(next.held);
                     if(next.held && pedestalLogicalInput(bits)!=next.held) valid=false;
