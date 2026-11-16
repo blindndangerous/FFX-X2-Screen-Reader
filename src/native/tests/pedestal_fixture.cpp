@@ -106,7 +106,9 @@ bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return faceResult;}
 bool autoWalkActive() { return walking; }
 unsigned walkStops=0;
 bool legValid=false,legArrived=false;
-void stopAutoWalk() { walking=false; ++walkStops; }
+unsigned inputRevision=1;
+unsigned autoWalkInputRevision() { return inputRevision; }
+void stopAutoWalk() { walking=false; ++walkStops; ++inputRevision; }
 void startAutoWalk() { walking=true; ++starts; }
 bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
@@ -311,6 +313,39 @@ void kilikaWalkFixtures() {
         spoken.back()==L"Pedestal push did not start. Walk into the pedestal from the push side by hand.",
         "three Kilika pushes that do not move the pedestal stop and say so");
     restore();
+    // In-game round 9: fourteen Kilika pushes in a row each moved the
+    // pedestal under 1 unit, and none counted toward the cap. Short pushes
+    // count, so the third one stops with its own message.
+    {
+        const auto pedestal=base+0x1300000+6*0x880;
+        target=kilika({at.x-7.5,at.y,at.z});
+        for(unsigned i=0;i<3;++i) {
+            refreshTargetZone(target,worker(6),1); OwnedNavTarget copied{}; captureOwnedNavTarget(target,copied);
+            updatePedestalOwnedTarget(copied.native); frame(0);
+            disable(6,4,0x274b); frame(0);
+            position(pedestal,{at.x+.29*(i+1),at.y,at.z+.55*(i+1)}); restore(); frame(0);
+        }
+        check(!capturePedestalNavigationState().armed && !spoken.empty() &&
+            spoken.back()==L"Pedestal push keeps stopping after a short move. Walk into the pedestal from the push side by hand.",
+            "three short Kilika pushes in a row stop and say so");
+        position(pedestal,at);
+    }
+    // After the 24-unit push the pedestal was within 1 of the east goal,
+    // but north of the line. The plan was not worked out again, so it said
+    // "Push from the north side. Push south 1.5 steps". Plan again from the
+    // pedestal's live position after every push.
+    {
+        const auto pedestal=base+0x1300000+6*0x880;
+        target=kilika({at.x-7.5,at.y,at.z});
+        disable(6,4,0x274b); frame(0);
+        const Point after{50.0109901428-.5,at.y,at.z+16};
+        position(pedestal,after); restore(); frame(0);
+        const auto state=capturePedestalNavigationState();
+        check(state.armed && state.plan.moves.size()==1 && std::abs(state.plan.moves[0].goal.z-198.2762908936)<.01 &&
+            state.plan.moves[0].held==0x1000,
+            "after a push leaves the pedestal near the east goal, the next push is north from its live position");
+        cancelPedestal(); frame(0); position(pedestal,at);
+    }
     // F26: a contact near the corner (1.7 across the push axis, inside the
     // native 2) took control but did not push. Treat it as off the push side.
     kilika({at.x-3,at.y,at.z+1.7});
@@ -325,6 +360,14 @@ void kilikaWalkFixtures() {
     check(walking,"a Kilika walk-in push starts its approach walk");
     walking=false; frame(0);
     check(routeRequests==asked+1 && walking,"a Kilika approach walk that ended short is requested again");
+    // Integration review: Backslash pressed again during the walk stops it
+    // through stopAutoWalk only ("Auto walk stopped"). The approach must not
+    // ask for the route again, or the walk restarts on its own.
+    {
+        const auto again=routeRequests; stopAutoWalk(); frame(0); frame(0);
+        check(routeRequests==again && !walking && !capturePedestalNavigationState().armed,
+            "a Kilika approach walk the player stopped is not requested again");
+    }
     cancelPedestal(); frame(0);
     // F27: on the reset tile north-east of the pedestal, every approach walk
     // touched it off the push side, farther out than the modelled contact
@@ -349,17 +392,25 @@ void kilikaWalkFixtures() {
     walking=true; frame(0);
     write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);
     check((read<uint16_t>(address(0xf27080))&0xf000)==0 && !walking,"an auto walk touching the Kilika pedestal gives its script no direction");
+    // The push script gives control back at 2F70 but turns field interaction
+    // on only after wait(5) (2F76-2F82). Until then the pedestal reads
+    // inactive, and in game round 9 the resumed walk was refused
+    // ("auto walk refused: destination inactive worker=6"). Wait first.
     auto started=starts; restore(); frame(0);
-    check(starts==started+1 && walking,"the interrupted walk resumes when control returns");
+    check(starts==started && !walking,"the interrupted walk waits while the pedestal still has interaction off");
+    for(unsigned i=0;i<30;++i) frame(0);
+    check(starts==started+1 && walking,"the interrupted walk resumes once interaction is back");
     legValid=legArrived=true; frame(0);
     // Step 8 via the plain Pedestal row: the walk arrived, the touch pushed
     // the player out of reach, and facing failed. Ask for the route again.
     faceResult=false; disable(6,4,0x274b); restore(); auto faced=faces; auto asked8=pathQueries; started=starts; frame(0);
+    check(pathQueries==asked8 && faces==faced,"an interrupted walk that had arrived waits before it routes again");
+    for(unsigned i=0;i<30;++i) frame(0);
     check(faces==faced+1 && starts==started,"an interrupted walk that had arrived faces its target instead");
     check(pathQueries==asked8+1,"an interrupted walk that had arrived but cannot face its target is routed again");
     faceResult=true;
     legValid=legArrived=false; walking=true; frame(0);
-    disable(6,4,0x274b); restore(); started=starts; frame(0);
+    disable(6,4,0x274b); restore(); started=starts; for(unsigned i=0;i<30;++i) frame(0);
     check(starts==started,"a third touch within ten seconds does not resume the walk");
     walking=false; frame(0);
     write<uint16_t>(address(0xf27080),0x2000); disable(6,4,0x274b);

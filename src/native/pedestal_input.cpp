@@ -25,6 +25,7 @@ struct Session {
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
     unsigned requests=0,failures=0;
+    unsigned walkInput=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
     Point last,lastPlayer,pushFrom;
 
@@ -38,7 +39,8 @@ thread_local unsigned interpreterEpoch=0;
 // A touch by an ordinary auto walk (not a push) that the Kilika or Besaid
 // pedestal script turned into a push start.
 bool walkSeen=false,strayResume=false;
-unsigned strayResumes=0;
+unsigned strayResumes=0,strayFrames=0;
+constexpr unsigned StrayResumeFrames=20;
 uint64_t strayAt=0;
 // The learned touch outlives one assistance session, so pressing the walk
 // key again after a stop keeps it, until the map changes.
@@ -46,7 +48,7 @@ struct {unsigned epoch=0;uintptr_t chunk=0;int worker=-1;double radius=0;} remem
 // Stop only a walk that is running. stopAutoWalk also advances the manual
 // input revision, which rejects the mod's own queued navigation actions
 // (in-game F26: "navigation action rejected: manual input revision").
-void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();}
+void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();active.walkInput=autoWalkInputRevision();}
 // Route around a learned off-side touch as a wider keep-out radius. The
 // contact radius itself stays, so the final walk-in still reaches contact.
 void learnedTouch(NativeRouteTarget& target) {
@@ -170,7 +172,7 @@ void strayTouch(Event& e) {
             read<uint16_t>(read<uintptr_t>(interpreter+0x90)+8,0xffff)!=4 || !contactPushSite(control,pc(interpreter,script))) continue;
         suppress(pedestalInputMask(0xf000)); haltAutoWalk();
         const auto now=GetTickCount64();if(now-strayAt>10000) strayResumes=0;
-        strayAt=now; strayResume=strayResumes<2; ++strayResumes;
+        strayAt=now; strayResume=strayResumes<2; ++strayResumes; strayFrames=0;
         recordLog("pedestal touched by auto walk: %s",strayResume?"resuming the walk":"walk not resumed");
         return;
     }
@@ -260,6 +262,10 @@ bool approach() {
         haltAutoWalk(); active.approaching=active.walked=false; active.requests=0; faceNavigationTarget(active.target); return true;
     }
     if(autoWalkActive()) {active.approaching=active.walked=true; return false;}
+    // The player stopped the walk (Backslash again, or any movement or
+    // menu key). stopAutoWalk and physical input both advance the input
+    // revision; our own stops record it. Do not walk again on our own.
+    if(active.approaching && autoWalkInputRevision()!=active.walkInput) {stop("approach walk stopped by the player");return false;}
     // Ask again when the walk ended short of the zone (another hook stopped
     // it at a touch), or when a request never started a walk.
     const auto now=GetTickCount64();
@@ -313,7 +319,7 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
     try {
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
         if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
-        active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent;
+        active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent; active.walkInput=autoWalkInputRevision();
         if(remembered.epoch==active.epoch && remembered.chunk==script.chunk && remembered.worker==target.worker) active.touch=remembered.radius;
         learnedTouch(active.target);
         active.walk=active.held=walk && plan.walkConsent;
@@ -342,7 +348,10 @@ void updatePedestalInput() {
     const auto raw=read<uint16_t>(address(pedestal_rva::Held));
     const auto drained=drain; drain&=raw; if(drained) suppress(drained);
     if(strayResume && (armed || autoWalkActive())) strayResume=false; // Another walk or a push took over.
-    if(strayResume && fieldControl()) {
+    // Control comes back at 2F70 (Kilika), but field interaction only after
+    // a further wait(5) (2F76-2F82). Until then the pedestal reads inactive
+    // and a new walk to it is refused (in-game round 9, step 8 and step 11).
+    if(strayResume && fieldControl() && ++strayFrames>=StrayResumeFrames) {
         strayResume=false;
         // Step 8 via the plain Pedestal row: the walk had arrived, but the
         // touch moved the player out of reach, so facing fails. Route again.
@@ -407,12 +416,28 @@ void updatePedestalInput() {
         if(active.ended) {
             active.ended=false;
             const double moved=distanceXZ(snapshot.position,active.pushFrom);
-            recordLog("pedestal push stopped short: moved %.2f, player offset %.2f %.2f",moved,player.x-snapshot.position.x,player.z-snapshot.position.z);
-            if(moved<.3 && ++active.failures>=3) {
-                output(L"Pedestal push did not start. Walk into the pedestal from the push side by hand.",false,"pedestal-push");
-                stop("push did not start"); return;
+            recordLog("pedestal push stopped short: moved %.2f (east %.2f, north %.2f), player offset %.2f %.2f",moved,
+                snapshot.position.x-active.pushFrom.x,snapshot.position.z-active.pushFrom.z,player.x-snapshot.position.x,player.z-snapshot.position.z);
+            // In-game round 9: fourteen pushes in a row moved it under 1
+            // unit each. A push that short counts toward the cap as well.
+            if(moved<1.5 && ++active.failures>=3) {
+                output(moved<.3?L"Pedestal push did not start. Walk into the pedestal from the push side by hand.":
+                    L"Pedestal push keeps stopping after a short move. Walk into the pedestal from the push side by hand.",false,"pedestal-push");
+                stop(moved<.3?"push did not start":"push keeps stopping short"); return;
             }
-            if(moved>=.3) active.failures=0;
+            if(moved>=1.5) active.failures=0;
+            // Plan the rest from where the pedestal is now. A push can end
+            // past its goal or off the axis, and the plan made at arm time
+            // then names the wrong side (in game: "Push south 1.5 steps").
+            if(!live.moves.empty() && live.moves.size()<=active.directions.size()) {
+                unsigned index=0;std::array<unsigned,2> directions{};bool valid=true;
+                for(const auto& next:live.moves) {
+                    const auto bits=pedestalInputMask(next.held);
+                    if(next.held && pedestalLogicalInput(bits)!=next.held) valid=false;
+                    directions[index++]=bits;
+                }
+                if(valid) {active.plan=live;active.segment=0;active.directions=directions;}
+            }
             // Walk back to the push side and in again: the original script
             // starts a push only on a fresh contact.
             if(published) suppress(published);

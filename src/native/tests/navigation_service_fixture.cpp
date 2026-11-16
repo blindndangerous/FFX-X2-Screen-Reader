@@ -39,7 +39,7 @@ void installAutoWalk() {}void installPedestal() {}
 void stopAutoWalk() {++manualInputRevision;}
 void startAutoWalk() {check(nativeOwner,"approved start stays Native");++starts;}
 void cancelPedestal() {}
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&) {check(nativeOwner,"arming stays Native");++arms;}
+void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {check(nativeOwner,"arming stays Native");++arms;}
 void updatePedestalOwnedTarget(const NativeRouteTarget&) {check(nativeOwner,"POD assistance handback stays Native");}
 bool faceNavigationTarget(const NativeRouteTarget&) {check(nativeOwner,"facing stays Native");++faces;return true;}
 bool sphereGridOpen() {return false;}void spherePathKey(bool) {}

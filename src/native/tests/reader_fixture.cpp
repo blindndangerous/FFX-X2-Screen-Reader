@@ -120,7 +120,7 @@ bool nativeReaderResourcesReady() noexcept {return true;}
 unsigned autoWalkInputRevision() {return 0;}
 unsigned pedestalConfirmMask() {return 0x20;}
 PedestalNavigationState capturePedestalNavigationState() {return {};}
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&) {}
+void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {}
 void updatePedestalOwnedTarget(const NativeRouteTarget&) {}
 bool testBlitzMirror=false;
 BlitzSnapshot captureBlitzSnapshot(bool,bool) {BlitzSnapshot s;s.epoch=generation();s.valid=s.lobby=testBlitzMirror;return s;}

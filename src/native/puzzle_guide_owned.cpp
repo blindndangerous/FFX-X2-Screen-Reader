@@ -64,13 +64,25 @@ void synchronizeTiles(const nav::Scene& observation,State& state) {
     const int pattern=value(observation,state,0x5c000004),progress=value(observation,state,pattern==0?0x0c000022:pattern==5?0x0c000029:0x0c000024);
     if(state.pattern!=pattern || progress<state.progress) state.visited.clear();state.pattern=pattern;state.progress=progress;
 }
+// A lit floor panel turns its own touch shape off (dome0700 W58 a9a2
+// setCollisionShapeActive(0)), so the live scene shows it with no interaction
+// channel. Panels the session never saw lit (guide reset mid-pattern) are
+// skipped that way too. An all-dark read of the pattern is ignored.
+std::set<unsigned> darkTiles(const nav::Scene& observation,const State& state) {
+    std::set<unsigned> dark;unsigned seen=0;
+    for(const auto& candidate:puzzleTiles) if(static_cast<int>(candidate.stage)==state.pattern)
+        for(unsigned i=0;i<observation.count;++i) {const auto& fact=observation.workers[i];
+            if(!fact.valid || fact.part!=state.part || fact.local!=candidate.worker) continue;++seen;if(!fact.interactions.channels) dark.insert(candidate.worker);break;}
+    if(dark.size()==seen) dark.clear();return dark;
+}
 bool tile(const nav::Scene& observation,State& state,Point& point,std::wstring& label) {
     if(std::strcmp(state.route->script,"dome0700")) return false;synchronizeTiles(observation,state);const PuzzleTile* target=nullptr;double best=std::numeric_limits<double>::infinity();
-    for(const auto& candidate:puzzleTiles) {nav::checkComputation();if(static_cast<int>(candidate.stage)!=state.pattern || state.visited.count(candidate.worker)) continue;bool blocked=false;
+    const auto dark=darkTiles(observation,state);
+    for(const auto& candidate:puzzleTiles) {nav::checkComputation();if(static_cast<int>(candidate.stage)!=state.pattern || state.visited.count(candidate.worker) || dark.count(candidate.worker)) continue;bool blocked=false;
         for(const auto& guard:candidate.blocked) if(value(observation,state,guard.low,guard.high,guard.element)==guard.value) blocked=true;if(blocked) continue;
         const auto distance=distanceXZ(observation.player,candidate.point);if(distance<best) {best=distance;target=&candidate;}}
     if(!target) {label=L"No remaining permitted tile for this pattern. Activate the next pedestal or follow the current sphere step.";return false;}
-    point=target->point;label=L"Pattern "+std::to_wstring(state.pattern)+L". Next permitted floor panel: "+zanarkandGlyphLabel(target->worker)+L". Step onto it; a wrong panel resets the pattern. Press F10 for its path.";return true;
+    point=target->point;label=L"Pattern "+std::to_wstring(state.pattern)+L". Next permitted floor panel: "+zanarkandGlyphLabel(target->worker)+L". Step onto it; a wrong panel resets the pattern. For its path, choose Read path to current step in the Cloister of Trials menu.";return true;
 }
 Entity target(const nav::Scene& observation,const State& state,const PuzzleStep& step,const std::vector<Entity>& entities) {
     Entity result;result.name=step.label;
@@ -188,7 +200,14 @@ bool ownedGuidePedestalFace(const nav::Scene& observation,const Entity& pedestal
     // recess, at interaction range, not to the push position: touching the
     // pedestal starts the original push script, which takes control.
     if(pedestal.pushControl<2 || pedestal.pushControl>4 || ownedGuidePedestalStep(observation,pedestal).empty()) return false;
-    face={};const auto& state=storage.get();if(std::string_view(state.route->script)!="djyt0600") return true;
+    face={};const auto& state=storage.get();
+    if(std::string_view(state.route->script)=="mcyt0500") try {
+        // W1 entry 2 (pc 1666) runs the sphere action only from W29 side
+        // 0xc5=2, south of the pedestal, or side 8, north of it, while the
+        // pedestal is on the walkway (0xa3=5).
+        face={0,0,value(observation,state,0x0c0000a3)==5?1.0:-1.0};return true;
+    } catch(...) {return false;}
+    if(std::string_view(state.route->script)!="djyt0600") return true;
     try {
         // Djose W15 owns the east socket (0x9d) and W16 the west socket (0x9e).
         // An insert goes to an empty socket, a take to a loaded one; east first.

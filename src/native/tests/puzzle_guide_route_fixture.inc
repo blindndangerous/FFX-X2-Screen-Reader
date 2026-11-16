@@ -13,7 +13,10 @@ void loadGuideRoute(const char* script,const std::vector<GuideStage>& stages) {
     const auto trial=std::find_if(std::begin(trialUtilities),std::end(trialUtilities),[&](const TrialUtility& t){return !std::strcmp(t.script,script);});
     check(trial!=std::end(trialUtilities),"guide trial exists");
     load(*trial,trial->collect);resetOwnedPuzzleGuide();
-    for(const auto& step:guideRoute(script).steps) if(step.check) declaration(step.done.low,step.done.high);
+    for(const auto& step:guideRoute(script).steps) if(step.check) {
+        declaration(step.done.low,step.done.high);
+        if(step.also.low) declaration(step.also.low,step.also.high);
+    }
     for(const auto& stage:stages) for(const auto& write:stage.writes) declaration(write.low,write.high);
     put(chunk,0x402,static_cast<uint16_t>(declarations.size()));
     utility_fixture_resources::prepareUtilityResources(ptr(chunk),chunk.data(),chunk.size());
@@ -163,6 +166,10 @@ double guidePedestalFace(const Entity& pedestal) {
 // A guide step that puts a sphere in or takes one out of a pedestal routes
 // to the pedestal's sphere recess, which stops at interaction range. The push
 // position touches the pedestal and starts the native push.
+double guidePedestalFaceZ(const Entity& pedestal) {
+    const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;Point face{};
+    const bool found=ownedGuidePedestalFace(*fixtureGuideScene,pedestal,face);fixtureNativeOwner=previous;return found?face.z:0;
+}
 bool guidePedestalRecess(const Entity& pedestal) {
     const bool previous=fixtureNativeOwner;fixtureNativeOwner=false;Point face{};
     const bool found=ownedGuidePedestalFace(*fixtureGuideScene,pedestal,face);fixtureNativeOwner=previous;return found;
@@ -295,6 +302,14 @@ void kilikaGuideRouteFixture() {
         {"open Destruction treasure",{{0x01000a70,2}},21},
         {"remove antechamber door sphere",{{0x0c000062,0},{0x0c00005b,3},{0x0c000063,3}},22},
     });
+    // A sphere put back in its source recess (0x58 refilled, hand 0x5b
+    // empty) asks for the pickup again.
+    walkGuideRoute("klyt1000",{
+        {"entry",{{0x0c000058,1},{0x0c00005a,4},{0x0c00005f,2},{0x0c000060,6},{0x0c000061,3}},1},
+        {"take entry sphere",{{0x0c00005b,1},{0x0c000058,0}},2},
+        {"put entry sphere back",{{0x0c000058,1},{0x0c00005b,0}},1},
+        {"take entry sphere again",{{0x0c00005b,1},{0x0c000058,0}},2},
+    });
     {
         const std::vector<GuideStage> stages={
             {"entry",{{0x0c000058,1},{0x0c00005a,4},{0x0c00005f,2},{0x0c000060,6},{0x0c000061,3}},1},
@@ -390,6 +405,36 @@ void macalaniaGuideRouteFixture() {
     // The treasure flag is permanent save data, but the room resets on each
     // entry. A collected treasure must not skip the room steps.
     walkGuideRoute("mcyt0500",{{"room reset after treasure",{{0x0c000095,4},{0x0c000096,4},{0x0c000098,11},{0x0c00009b,4},{0x0c00009d,10},{0x01000a70,8}},1}});
+    // W1 entry 2 (mcyt0500 pc 1666) only runs the sphere action when W29
+    // set side 0xc5=2: the player 2 to 9.6 units south of the pedestal and
+    // within 1.6 west to 2.4 east of it. Side 8 (north) counts only when the
+    // pedestal is on the walkway (0xa3=5). The guide must route there.
+    {
+        const std::vector<GuideStage> stages={
+            {"entry",{{0x0c000095,4},{0x0c000096,4},{0x0c000098,11},{0x0c00009b,4},{0x0c00009d,10}},1},
+            {"push into first ice mound",{{0x0c0000a3,1}},2},
+            {"push down opened ramp",{{0x0c0000a3,3}},3},
+            {"take central Glyph Sphere",{{0x0c000094,11},{0x0c000098,0}},4},
+            {"insert lower reveal recess",{{0x0c0000c8,1},{0x0c000094,0}},5},
+            {"take revealed Macalania Sphere",{{0x0c000094,4},{0x0c00009b,0}},6}};
+        loadGuideRoute("mcyt0500",stages);
+        for(const auto& stage:stages) {for(const auto& w:stage.writes) setValue(w.low,w.high,w.value,w.element);expectGuide("mcyt0500",stage.action,stage.expected);}
+        Entity pedestal;configurePedestalTarget(pedestal,"mcyt0500",1);
+        check(guidePedestalFaceZ(pedestal)==-1,"Macalania pedestal insert routes to the south face");
+        guideSays(OwnedGuideAction::Expected,L"Step 6 of 38. Target: Pedestal. Stand centred on the south face","Macalania insert names the south face");
+        setValue(0x0c0000a3,1,5);fixturePuzzleGuideSync(OwnedGuideAction::Completed);
+        check(guidePedestalFaceZ(pedestal)==1,"Macalania pedestal on the walkway routes to the north face");
+        resetOwnedPuzzleGuide();
+    }
+    // A sphere put back in its source recess asks for the pickup again.
+    walkGuideRoute("mcyt0500",{
+        {"entry",{{0x0c000095,4},{0x0c000096,4},{0x0c000098,11},{0x0c00009b,4},{0x0c00009d,10}},1},
+        {"push into first ice mound",{{0x0c0000a3,1}},2},
+        {"push down opened ramp",{{0x0c0000a3,3}},3},
+        {"take central Glyph Sphere",{{0x0c000094,11},{0x0c000098,0}},4},
+        {"put Glyph Sphere back",{{0x0c000098,11},{0x0c000094,0}},3},
+        {"take central Glyph Sphere again",{{0x0c000094,11},{0x0c000098,0}},4},
+    });
     // Taking the bridge sphere back keeps the durable bridge checkpoint.
     walkGuideRoute("mcyt0500",{
         {"bridge restored",{{0x0c0000c8,1},{0x0c0000ca,1},{0x0c000098,4}},12},
@@ -434,11 +479,17 @@ void bevelleGuideRouteFixture() {
         {"insert Destruction Sphere in former Glyph recess",{bevelleSphere(5,1,0),bevelleSphere(5,7,1),{0x0c000026,1}},10},
         {"retrieve lower power recess sphere",{bevelleSphere(3,8,0),bevelleSphere(3,1,1)},11},
         {"open Destruction treasure",{{0x01000a70,16}},12},
+        // w54 (the chest edge) turns on w53. Stepping into w53 calls the
+        // pedestal (1cd48 0x09=15) before any push. w38 entry 16 then puts
+        // the push zone beside it at z 263.1 for 0x09 14 or 15.
+        {"step into the w53 zone that calls the pedestal",{{0x0c000007,81},{0x0c000009,15}},12},
         {"insert upper platform recess",{bevelleSphere(3,1,0),bevelleSphere(3,10,1),{0x0c000029,1}},13},
-        // w53 is the push zone for the emptied pedestal; it alone writes
-        // 0x09=15. w15 then rides to 0x08=66, gives the second chest (w17
-        // entry 7) and sets 0x2a, and only then rests the pedestal at 0x09=17.
-        {"push pedestal to upper platform",{{0x0c000009,15}},14},
+        // The push is w38 entry 15 (gated on 0x29=1): 1c413 0x07=87. w0 then
+        // writes 0x09=16 (2be0) and rides w13 to z 203.59, where w13 writes
+        // 0x08=65 (557b). w15 rides on to 0x08=66, gives the second chest (w17
+        // entry 7), sets 0x2a, and only then rests the pedestal at 0x09=17.
+        {"push pedestal off the upper platform",{{0x0c000007,87},{0x0c000009,16}},14},
+        {"ride reaches the lower stop",{{0x0c000008,65}},14},
         {"ride reaches the second chest",{{0x0c000008,66}},14},
         {"ride opens second chest",{{0x0c00002a,1},{0x0c000009,17}},15},
     });
@@ -448,6 +499,15 @@ void bevelleGuideRouteFixture() {
     // entry. A collected treasure must not skip the room steps.
     walkGuideRoute("bvyt1100",{{"room reset after treasure",{bevelleSphere(1,2,1),bevelleSphere(2,4,1),bevelleSphere(3,6,1),bevelleSphere(4,7,1),bevelleSphere(5,9,1),{0x01000a70,16}},1}});
     walkGuideRoute("bvyt1100",{{"late start after treasure",{{0x0c000025,1},bevelleSphere(4,11,1),{0x0c000026,1},{0x01000a70,16}},12}});
+    // A Bevelle Sphere put back in its source place asks for the pickup again.
+    walkGuideRoute("bvyt1100",{
+        {"entry",{bevelleSphere(1,2,1),bevelleSphere(2,4,1),bevelleSphere(3,6,1),bevelleSphere(4,7,1),bevelleSphere(5,9,1)},1},
+        {"push rail pedestal onto track",{{0x0c000008,1}},2},
+        {"ride the rail",{{0x0c000008,19}},2},
+        {"take upper Bevelle Sphere",{bevelleSphere(2,4,0),bevelleSphere(2,1,1)},3},
+        {"put it back",{bevelleSphere(2,1,0),bevelleSphere(2,4,1)},2},
+        {"take it again",{bevelleSphere(2,4,0),bevelleSphere(2,1,1)},3},
+    });
     // Taking a Bevelle Sphere back out of w31 clears 0x25 (w31 writes
     // 0x25=0 at 1685a, 169b0 and 16b06); putting it back sets it again.
     // After the put-back the guide must expect step 4 again.
@@ -505,6 +565,52 @@ void zanarkandGuideRouteFixture() {
         {"take Kilika Sphere",{{0x5c00000c,0},{0x5c000008,1}},10},
         {"insert Kilika recess",{{0x5c000008,0},{0x5c00001c,1},{0x0c000020,6}},11},
         {"gate opens",{{0x0c000020,7}},11},
+    });
+    // W56 (the activation tile) only resets 0x22 and 0x23, which are already
+    // 0, so step 1 has no done signal. Its text must send the player to step
+    // 2, where tile guidance runs. F10 selects the next step; the path is the
+    // trial menu's "Read path to current step".
+    {
+        loadGuideRoute("dome0700",{{"entry",firstVisit,0}});
+        for(const auto& w:firstVisit) setValue(w.low,w.high,w.value,w.element);
+        guideSays(OwnedGuideAction::Step,L"press F10 for the next step","Zanarkand step 1 sends the player to step 2");
+        const auto tileText=fixturePuzzleGuideSync(OwnedGuideAction::Next);
+        check(tileText.find(L"Next permitted floor panel")!=std::wstring::npos,"Zanarkand step 2 names the next floor panel");
+        check(tileText.find(L"Press F10 for its path")==std::wstring::npos,"Zanarkand tile text does not send F10 for a path");
+        if(tileText.find(L"Read path to current step")==std::wstring::npos) std::fprintf(stderr,"tile text: %ls\n",tileText.c_str());
+        check(tileText.find(L"Read path to current step")!=std::wstring::npos,"Zanarkand tile text names the path action");
+        // A lit floor panel turns its own touch shape off (W58 a9a2
+        // setCollisionShapeActive(0)), so stepping on it again does nothing.
+        // A guide that lost its session record (reset mid-pattern) must not
+        // name it again; the live scene shows it with no interaction channel.
+        std::vector<const PuzzleTile*> order;
+        for(const auto& tile:puzzleTiles) if(tile.stage==0) order.push_back(&tile);
+        std::sort(order.begin(),order.end(),[](const PuzzleTile* a,const PuzzleTile* b) {return std::hypot(a->point.x,a->point.z)<std::hypot(b->point.x,b->point.z);});
+        check(order.size()>=2 && tileText.find(zanarkandGlyphLabel(order[0]->worker))!=std::wstring::npos,"Zanarkand names the nearest unlit panel");
+        resetOwnedPuzzleGuide();
+        for(const auto* tile:order) fixtureGuideWorkers.push_back({tile->worker,tile==order[0]?0u:0x20u});
+        fixturePuzzleGuideSync(OwnedGuideAction::Step);
+        const auto liveText=fixturePuzzleGuideSync(OwnedGuideAction::Next);fixtureGuideWorkers.clear();
+        const auto litLabel=std::wstring(zanarkandGlyphLabel(order[0]->worker)),nextLabel=std::wstring(zanarkandGlyphLabel(order[1]->worker));
+        if(litLabel!=nextLabel) {
+            if(liveText.find(nextLabel)==std::wstring::npos) std::fprintf(stderr,"live tile text: %ls\n",liveText.c_str());
+            check(liveText.find(nextLabel)!=std::wstring::npos,"Zanarkand skips a panel the scene shows as already lit");
+        }
+        // If the scene shows every panel with no channel (a transient read),
+        // the guide still names a panel instead of giving up.
+        for(const auto* tile:order) fixtureGuideWorkers.push_back({tile->worker,0u});
+        resetOwnedPuzzleGuide();fixturePuzzleGuideSync(OwnedGuideAction::Step);
+        const auto allText=fixturePuzzleGuideSync(OwnedGuideAction::Next);fixtureGuideWorkers.clear();
+        check(allText.find(L"Next permitted floor panel")!=std::wstring::npos,"Zanarkand ignores an all-dark scene read");
+        resetOwnedPuzzleGuide();
+    }
+    // A sphere put back in its source recess asks for the pickup again.
+    auto allPedestals=firstVisit;allPedestals.insert(allPedestals.end(),{{0x5c000004,4},{0x0c000020,4}});
+    walkGuideRoute("dome0700",{
+        {"after four pedestal patterns",allPedestals,7},
+        {"take Besaid Sphere",{{0x5c000010,0},{0x5c000008,2}},8},
+        {"put Besaid Sphere back",{{0x5c000010,2},{0x5c000008,0}},7},
+        {"take Besaid Sphere again",{{0x5c000010,0},{0x5c000008,2}},8},
     });
     auto lateStart=firstVisit;lateStart.push_back({0x0c000020,3});
     walkGuideRoute("dome0700",{{"late start after three pedestals",lateStart,6}});

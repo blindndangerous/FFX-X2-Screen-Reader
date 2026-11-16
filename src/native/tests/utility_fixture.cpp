@@ -31,6 +31,9 @@
 #include "../settings.hpp"
 #include "../via_purifico.hpp"
 #include "../via_purifico_data.hpp"
+#include "../puzzle_tiles.hpp"
+#include "../puzzle_tiles_data.hpp"
+#include "../zanarkand_patterns.hpp"
 #include <map>
 #include <fstream>
 #include <cstdio>
@@ -303,6 +306,8 @@ namespace {
 bool fixtureGuideControl=true;
 ffx::PedestalNavigationState fixtureGuidePedestal{};
 const ffx::nav::Scene* fixtureGuideScene=nullptr;
+// Live scene workers for the guide: {local worker, interaction channels}.
+std::vector<std::pair<unsigned,unsigned>> fixtureGuideWorkers;
 std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
     using namespace ffx;
     UtilityScript script=utilityScript();
@@ -312,6 +317,8 @@ std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
     nav::Scene& guideScene=*([]()->nav::Scene* { static nav::Scene value{};return &value; })();
     std::memset(&guideScene,0,sizeof(guideScene));guideScene.epoch=generation();guideScene.revision=1;guideScene.primary=script.chunk;guideScene.partCount=1;
     guideScene.control=fixtureGuideControl;guideScene.pedestal=fixtureGuidePedestal;fixtureGuideScene=&guideScene;
+    for(const auto& [local,channels]:fixtureGuideWorkers) {auto& fact=guideScene.workers[guideScene.count++];
+        fact.valid=true;fact.part=0;fact.local=local;fact.global=guideScene.count-1;fact.interactions.channels=channels;}
     auto& part=guideScene.parts[0];
     check(nativeAtelSpan(script.chunk,part.span),"Native guide fixture captures resource span");
     part.span.epoch=guideScene.epoch;part.guideReady=true;part.bindingsReady=true;part.identityReady=true;
@@ -328,6 +335,15 @@ std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
         check(part.bindings.count<part.bindings.rows.size(),"Native guide fixture element row bound");
         auto& row=part.bindings.rows[part.bindings.count++];row.binding=step.done.low;row.high=step.done.high;row.element=step.done.element;
         row.value=utilityValue(script,step.done.low,step.done.high,step.done.element);
+    }
+    // A pickup's source check (`also`) can read another array element.
+    for(const auto& route:puzzleRoutes) if(script.name==route.script) for(const auto& step:route.steps) if(step.check && step.also.element) {
+        bool have=false;for(unsigned i=0;i<part.bindings.count;++i) {const auto& row=part.bindings.rows[i];
+            if(row.binding==step.also.low && row.high==step.also.high && row.element==step.also.element) have=true;}
+        if(have) continue;
+        check(part.bindings.count<part.bindings.rows.size(),"Native guide fixture element row bound");
+        auto& row=part.bindings.rows[part.bindings.count++];row.binding=step.also.low;row.high=step.also.high;row.element=step.also.element;
+        row.value=utilityValue(script,step.also.low,step.also.high,step.also.element);
     }
     speechq::Header header{};header.generation=guideScene.epoch;
     struct WorkerGuard {bool previous;WorkerGuard():previous(fixtureNativeOwner){fixtureNativeOwner=false;}~WorkerGuard(){fixtureNativeOwner=previous;}} guard;
