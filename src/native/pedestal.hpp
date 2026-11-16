@@ -92,6 +92,9 @@ void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const Pedest
 void updatePedestalOwnedTarget(const NativeRouteTarget&);
 void cancelPedestal();
 void updatePedestalInput();
+struct NavLeg;
+// Native walker calls with its current pose. True releases movement this tick.
+bool pedestalWalkLeg(NavLeg&,Point);
 // Native owner: defer an approach stall to this session's bounded retry budget.
 bool pedestalRetryNoProgress();
 void installPedestal();

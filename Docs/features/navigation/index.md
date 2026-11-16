@@ -1,6 +1,100 @@
 # Navigation, route validity, audio and movement
 
+## Kilika step-15 native staging handoff — November16
+
+This record supersedes the three unsuccessful live repairs (`ffd6fc9`,
+`04d23b0`, `77043b9`) and their acceptance procedures below. The supplied
+`.local/r16-step15-live.log` records the player passing the clearance entry
+sideways, then standing at `(-7.682, -10.008, 132.661)` until timeout.
+The preceding oscillation is retained in `.local/r15-step15-live.log`.
+
+The missed waypoint was the radial entry, not the final outside-contact stage.
+At `77043b9`, `auto_walk.cpp:346` held every reached intermediate push waypoint
+until the worker published a different one. `nav_cues.cpp:127` advanced only
+from worker observations. A crossing between observations therefore left the
+native walker holding forever. `pedestal_input.cpp:328` separately measured
+progress toward an ideal contact point, explaining the logged distance mismatch.
+The previous convergence record's claim that this mismatch was harmless is
+superseded by the shared-target requirement and implementation here.
+
+The route now ends with at least four world units along the push axis. For
+the reset north push, it first reaches the centre line farther south, then
+walks north to the outside stage. Floor connectivity and pedestal clearance
+still validate that suffix on the preparation worker. The native walker can
+advance that validated radial suffix without waiting for another observation.
+Other reached intermediate waypoints release movement and allow at most 250 ms
+for worker advancement; a missed waypoint silently requests a fresh route.
+A player stopped before handoff also requests a fresh route after 1.8 seconds.
+The existing eight-request limit and whole-approach deadline remain.
+
+`pedestalWalkLeg` receives the exact pose already read by the per-frame walker.
+It tests staging and changes the owned session to contact in that same call,
+releasing movement for the transition tick. The next tick uses the owned axial
+contact leg even if the worker still publishes the staging leg. Native contact
+ancestry, script/state/side guards and original north/east/north push plans remain
+in place. No new speech string or announcement is introduced. Progress,
+no-progress diagnostics and reported waypoint now share the effective steering
+target, including lateral alignment, rather than an unrelated contact point.
+When a line-rejoin steering point moves forward, improvement toward the previous
+point preserves the progress clock; changing targets without movement does not.
+All new native work uses fixed owned facts and bounded arithmetic; pathfinding
+stays on the preparation worker, with no native waits or locks.
+
+The new combined `pedestal_walk_fixture` links the real pedestal session and
+walker. It interpolates both live traces at 17 ms ticks with one-second recorded
+observations, freezes the copied worker leg, then lets actual input drive a
+10-units/second synthetic plant. It checks same-tick release/contact handoff,
+next-tick north steering, matching progress diagnostics, one push announcement,
+native north contact, and bounded stationary/missed-waypoint recovery. Existing
+route/input matrices retain six camera headings, four strides and delayed
+worker observations. These are offline synthetic movement/API/speech boundaries;
+they do not establish native inertia, collision timing or audible speech.
+The axial-route and indefinite-hold regressions failed before the repair. A
+long moving-target detour also failed its added regression, then passed after
+the progress-clock correction (`.local/r16-moving-target-red.log` and
+`.local/r16-moving-target-green.log`).
+
+Final validation: `cmd /c "src\proxy\build_dinput8.bat --no-deploy"` exits 0
+(`.local/r16-build-final.log`). The full `src\native\tests\run_tests.bat`
+exits 0: 85 PASS groups, 3 SKIP groups, no failures
+(`.local/r16-tests-final.log`). Skips retain the existing absent
+`native/hudTextureClipBody.bin`, `native/collisionReplayBody.bin` and
+`offline-output/FFX/20261003_audit/maps_v3.json`; no installed-game read was
+attempted to supply them. Existing C4244 build and C4456/D9026 harness warnings
+remain; no new warning is reported for the changed runtime or combined fixture.
+`git diff --check` passes. The matrix's contact handoff now refreshes its local
+leg before evaluating clearance and recognizes native consumption of the
+validated radial suffix; the full 192-case matrix passes with native contact
+side/clearance and whole-approach limits retained.
+
+Changed runtime files: `src/native/auto_walk.cpp`, `auto_walk.hpp`,
+`pedestal_input.cpp`, `pedestal.hpp`, and `nav_zones.cpp`. Changed test files:
+`src/native/tests/auto_walk_fixture.cpp`, `navigation_cancel_fixture.cpp`,
+`pedestal_fixture.cpp`, new `pedestal_walk_fixture.cpp`, and `run_tests.bat`.
+Documentation changes are this record, `CODEX_MEMORY.md` and `CHANGELOG.md`.
+No commit, deployment, packaging or game access is authorized for this task.
+
+Current nonvisual gameplay procedure, only after separately authorized deployment:
+
+1. At step 15 with the reset pedestal loaded, select Pedestal and start Auto walk
+   from the northeast, then from either former lateral loop position. Expect a
+   centre-line approach from the south, a brief release at staging, one push
+   announcement per leg, and north 2.3, east 4.5, north 2.5. Leave Confirm alone;
+   it opens the sphere prompt. Continue to steps 16–22 only after the pedestal
+   reaches the depression. Failure is renewed lateral hunting, an idle staging
+   hold, wrong-side contact, a repeated announcement, or premature no-progress.
+2. Verify Backslash and physical movement cancel immediately without restart.
+   A blocked/missed approach must silently replan, then give at most one existing
+   failure message within the retained request/deadline limits. Retain only the
+   failing attempt's timestamps and approach/contact/stop diagnostics.
+3. When progression permits, check sphere/recess walks at steps 8, 10, 11 and 13
+   still avoid pushing. Offline fixtures cannot prove actual gameplay completion,
+   floor collision response, hardware cadence or audible output.
+
 ## Kilika step-15 staging convergence — November16
+
+Historical implementation and offline results; superseded by the native handoff
+record above after the next live attempt failed.
 
 The user's live test of `04d23b0` remained in staging until the 15-second
 contact-progress stop. The authorized excerpt is `.local/r15-step15-live.log`.

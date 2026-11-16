@@ -62,6 +62,7 @@ bool utilityConsoleActive() { return console; }
 bool consent=false;
 bool retryPedestalStall=false;
 bool pedestalRetryNoProgress() {return retryPedestalStall;}
+bool pedestalWalkLeg(NavLeg&,Point) {return false;}
 bool pedestalConsentKey(unsigned scan) { return consent && scan==0x1c; }
 bool pedestalConsentVk(unsigned vk) { return consent && vk==VK_RETURN; }
 uint64_t pedestalConsentButtons() { return consent?pad::bit(pad::South):0; }
@@ -451,11 +452,17 @@ int main() {
     begin();leg.target.pushControl=2;leg.goal={0,0,10};player={0,0,9.25};frames(1);corner=keyboard();
     regression(autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a reached intermediate push waypoint releases input before worker advancement");
     frames(5);corner=keyboard();
-    regression(autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a delayed worker cannot make a reached push waypoint hunt again");
+    regression(!autoWalkActive() && !corner[0xc8] && !corner[0xd0],"a missed worker waypoint requests recovery instead of holding forever");
     player={};startAutoWalk(false);corner=keyboard();
     regression(corner[0xc8]!=0,"a new walk to the same waypoint clears the previous hold");
     player={0,0,9.25};frames(1);leg.start=leg.goal;leg.goal={10,0,10};frames(1);corner=keyboard();
     regression(corner[0xcd]!=0,"worker waypoint advancement releases the hold and steers the next leg");
+    begin({.222,-10,136.854});leg.start={9.112,-10,138.140};leg.goal={.222,-10,132.854};
+    leg.target.pushControl=2;leg.target.zone.valid=true;leg.target.zone.contactRadius=7;
+    leg.target.zone.center={.222,-10,144.104};leg.target.zone.approach={0,0,-1};
+    player={.3,-10,132.9};startAutoWalk(false);frames(1);corner=keyboard();
+    regression(autoWalkActive() && corner[0xc8] && !corner[0xcb] && !corner[0xcd],
+        "native tick turns north from axial entry without waiting for a worker observation");
     begin({.9,0,-7.25});player={1.25,0,-10};leg.start={0,0,-12};leg.target.pushControl=2;
     leg.target.zone.valid=true;leg.target.zone.shape=1;leg.target.zone.approach={0,0,-1};leg.target.zone.contactRadius=7;
     frames(1);corner=keyboard();
@@ -492,6 +499,9 @@ int main() {
     begin({0,0,100});speech.clear();leg.goal={0,0,-300};
     for(unsigned i=0;i<160 && autoWalkActive();++i) {player.z-=1;clockValue+=100;updateAutoWalk();}
     regression(autoWalkActive() && speech.empty(),"progress along a detour survives fifteen seconds moving away from the destination");
+    begin({0,0,1000});leg.target.pushControl=2;player={1,0,0};startAutoWalk(false);speech.clear();
+    for(unsigned i=0;i<160 && autoWalkActive();++i) {player.z+=.15;clockValue+=100;updateAutoWalk();}
+    regression(autoWalkActive() && speech.empty(),"advancing toward a moving line-rejoin target remains progress during a long pedestal detour");
     begin();speech.clear();
     for(unsigned i=0;i<160 && autoWalkActive();++i) {player.z-=.5;leg.goal={0,0,player.z-1};clockValue+=100;updateAutoWalk();}
     regression(autoWalkActive() && speech.empty(),"reaching short waypoints counts as progress through a long detour");

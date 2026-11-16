@@ -389,6 +389,10 @@ cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:p
 if not "%errorlevel%"=="0" goto failed
 pedestal_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:pedestal_walk_fixture.exe "%TEST_SRC%pedestal_walk_fixture.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_keys.cpp" "%TEST_SRC%..\game_binding_input.cpp" "%TEST_SRC%..\pedestal_input.cpp" "%TEST_SRC%..\auto_walk.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+pedestal_walk_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--pedestal" goto success
 :review
 cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:context_fixture.exe "%TEST_SRC%context_fixture.cpp" "%TEST_SRC%..\game_context.cpp"

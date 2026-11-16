@@ -22,6 +22,8 @@ void suspendAutoWalk();
 using AutoWalkResume=bool(*)(const NativeRouteTarget&);
 void setAutoWalkResume(AutoWalkResume);
 bool autoWalkActive();
+// Native owner: current effective steering target, including pedestal alignment.
+bool autoWalkSteeringGoal(Point&);
 void updateAutoWalk();
 void autoWalkKeyboard(uint8_t* keys);
 void autoWalkController(pad::State& state);

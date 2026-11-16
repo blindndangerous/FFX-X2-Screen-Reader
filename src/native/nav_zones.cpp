@@ -183,8 +183,9 @@ std::vector<Point> contactRoute(const Mesh& mesh,Point player,Point goal,const I
     // A monotonic but oblique last leg can still touch an off-side corner.
     std::vector<Point> suffix;
     const double to=distanceXZ(goal,zone.center);
-    if(to>.01 && to<radius) {
-        const double scale=radius/to;
+    const bool axial=zone.contactRadius>0 && distanceXZ(zone.approach,{})>.9;
+    if(to>.01 && (to<radius || axial)) {
+        const double scale=(axial?std::max(radius,to+4):radius)/to;
         const Point stage{zone.center.x+(goal.x-zone.center.x)*scale,goal.y,zone.center.z+(goal.z-zone.center.z)*scale};
         auto step=routePoints(mesh,stage,goal);
         if(step.size()!=2 || distanceXZ(step.front(),stage)>.01 || distanceXZ(step.back(),goal)>.01 ||

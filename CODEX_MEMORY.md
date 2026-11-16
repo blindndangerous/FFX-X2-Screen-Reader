@@ -1,5 +1,23 @@
 # FFX current memory — November4
 
+November16 step-15 redesign supersedes the failed live waypoint-hold repair.
+The radial entry now leads into an axial staging suffix; the per-frame walker
+owns staging/contact handoff and releases movement in the transition tick.
+Missed intermediate holds and stopped approaches request bounded silent replans.
+Progress and diagnostics use the effective steering target. Both supplied live
+traces pass the combined real-session/walker fixture with a frozen worker leg,
+17 ms native ticks and a 10-units/second synthetic plant. The final no-deploy
+build and full native suite exit 0: 85 PASS groups and 3 existing missing-evidence
+SKIP groups. The 192-case production route/input matrix and moving-target
+progress regression pass. Receipts: `.local/r16-build-final.log` and
+`.local/r16-tests-final.log`. Existing C4244 compiler and C4456/D9026 harness
+warnings remain. Gameplay and audible speech remain unverified.
+No commit, deployment, packaging or game access is authorized. See the
+[current cause, design and prioritized procedure](Docs/features/navigation/index.md#kilika-step-15-native-staging-handoff--november16).
+
+The following step-15 entries retain historical offline results; their live
+failures and superseding implementation are recorded above.
+
 Latest November16 step-15 live-staging follow-up reproduces skipped intermediate
 waypoint observations and digital-stride reversals at the supplied reset/loop
 coordinates. Native input now holds reached intermediate push waypoints, while

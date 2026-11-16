@@ -37,6 +37,8 @@ struct Session {
     uint64_t previous=0,progress=0,requested=0;
     uint64_t approachAt=0,contactProgress=0,diagnosticAt=0;
     double contactBest=-1;
+    Point monitorGoal,monitorPlayer;
+    bool monitorGoalKnown=false;
     unsigned requests=0,failures=0,announcedSegment=~0u;
     unsigned walkInput=0,walkFailure=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
@@ -316,6 +318,7 @@ void freshTarget(Point position) {
 }
 void resetApproach() {
     active.approachAt=active.contactProgress=active.diagnosticAt=0;active.contactBest=-1;
+    active.monitorGoalKnown=false;
 }
 bool monitorApproach(const PedestalSnapshot& snapshot,Point player,uint64_t now) {
     if(active.target.pushControl>2 || active.owned || active.started) return true;
@@ -325,14 +328,22 @@ bool monitorApproach(const PedestalSnapshot& snapshot,Point player,uint64_t now)
     const Point side=std::abs(gx)>=std::abs(gz)?Point{gx>0?-1.0:1.0,0,0}:Point{0,0,gz>0?-1.0:1.0};
     const auto& zone=active.target.zone;
     const double radius=active.contact?zone.range+.15:zone.contactRadius;
-    const Point contact{p.x+side.x*std::max(0.0,radius-.25),p.y,p.z+side.z*std::max(0.0,radius-.25)};
+    Point contact{p.x+side.x*std::max(0.0,active.contact?zone.range-.5:radius+.25),p.y,
+        p.z+side.z*std::max(0.0,active.contact?zone.range-.5:radius+.25)};
+    autoWalkSteeringGoal(contact);
+    if(!active.monitorGoalKnown || distanceXZ(contact,active.monitorGoal)>.1) {
+        const auto previousDistance=distanceXZ(player,active.monitorGoal);
+        if(active.monitorGoalKnown && distanceXZ(player,active.monitorPlayer)>.1 &&
+            (previousDistance<=1.5 || previousDistance<active.contactBest)) active.contactProgress=now;
+        active.monitorGoal=contact;active.monitorPlayer=player;active.monitorGoalKnown=true;active.contactBest=distanceXZ(player,contact);
+    }
     const double distance=distanceXZ(player,contact);
-    // Keep the best contact distance across staging, replans and off-side touches.
+    // Progress follows the effective steering target through staging and contact.
     if(active.contactBest<0 || distance<active.contactBest-1) {active.contactBest=distance;active.contactProgress=now;}
     const bool deadline=now-active.approachAt>=ApproachBudgetMs,stalled=now-active.contactProgress>=ContactProgressMs;
     if(!active.diagnosticAt || now-active.diagnosticAt>=1000 || deadline || stalled) {
         active.diagnosticAt=now;NavLeg leg;const bool routed=navLeg(leg);
-        const auto waypoint=routed?leg.goal:contact;
+        const auto waypoint=contact;
         recordLog("pedestal approach: elapsed %llu ms, idle %llu ms, segment %u, phase %s, requests %u, distance %.3f, best %.3f, route %u",
             now-active.approachAt,now-active.contactProgress,active.segment,active.waitingShape?"pending":active.contact?"contact":"staging",active.requests,distance,active.contactBest,routed?1u:0u);
         recordLog("pedestal approach geometry: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f, along %.3f, across %.3f, radius %.3f",
@@ -343,6 +354,38 @@ bool monitorApproach(const PedestalSnapshot& snapshot,Point player,uint64_t now)
     output(L"Auto walk stopped: no progress",false,"pedestal-push");
     stop(deadline?"approach deadline":"no contact progress");return false;
 }
+bool enterContact() {
+    const auto radius=active.target.zone.contactRadius,height=active.target.zone.height<0?1e30:active.target.zone.height;
+    const auto side=active.target.zone.approach;
+    const auto minY=active.target.zone.contactMinY,maxY=active.target.zone.contactMaxY;
+    active.target.zone={};active.target.zone.shape=1;active.target.zone.center=active.target.position;
+    active.target.zone.range=radius-.15;active.target.zone.height=height;active.target.zone.valid=std::isfinite(radius) && radius>.5;
+    active.target.zone.approach=side;
+    active.target.zone.contactMinY=minY;active.target.zone.contactMaxY=maxY;
+    if(!active.target.zone.valid) {stop("contact target unavailable",true);return false;}
+    active.contact=true;active.contactBest=-1;active.contactProgress=nowMs();
+    announcePush();nav::requestNavigationScene();return true;
+}
+}
+bool pedestalWalkLeg(NavLeg& leg,Point player) {
+    if(!nativeGameThread() || !armed || !active.held || active.owned || active.started || active.waitingShape ||
+        (!active.walk && !(read<uint16_t>(address(pedestal_rva::Held))&active.consent)) ||
+        active.epoch!=generation() || active.target.pushControl<1 || active.target.pushControl>2 ||
+        leg.target.worker!=active.target.worker || leg.target.id!=active.target.id ||
+        leg.target.pushControl!=active.target.pushControl || leg.target.pushLocal!=active.target.pushLocal ||
+        !active.target.zone.valid || active.target.inactive) return false;
+    // Arrival and phase ownership use this frame's pose, never the worker's arrived flag.
+    if(!active.contact && inInteractionZone(active.target.zone,player)) {
+        enterContact();return true;
+    }
+    leg.arrived=false;
+    if(active.contact) {
+        leg.target=active.target;leg.start=player;
+        const auto side=active.target.zone.approach;
+        const auto radius=std::max(0.0,active.target.zone.range-.5);
+        leg.goal=leg.final={active.target.position.x+side.x*radius,active.target.position.y,active.target.position.z+side.z*radius};
+    }
+    return false;
 }
 PedestalNavigationState capturePedestalNavigationState() {
     PedestalNavigationState s;if(!nativeGameThread() || !armed || active.epoch!=generation()) return s;
@@ -527,16 +570,7 @@ void updatePedestalInput() {
         const auto& next=active.plan.moves[active.segment];
         if(active.target.pushControl<=2 && !active.started) {
             if(!active.contact) {
-                const auto radius=active.target.zone.contactRadius,height=active.target.zone.height<0?1e30:active.target.zone.height;
-                const auto side=active.target.zone.approach;
-                const auto minY=active.target.zone.contactMinY,maxY=active.target.zone.contactMaxY;
-                active.target.zone={};active.target.zone.shape=1;active.target.zone.center=active.target.position;
-                active.target.zone.range=radius-.15;active.target.zone.height=height;active.target.zone.valid=std::isfinite(radius) && radius>.5;
-                active.target.zone.approach=side;
-                active.target.zone.contactMinY=minY;active.target.zone.contactMaxY=maxY;
-                if(!active.target.zone.valid) {stop("contact target unavailable",true);return;}
-                active.contact=true;
-                announcePush();
+                if(!enterContact()) return;
                 approach();
             }
             return;

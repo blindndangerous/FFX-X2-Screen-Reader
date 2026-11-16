@@ -74,7 +74,7 @@ int main() {
             check(!points.empty(),"push-side fixture has a connected route");
             routeNavAudio(points,target);nativeOwner=true;startAutoWalk(false);
         };
-        route();bool inward=false,touched=false;const auto began=clockValue;
+        route();bool inward=false,touched=false;unsigned retries=0;const auto began=clockValue;
         for(unsigned frame=0;frame<1800 && !touched;++frame) {
             if(frame%observationFrames==0) publish();
             clockValue+=33;updateAutoWalk();NavLeg current;
@@ -84,7 +84,12 @@ int main() {
             if(inInteractionZone(target.zone,player) && !inward) {
                 stopAutoWalk();target.zone.contactRadius=target.zone.obstacleRadius=0;
                 target.zone.range=6.85;inward=true;route();
+                check(navLeg(current),"contact handoff observes its newly published leg");
             }
+            // The pedestal session now owns bounded silent recovery when a
+            // worker misses an intermediate hold. This host supplies that
+            // scheduling boundary; pedestal_walk_fixture links the real owner.
+            if(!autoWalkActive() && speech.empty() && retries++<8) {route();check(navLeg(current),"replanned push leg stays available");}
             if(!autoWalkActive()) {
                 std::fprintf(stderr,"approach stopped: live=%d observation-frames=%u heading=%.1f stride=%.2f frame=%u player=%.3f,%.3f waypoint=%.3f,%.3f inward=%d arrived=%d\n",
                     liveReset,observationFrames,heading,stride,frame,player.x,player.z,current.goal.x,current.goal.z,inward,current.arrived);
@@ -97,8 +102,13 @@ int main() {
             if(!length) continue;
             const Point next{player.x+stride*(front*forward.x+right*forward.z)/length,player.y,
                 player.z+stride*(front*forward.z-right*forward.x)/length};
-            if(distanceXZ(current.goal,current.final)>.01)
+            Point steering;const bool nativeFinal=autoWalkSteeringGoal(steering) && distanceXZ(steering,current.final)<.01;
+            if(distanceXZ(current.goal,current.final)>.01 && !nativeFinal) {
+                if(distanceXZ(next,pedestal)<=(liveReset?7:9.5)) std::fprintf(stderr,
+                    "clearance: scenario=%u observations=%u heading=%.1f stride=%.2f frame=%u player=%.3f,%.3f next=%.3f,%.3f goal=%.3f,%.3f final=%.3f,%.3f steer=%.3f,%.3f inward=%d\n",
+                    scenario,observationFrames,heading,stride,frame,player.x,player.z,next.x,next.z,current.goal.x,current.goal.z,current.final.x,current.final.z,steering.x,steering.z,inward);
                 check(distanceXZ(next,pedestal)>(liveReset?7:9.5),"detour movement retains the wider pedestal clearance before the final leg");
+            }
             if(distanceXZ(next,pedestal)<=7) {
                 check(inward,"outside staging hands off before native contact");
                 check(next.z-pedestal.z< -2 && std::abs(next.x-pedestal.x)<1.5,"only centred south-side movement can touch the pedestal");

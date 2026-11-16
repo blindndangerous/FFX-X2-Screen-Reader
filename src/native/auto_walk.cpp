@@ -40,6 +40,7 @@ double best=-1;
 Point last,progressGoal;
 Point reachedWaypoint;
 bool waypointReached=false;
+uint64_t waypointAt=0;
 bool stopAnnounced=false;
 FieldControlsSnapshot messageGuard;
 std::array<unsigned,4> scans{0xc8,0xcb,0xd0,0xcd};
@@ -193,6 +194,7 @@ bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}
 unsigned autoWalkInputRevision() {return manualRevision.load(std::memory_order_acquire);}
 bool autoWalkActive() { return engaged && !cancel; }
+bool autoWalkSteeringGoal(Point& goal) {if(!nativeGameThread() || !autoWalkActive()) return false;goal=progressGoal;return true;}
 unsigned autoWalkRouteFailureRevision() {return routeFailures.load(std::memory_order_acquire);}
 void startAutoWalk(bool announce) {
     stop("new route");takeover={};
@@ -280,6 +282,7 @@ void updateAutoWalk() {
     if(!std::isfinite(player.x) || !std::isfinite(player.y) || !std::isfinite(player.z)) { stop("unreadable player",L"player position unavailable"); return; }
     const double delta=distanceXZ(player,last);
     if(delta>55.65) { stop("player relocated",L"player relocated"); return; }
+    if(pedestalWalkLeg(leg,player)) {mask=0;stamp=now;last=player;return;}
     if(leg.arrived) {
         const auto& target=leg.target;
         if(target.butterfly || target.swimDepth || !target.zone.valid || target.zone.crossing) {
@@ -315,40 +318,41 @@ void updateAutoWalk() {
         if(distanceXZ(player,leg.goal)<=.1) {mask=16;stamp=now;return;}
 
     }
-    if(!leg.target.swimDepth) {
-        if(delta>.1) { last=player; movingSince=now; }
-        // A detour can move away from its destination for longer than the cap.
-        // Measure advance toward the current waypoint without rearming on replans.
-        const double distance=distanceXZ(player,leg.goal);
-        if(distanceXZ(progressGoal,leg.goal)>.1) {
-            if(delta>.1 && distanceXZ(player,progressGoal)<=1.5) improved=now;
-            progressGoal=leg.goal;best=distance;
-        }
-        if(best<0 || distance<best-1) { best=distance; improved=now; }
-        else if(now-improved>=15000) {
-            const auto pedestal=leg.target.pushControl?leg.target.position:leg.target.zone.obstacle;
-            recordLog("auto walk no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
-                player.x,player.y,player.z,pedestal.x,pedestal.y,pedestal.z,leg.goal.x,leg.goal.y,leg.goal.z);
-            const bool retry=pedestalRetryNoProgress();
-            stop("no progress",retry?nullptr:L"no progress"); return;
-        }
-    }
+    if(!leg.target.swimDepth && delta>.1) { last=player; movingSince=now; }
     const bool pedestalRoute=leg.target.pushControl || leg.target.zone.obstacleRadius>0;
     if(leg.target.pushControl>=1 && leg.target.pushControl<=2 && distanceXZ(leg.goal,leg.final)>.01) {
         if(waypointReached && distanceXZ(reachedWaypoint,leg.goal)>.01) waypointReached=false;
         const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length=std::hypot(x,z);
         const auto dx=player.x-leg.goal.x,dz=player.z-leg.goal.z;
         const bool passed=length>.001 && dx*x+dz*z>=0 && std::abs(dx*z-dz*x)/length<=1;
-        if((distanceXZ(player,leg.goal)<=1 || passed) && std::abs(player.y-leg.goal.y)<=8) {
-            if(!waypointReached) {waypointReached=true;reachedWaypoint=leg.goal;refreshNavCollision();}
+        if((distanceXZ(player,leg.goal)<=1 || passed) && std::abs(player.y-leg.goal.y)<=8 && !waypointReached) {
+            waypointReached=true;reachedWaypoint=leg.goal;waypointAt=now;refreshNavCollision();
+            progressGoal=leg.goal;best=distanceXZ(player,leg.goal);improved=now;
+            mask=0;stamp=now;return;
         }
         // The worker may miss a waypoint crossed between observations. Hold
         // the reached point instead of steering back and forth through it.
-        if(waypointReached) {mask=0;stamp=now;return;}
+        if(waypointReached) {
+            const auto& zone=leg.target.zone;const auto side=zone.approach;
+            const auto axial=[&](Point p) {return (p.x-zone.center.x)*side.x+(p.z-zone.center.z)*side.z;};
+            const auto across=[&](Point p) {return (p.x-zone.center.x)*side.z-(p.z-zone.center.z)*side.x;};
+            const bool radial=zone.valid && zone.contactRadius>0 && !zone.talk && distanceXZ(side,{})>.9 &&
+                std::abs(across(leg.goal))<.01 && std::abs(across(leg.final))<.01 &&
+                axial(leg.goal)>axial(leg.final) && axial(leg.final)>=zone.contactRadius+.1;
+            if(radial) {leg.start=leg.goal;leg.goal=leg.final;}
+            else {
+                mask=0;stamp=now;
+                if(now-waypointAt>=250 || distanceXZ(player,reachedWaypoint)>1.5) {
+                    pedestalRetryNoProgress();stop("pedestal waypoint replan");
+                }
+                return;
+            }
+        }
     } else waypointReached=false;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
         if(leg.target.butterfly) { stop("butterfly route stalled",L"butterfly route stalled"); return; }
         refreshNavCollision();
+        if(leg.target.pushControl>=1 && leg.target.pushControl<=2) {pedestalRetryNoProgress();stop("pedestal stopped before handoff");return;}
         if(!navLeg(leg) || leg.arrived) { stop("replan unavailable",L"replan unavailable",true); return; }
         if(!pedestalRoute) unstickRight=!unstickRight;
         unstickUntil=pedestalRoute?0:now+700;movingSince=now;
@@ -375,6 +379,25 @@ void updateAutoWalk() {
         if(distanceXZ(nearest,player)>.35) {
             const auto lead=std::min(1.0,t+2/std::sqrt(length2));
             steer={leg.start.x+lead*x,player.y,leg.start.z+lead*z};
+        }
+    }
+    if(!leg.target.swimDepth) {
+        // A detour can move away from its destination for longer than the cap.
+        // Measure advance toward the current waypoint without rearming on replans.
+        const Point goal=leg.target.pushControl>=1 && leg.target.pushControl<=2?steer:leg.goal;
+        const double distance=distanceXZ(player,goal);
+        if(distanceXZ(progressGoal,goal)>.1) {
+            const auto previousDistance=distanceXZ(player,progressGoal);
+            if(delta>.1 && (previousDistance<=1.5 || previousDistance<best)) improved=now;
+            progressGoal=goal;best=distance;
+        }
+        if(best<0 || distance<best-1) { best=distance; improved=now; }
+        else if(now-improved>=15000) {
+            const auto pedestal=leg.target.pushControl?leg.target.position:leg.target.zone.obstacle;
+            recordLog("auto walk no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
+                player.x,player.y,player.z,pedestal.x,pedestal.y,pedestal.z,progressGoal.x,progressGoal.y,progressGoal.z);
+            const bool retry=pedestalRetryNoProgress();
+            stop("no progress",retry?nullptr:L"no progress"); return;
         }
     }
     double pan=0,front=0;

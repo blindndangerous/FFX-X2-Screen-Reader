@@ -108,17 +108,28 @@ Mesh readMesh() { Mesh mesh; mesh.openPlane=true; mesh.fixedHeight=true; mesh.pl
 bool faceNavigationTarget(const Entity&) { ++faces; return true; }
 bool faceResult=true;
 bool faceNavigationTarget(const NativeRouteTarget&) {++faces;return faceResult;}
+#ifndef FFX_PEDESTAL_WALK_INTEGRATION
 bool autoWalkActive() { return walking; }
+bool autoWalkSteeringGoal(Point& goal) {if(!walking || route.empty()) return false;goal=route.back();return true;}
+#endif
 unsigned walkStops=0;
 bool legValid=false,legArrived=false;
 unsigned inputRevision=1;
 unsigned routeFailuresFixture=0;
 char lastStopReason[256]{};
+#ifndef FFX_PEDESTAL_WALK_INTEGRATION
 unsigned autoWalkInputRevision() { return inputRevision; }
 void stopAutoWalk() { walking=false; ++walkStops; ++inputRevision; }
 unsigned autoWalkRouteFailureRevision() {return routeFailuresFixture;}
 void startAutoWalk(bool) { walking=true; ++starts; }
+#endif
+#ifdef FFX_PEDESTAL_WALK_INTEGRATION
+NavLeg integrationLeg;
+bool navLeg(NavLeg& leg) {leg=integrationLeg;return legValid;}
+void refreshNavCollision() {}
+#else
 bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
+#endif
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
 // Semantic immediate handback adapter: production scheduling/data-age is
 // exercised separately by navigation_service_fixture. This host only preserves
@@ -135,7 +146,15 @@ bool requestNavigationAssistRoute() {
     nativeOwner=false;OwnedNavTarget copied{};copied.native=target;Entity owned;
     const bool restored=restoreOwnedNavTarget(copied,owned);const auto points=restored?interactionRoute(mesh,origin,owned.zone):std::vector<Point>{};
     if(!points.empty()) routeNavAudio(points,owned);nativeOwner=true;
-    updatePedestalOwnedTarget(target);if(points.empty()) {cancelPedestal();return false;}startAutoWalk();return true;
+    updatePedestalOwnedTarget(target);if(points.empty()) {cancelPedestal();return false;}
+#ifdef FFX_PEDESTAL_WALK_INTEGRATION
+    OwnedNavTarget ready;captureOwnedNavTarget(owned,ready);
+    integrationLeg={points.front(),points[1],points.back(),ready.native,generation(),false};legValid=true;
+    startAutoWalk(false);
+#else
+    startAutoWalk();
+#endif
+    return true;
 }
 void requestNavigationAssistInstruction() {}
 unsigned pathQueries=0;
@@ -389,6 +408,19 @@ void liveResetContactFixture() {
         "coarse-stride staging still claims only an aligned north push");
     restore();cancelPedestal();frame(0);
     std::puts("PASS: live shifted reset-centre south approach and native contact");
+}
+void axialResetRouteFixture() {
+    auto target=setup(2,6,{.222,-10,144.104});values[0x0c00005a]=2;
+    for(const auto actor:{read<uintptr_t>(worker(6)+0x9c),playerActor()}) {
+        write<float>(actor+0x5c,3.5f);write<float>(actor+0x64,3.5f);
+    }
+    position(playerActor(),{5.285,-10,134.055});refreshTargetZone(target,worker(6),1);
+    const auto points=interactionRoute(readMesh(),playerPosition(),target.zone);
+    check(points.size()>=3,"reset staging route retains an axial entry leg");
+    const auto entry=points[points.size()-2],stage=points.back();
+    check(std::abs(entry.x-.222)<.001 && std::abs(stage.x-.222)<.001 && stage.z-entry.z>=4-.001,
+        "east-side reset approach reaches the south centre line before walking north to staging");
+    cancelPedestal();frame(0);
 }
 // In-game F25 and F26 (Kilika step 15 and the sphere steps next to it).
 void kilikaWalkFixtures() {
@@ -760,6 +792,7 @@ int main() {
     check(capturePedestalNavigationState().held,"pending route retains explicit held consent");frame(0);check(!capturePedestalNavigationState().armed,"released consent retires a pending route before delayed movement can start");delayRoute=false;
     nativeOwner=false;cancelPedestal();nativeOwner=true;
     check(!pedestalActivePlan(target,heldPlan),"foreign cancellation immediately retires consent without touching Native fields");frame(0);
-    liveResetContactFixture();boundedApproachFixtures();kilikaWalkFixtures();
+    axialResetRouteFixture();liveResetContactFixture();boundedApproachFixtures();kilikaWalkFixtures();
     std::puts("PASS: all-trial pedestal sides, Space push/native contact lifecycle, remaps and cancellation");
+    return 0;
 }
