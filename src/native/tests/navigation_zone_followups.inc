@@ -29,6 +29,11 @@ void contactPedestalFixtures(const Mesh& room) {
     const auto toStorage=interactionRoute(room,{56,0,40},list[2].zone);
     check(keepsClear(toStorage,center,5) && inInteractionZone(list[2].zone,toStorage.back()),
         "a walk past the Kilika pedestal to a storage recess goes around it");
+    auto closeGoal=list[2].zone;closeGoal.center={56,0,43};closeGoal.range=.3;
+    const auto oblique=interactionRoute(room,{80,0,40},closeGoal);
+    check(oblique.size()>2 && std::abs((oblique.back().x-center.x)*(oblique[oblique.size()-2].z-center.z)-
+        (oblique.back().z-center.z)*(oblique[oblique.size()-2].x-center.x))<.001,
+        "a near-pedestal destination receives a radial final leg instead of an oblique clearance shortcut");
     auto inner=list[1].zone; inner.range=4;
     check(interactionRoute(room,{50,0,25},inner).empty(),"an unreachable talk zone never discards the pedestal keep-out");
     // In-game F26: walking around the Kilika pedestal to its push side
@@ -96,6 +101,10 @@ void contactPedestalFixtures(const Mesh& room) {
             std::abs(last.z-center.z)<.001 && last.x<center.x-5,
             "the final push-side leg starts outside clearance with zero perpendicular offset");
     }
+    list[0].position=list[0].zone.center={60,0,40};
+    avoidContactPedestals(list);
+    check(distanceXZ(list[2].zone.obstacle,list[0].position)<.001,
+        "a moved pedestal replaces a destination's stale obstacle position");
 }
 void zoneFixtures() {
     Mesh counter;

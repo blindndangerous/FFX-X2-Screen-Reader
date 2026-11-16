@@ -27,7 +27,7 @@ struct Frame {
     std::array<uint8_t,0x4c> geometry;
     uintptr_t controller=0,primary=0;unsigned epoch=0,revision=0,manual=0,global=0,local=0,header=0,type=0,model=0,actorCount=0,zeroGlobal=0,zeroHeader=0,collisionSerial=0;
     Intent kind=Intent::Face;ULONGLONG capturedAt=0;
-    bool pointOnly=false;Point player,actorPose;
+    bool pointOnly=false,announce=true;Point player,actorPose;
 };
 ProcessStorage<std::array<Frame,Slots>> frames;
 std::array<std::atomic<unsigned>,Slots> tickets{};
@@ -115,14 +115,14 @@ void invoke(unsigned slot) {
     else if(f.kind==Intent::AssistFailed) cancelPedestal();
     else {
         if(f.kind==Intent::ArmAndStart || f.kind==Intent::ArmAndFace) {UtilityScript script;if(!scriptFor(f,script)) return;armPedestalOwned(f.target,script,f.plan,f.kind==Intent::ArmAndStart);}
-        if(f.kind==Intent::ArmAndFace) faceNavigationTarget(f.target);else startAutoWalk();
+        if(f.kind==Intent::ArmAndFace) faceNavigationTarget(f.target);else startAutoWalk(f.announce);
     }
 }
 }
 void startNavigationIntents() {frames.prepare();}
 unsigned navigationIntentRevision() {return revision.load(std::memory_order_acquire);}
 void invalidateNavigationIntents() {revision.fetch_add(1,std::memory_order_acq_rel);}
-bool submitNavigationIntent(const Scene& observation,const Entity& target,Intent kind,unsigned manual,unsigned wantedRevision) {
+bool submitNavigationIntent(const Scene& observation,const Entity& target,Intent kind,unsigned manual,unsigned wantedRevision,bool announce) {
     if(nativeGameThread() || !frames.ready() || (target.worker>=0 && static_cast<unsigned>(target.worker)>=observation.count) || wantedRevision!=navigationIntentRevision()) return false;
     // qualify() requires the controlled actor; never queue an action it must refuse.
     if(!observation.controlled) return false;
@@ -137,6 +137,7 @@ bool submitNavigationIntent(const Scene& observation,const Entity& target,Intent
     if(!captureOwnedNavTarget(target,captured)) {release(slot,token|Writing);return false;}f.target=captured.native;
     f.span=observation.parts[part].span;f.controller=observation.controller;f.primary=observation.primary;f.epoch=observation.epoch;f.revision=wantedRevision;f.manual=manual;f.pointOnly=pointOnly;f.player=observation.player;f.events=observation.geometry.events;f.collisionSerial=observation.collisionSerial;
     if(worker) {f.global=worker->global;f.local=worker->local;f.header=worker->header;f.type=worker->type;f.geometry=worker->geometry;}f.saved=observation.saved;f.kind=kind;f.capturedAt=observation.capturedAt;
+    f.announce=announce;
     f.model=0;f.actorPose={};if(target.actor>=0 && static_cast<unsigned>(target.actor)<observation.actorCount) {
         const auto& body=observation.actors[target.actor].bytes;std::memcpy(&f.model,body.data(),sizeof(uint16_t));
         float x=0,y=0,z=0;std::memcpy(&x,body.data()+0xc,4);std::memcpy(&y,body.data()+0x10,4);std::memcpy(&z,body.data()+0x14,4);f.actorPose={x,y,z};

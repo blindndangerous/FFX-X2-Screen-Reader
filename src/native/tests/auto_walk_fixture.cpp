@@ -158,6 +158,20 @@ int main() {
     memory=reinterpret_cast<uintptr_t>(VirtualAlloc(nullptr,0x2100000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
     check(memory!=0,"isolated native keyboard configuration");
     installAutoWalk();
+    begin();speech.clear();stopAutoWalk();startAutoWalk(false);
+    check(speech.empty(),"a resumed walk does not repeat its destination announcement");
+    speech.clear();stopAutoWalk();startAutoWalk();
+    check(speech.size()==1,"a new user walk still announces its destination once");
+    const auto beforeFailure=autoWalkInputRevision();releaseAutoWalk();
+    check(autoWalkRouteFailureRevision() && autoWalkInputRevision()!=beforeFailure,"route loss invalidates queued work and records a route failure");
+    begin();leg.target.zone.obstacle={-8,0,0};leg.target.zone.obstacleRadius=7;
+    clockValue+=100;leg.start=player;leg.goal={100,0,100};updateAutoWalk();
+    auto corner=keyboard();
+    check(corner[0xc8] && corner[0xcd],"a pedestal detour turns immediately instead of holding the previous octant for 250 ms");
+    begin();leg.target.zone.obstacle={-8,0,0};leg.target.zone.obstacleRadius=7;frames(19);
+    corner=keyboard();
+    check(autoWalkActive() && corner[0xc8] && !corner[0xcd] && !corner[0xcb],
+        "a stalled pedestal detour replans without an unchecked sideways move");
     begin();speech.clear();Event stopEvent;hooks.at(0x4b8980)(stopEvent);updateAutoWalk();
     check(speech.size()==1 && speech.back()==L"Auto walk stopped: dialogue" && !lastInterrupt,"dialogue stop speaks its reason once without interrupting");
     begin();speech.clear();player={100,0,0};updateAutoWalk();updateAutoWalk();

@@ -234,7 +234,7 @@ void complete(unsigned index,bool finalChestReturn=true) {
 namespace ffx {
 void refreshSwimmingGoal(Entity& entity) { if(entity.swimDepth) std::abort(); }
 void armPedestal(const Entity&) {}
-void startAutoWalk() {}
+void startAutoWalk(bool) {}
 void stopAutoWalk() {}
 void cancelPedestal() {}
 void clearNavRoute() {}
@@ -369,7 +369,7 @@ bool scenePedestalPlan(const Scene&,const Entity&,PedestalPlan&) { return false;
 InteractionZone sceneInteractionZone(const WorkerFact&,unsigned,float) { return {}; }
 unsigned navigationIntentRevision() { return 0; }
 void invalidateNavigationIntents() {}
-bool submitNavigationIntent(const Scene&,const Entity&,Intent,unsigned,unsigned) { return false; }
+bool submitNavigationIntent(const Scene&,const Entity&,Intent,unsigned,unsigned,bool) { return false; }
 }
 namespace ffx {
 OwnedTextContext copiedControlContext(const CopiedControls&) { return {}; }

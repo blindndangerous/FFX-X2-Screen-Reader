@@ -32,13 +32,20 @@ int value(const nav::Scene& observation,const State& state,unsigned low,unsigned
     for(unsigned i=0;i<facts.bindings.count;++i) {const auto& row=facts.bindings.rows[i];if(row.binding==low && row.high==high && row.element==element) return row.value;}
     throw std::runtime_error("Required puzzle observation is missing");
 }
-bool done(const nav::Scene& observation,const State& state,const PuzzleStep& step) {if(!step.check) return false;const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);
+bool done(const nav::Scene& observation,const State& state,const PuzzleStep& step) {if(!step.check) return false;
+    if(!step.done.low) {
+        if(std::strcmp(state.route->script,"klyt1000") || step.worker!=41) return false;
+        for(unsigned i=0;i<observation.count;++i) {const auto& worker=observation.workers[i];
+            if(worker.valid && worker.part==state.part && worker.local==6) return kilikaResetReached(worker.position);}
+        return false;
+    }
+    const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);
     if(step.also.low && value(observation,state,step.also.low,step.also.high,step.also.element)!=step.also.value) return false;
     return step.done.low==0x01000a70?(current&step.done.value)!=0:current==step.done.value;}
 void advance(const nav::Scene& observation,State& state) {
     PuzzleProgress progress{state.expected,state.placed,state.removed};
     advancePuzzleProgress(*state.route,state.begin,state.end,progress,[&](const PuzzleStep& step) {return done(observation,state,step);},
-        [&](const PuzzleStep& step) {const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);
+        [&](const PuzzleStep& step) {if(!step.done.low) return false;const auto current=value(observation,state,step.done.low,step.done.high,step.done.element);
             return step.done.low==0x01000a70?(current&step.done.value)==0:current==0;});
     state.expected=progress.expected;state.placed=progress.placed;state.removed=progress.removed;
 }
@@ -112,7 +119,7 @@ std::wstring instruction(const nav::Scene& observation,const Entity& target,cons
 // A scene or an assisted push owns the player while the script is part-way
 // through its writes (a door scene briefly empties a socket), so the guide
 // holds its last exact step until the player has control again.
-bool settling(const nav::Scene& observation) {return !observation.control || (observation.pedestal.armed && observation.pedestal.held);}
+bool settling(const nav::Scene& observation) {return !observation.control || observation.message || observation.window || (observation.pedestal.armed && observation.pedestal.held);}
 // Manual F9 and F10 selection starts from the step the guide last found.
 // A sphere put back where it came from. A pickup step whose `also` says its
 // source recess is empty (Besaid w39) is undone when the hand is empty and the
@@ -250,7 +257,7 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
     if(!std::strcmp(state.route->script,"bsyt0100") && current.worker==7 && value(observation,state,0x5c0000cc)!=1) return prefix+L"The Besaid Sphere must be in the pedestal before the final push. Insert it into the pedestal sphere recess first."+(action==OwnedGuideAction::Path?L" "+path(observation,mesh,entities,target(observation,state,state.route->steps[8],entities),false,manual,intentRevision):L"");
     const bool held=settling(observation);
     std::wstring push;if(pushStep(state,current) && !held) {try {push=instruction(observation,target(observation,state,current,entities),&current,done(observation,state,current));}catch(...) {}}
-    if(held && action!=OwnedGuideAction::Path) push=L"Wait for the current scene or push to finish, then ask again.";
+    if((held || observation.message || observation.window) && action!=OwnedGuideAction::Path) push=puzzleGuideWaitText(observation.message || observation.window!=0);
     return prefix+current.instruction+(action==OwnedGuideAction::Path?L" "+path(observation,mesh,entities,target(observation,state,current,entities),current.platform,manual,intentRevision):push.empty()?L"":L" "+push);
 }
 }

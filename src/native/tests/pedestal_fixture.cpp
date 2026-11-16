@@ -1,6 +1,8 @@
 #include <atomic>
 // Isolated native input/script callbacks. Never launches or attaches to the game.
 #include "../pedestal.hpp"
+#include "../auto_walk.hpp"
+#include "../log_capture.hpp"
 #include "../nav_audio.hpp"
 #include "../settings.hpp"
 #include "../input_device.hpp"
@@ -107,9 +109,12 @@ bool autoWalkActive() { return walking; }
 unsigned walkStops=0;
 bool legValid=false,legArrived=false;
 unsigned inputRevision=1;
+unsigned routeFailuresFixture=0;
+char lastStopReason[256]{};
 unsigned autoWalkInputRevision() { return inputRevision; }
 void stopAutoWalk() { walking=false; ++walkStops; ++inputRevision; }
-void startAutoWalk() { walking=true; ++starts; }
+unsigned autoWalkRouteFailureRevision() {return routeFailuresFixture;}
+void startAutoWalk(bool) { walking=true; ++starts; }
 bool navLeg(NavLeg& leg) { leg={}; leg.arrived=legArrived; return legValid; }
 void routeNavAudio(const std::vector<Point>& points,const Entity&) { route=points; }
 // Semantic immediate handback adapter: production scheduling/data-age is
@@ -132,7 +137,7 @@ bool requestNavigationAssistRoute() {
 void requestNavigationAssistInstruction() {}
 unsigned pathQueries=0;
 namespace nav {void requestNavigationScene() {}
-bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path) ++pathQueries;return true;}}
+bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path || query==Query::SilentPath) ++pathQueries;return true;}}
 bool relativeBearing(Point delta,double& pan,double& front) { pan=delta.x; front=delta.z; return true; }
 bool cameraBasis(Point& forward,Point& right) { forward={0,0,1}; right={1,0,0}; return true; }
 std::wstring direction(Point p) { return std::abs(p.x)>std::abs(p.z)?p.x>0?L"east":L"west":p.z>0?L"north":L"south"; }
@@ -292,6 +297,24 @@ void ruleTests() {
 }
 // In-game F25 and F26 (Kilika step 15 and the sphere steps next to it).
 void kilikaWalkFixtures() {
+    Entity slope;slope.pushControl=2;slope.position={50,-10,170};slope.zone.contactRadius=7;slope.zone.height=-1;
+    slope.zone.approach={0,0,-1};slope.zone.contactMinY=-25;slope.zone.contactMaxY=0;
+    check(pedestalContactZone(slope) && inInteractionZone(slope.zone,{50,-23,163.5}) &&
+        !inInteractionZone(slope.zone,{50,-26,163.5}),
+        "contact entry uses native horizontal radius and vertical bounds on a slope");
+    {
+        auto centre=setup(2,6,{50,-10,170});values[0x0c00005a]=2;
+        position(playerActor(),{50,-10,165.75});refreshTargetZone(centre,worker(6),1);armPedestal(centre,true);frame(0);
+        check(capturePedestalNavigationState().contact,"Kilika third leg enters the contact walk from its south stage");
+        refreshTargetZone(centre,worker(6),1);
+        check(centre.zone.approach.z==-1 && !inInteractionZone(centre.zone,{48.12,-10,166.5}),
+            "Kilika third-leg live contact refresh keeps the south centre line");
+        const auto countPush=[] {unsigned count=0;for(const auto& text:spoken) if(text==L"Pushing pedestal") ++count;return count;};
+        const auto said=countPush();position(playerActor(),{56,-10,170});disable(6,4,0x274b);restore();
+        refreshTargetZone(centre,worker(6),1);OwnedNavTarget copied{};captureOwnedNavTarget(centre,copied);updatePedestalOwnedTarget(copied.native);
+        position(playerActor(),{50,-10,165.75});frame(0);
+        check(said==1 && countPush()==said,"a re-approach does not repeat Pushing pedestal for the same leg");
+    }
     const Point at{.2215,-10,144.1042};
     const auto kilika=[&](Point player) {
         auto target=setup(2,6,at); values[0x0c00005a]=2;
@@ -375,6 +398,16 @@ void kilikaWalkFixtures() {
             "a Kilika approach walk the player stopped is not requested again");
     }
     cancelPedestal(); frame(0);
+    target=kilika({at.x-14,at.y,at.z+9});frame(0);
+    const auto beforeRouteFailure=routeRequests;
+    logCaptureHandler.store([](const LogCapture& packet) noexcept {
+        if(std::strstr(packet.format.data(),"pedestal assistance stopped:") && packet.formatter)
+            packet.formatter(packet,lastStopReason,sizeof(lastStopReason));
+    });
+    walking=false;++inputRevision;++routeFailuresFixture;frame(0);logCaptureHandler.store(nullptr);
+    check(!std::strcmp(lastStopReason,"pedestal assistance stopped: approach route lost") &&
+        routeRequests==beforeRouteFailure && !capturePedestalNavigationState().armed,
+        "a lost approach route reports its cause without blaming player input or restarting");
     // F27: on the reset tile north-east of the pedestal, every approach walk
     // touched it off the push side, farther out than the modelled contact
     // radius (nine touches, no move). Learn where the touch happened; the
@@ -451,6 +484,8 @@ int main() {
     check(frame()==0 && walking && !route.empty(),"held Space starts actual DI/pad walking across the pedestal contact gap");
     refreshTargetZone(target,worker(7),1);
     check(target.zone.contactRadius==0 && target.zone.range>0 && frame()==0 && walking,"live refresh preserves native contact walk rather than stopping again at staging");
+    check(target.zone.approach.z==1 && !inInteractionZone(target.zone,{target.position.x+1.88,target.position.y,target.position.z+3}),
+        "contact walk retains its push-side centre line on live refresh");
     write<uint16_t>(address(0xf27080),0x4040); disable(7,4,0x12ab);
     check(read<uint16_t>(address(0xf27080))==0x1000,"owned disable replaces inward approach direction before same-interpreter initial input read");
     check(frame()==0x1000,"owned Besaid control disable preserves held movement");

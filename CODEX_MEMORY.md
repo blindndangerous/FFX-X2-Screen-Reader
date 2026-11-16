@@ -1,5 +1,12 @@
 # FFX current memory — November4
 
+November16 Kilika Round12 repairs are offline verified in the detached
+`ffx-wt-mergecheck` worktree. Deployed source remains `cd26e6b`; no commit,
+deployment or game access is authorized for this task. See the
+[repair record and prioritized gameplay procedure](Docs/features/navigation/index.md#kilika-round12--november16).
+Requested no-deploy build exited 0; native suite exited 0, 81 PASS / 3 SKIP,
+matching baseline. Gameplay completion and audible speech remain unverified.
+
 [Release1.0.2](Docs/release.md#release102--november4) is built, guarded-deployed,
 packaged and [published Latest](https://github.com/bladestorm360/FFX-X2-Screen-Reader/releases/tag/v1.0.2).
 807 installer/130 final-EXE dependency/20 scan-gate

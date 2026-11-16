@@ -37,7 +37,7 @@ bool deferNativeAction(NativeAction action) {
 }
 void installAutoWalk() {}void installPedestal() {}
 void stopAutoWalk() {++manualInputRevision;}
-void startAutoWalk() {check(nativeOwner,"approved start stays Native");++starts;}
+void startAutoWalk(bool) {check(nativeOwner,"approved start stays Native");++starts;}
 void cancelPedestal() {}
 void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {check(nativeOwner,"arming stays Native");++arms;}
 void updatePedestalOwnedTarget(const NativeRouteTarget&) {check(nativeOwner,"POD assistance handback stays Native");}

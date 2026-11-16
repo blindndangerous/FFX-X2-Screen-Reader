@@ -264,6 +264,7 @@ std::vector<Point> avoidingRoute(const Mesh& mesh,Point player,Point goal,const 
 
 }
 template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bool horizontal) {
+    if(!horizontal && (p.y<zone.contactMinY || p.y>zone.contactMaxY)) return false;
     if(zone.contactRadius>0) {
         if(!zone.valid || (!horizontal && (p.y<zone.contactMinY || p.y>zone.contactMaxY))) return false;
         const double x=p.x-zone.center.x,z=p.z-zone.center.z;
@@ -299,13 +300,16 @@ template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bo
     return true;
 }
 void avoidContactPedestals(std::vector<Entity>& entities) {
+    for(auto& e:entities) avoidContactPedestals(e,entities);
+}
+void avoidContactPedestals(Entity& e,const std::vector<Entity>& entities) {
+    // Push/contact walks own their deliberate entry. Ordinary routes refresh
+    // the obstacle even when their copied destination already has a keep-out.
+    if(e.pushControl || !e.zone.valid || e.zone.contactRadius>0) return;
     for(const auto& pedestal:entities) {
         if(pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
-        for(auto& e:entities) {
             // Push routes keep their own contact staging and obstacles.
-            if(e.pushControl || !e.zone.valid || e.zone.obstacleRadius>0 || e.zone.contactRadius>0) continue;
-            e.zone.obstacle=pedestal.zone.center; e.zone.obstacleRadius=pedestal.zone.contactRadius;
-        }
+            e.zone.obstacle=pedestal.zone.center; e.zone.obstacleRadius=std::max(pedestal.zone.contactRadius,pedestal.zone.obstacleRadius);
     }
 }
 bool inInteractionZone(const InteractionZone& zone,Point p) { return interactionEndpoint(zone,p,false); }

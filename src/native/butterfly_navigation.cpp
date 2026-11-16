@@ -24,7 +24,10 @@ std::vector<Point> navigationRoute(const Mesh& mesh,Point origin,const Entity& t
 }
 std::vector<Point> navigationRouteOwned(const Mesh& mesh,Point origin,const Entity& target,const std::vector<Entity>& liveTargets) {
     if(target.swimDepth) return swimmingRoute(mesh,origin,target);
-    if(!target.butterfly) return target.zone.valid?interactionRoute(mesh,origin,target.zone,target.swimApproach):routePoints(mesh,origin,target.position);
+    if(!target.butterfly) {
+        auto current=target;avoidContactPedestals(current,liveTargets);
+        return current.zone.valid?interactionRoute(mesh,origin,current.zone,current.swimApproach):routePoints(mesh,origin,current.position);
+    }
     if(target.inactive || target.hazardous) return {};
     return butterflyRoute(mesh,origin,target,hazards(liveTargets));
 }

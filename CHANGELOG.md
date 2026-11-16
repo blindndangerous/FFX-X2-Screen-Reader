@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Kilika pedestal assistance keeps its push-side alignment and native slope contact bounds. Ordinary walks refresh the movable pedestal obstacle and turn without delayed detour steering or unchecked recovery sidesteps. Resumed walks and repeated approaches avoid duplicate announcements; lost routes retain their real stop reason.
+- The Kilika guide recognizes the reset tile and subsequent push state. Open message boxes prompt Enter instead of asking the player to wait for a scene. Gameplay confirmation remains pending.
+
 ## 1.0.2 — 2026-11-04
 
 - Blitzball auto-win is available during team setup and completes a match when either team gains possession first. Thanks to Paul Lemm (Sephiroth101) for the worker-discovery and foreground-context fixes in [PR #1](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/1), adapted with the existing safety checks.

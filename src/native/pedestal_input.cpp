@@ -24,8 +24,8 @@ struct Session {
     bool ended=false,walked=false;
     uintptr_t signal=0,pawn=0;
     uint64_t previous=0,progress=0,requested=0;
-    unsigned requests=0,failures=0;
-    unsigned walkInput=0; // Auto walk input revision after our own last stop.
+    unsigned requests=0,failures=0,announcedSegment=~0u;
+    unsigned walkInput=0,walkFailure=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
     Point last,lastPlayer,pushFrom;
 
@@ -48,7 +48,7 @@ struct {unsigned epoch=0;uintptr_t chunk=0;int worker=-1;double radius=0;} remem
 // Stop only a walk that is running. stopAutoWalk also advances the manual
 // input revision, which rejects the mod's own queued navigation actions
 // (in-game F26: "navigation action rejected: manual input revision").
-void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();active.walkInput=autoWalkInputRevision();}
+void haltAutoWalk() {if(autoWalkActive()) stopAutoWalk();active.walkInput=autoWalkInputRevision();active.walkFailure=autoWalkRouteFailureRevision();}
 // Route around a learned off-side touch as a wider keep-out radius. The
 // contact radius itself stays, so the final walk-in still reaches contact.
 void learnedTouch(NativeRouteTarget& target) {
@@ -72,6 +72,10 @@ void inject(unsigned bits) {
     write<uint16_t>(address(pedestal_rva::Held),static_cast<uint16_t>(held|bits));
     write<uint16_t>(address(pedestal_rva::Pressed),static_cast<uint16_t>(read<uint16_t>(address(pedestal_rva::Pressed))|(bits&~injected)));
     injected=bits;
+}
+void announcePush() {
+    if(active.announcedSegment==active.segment) return;
+    active.announcedSegment=active.segment;output(L"Pushing pedestal",false,"pedestal-push");
 }
 void stop(const char* reason,bool announce=false) {
     if(published) suppress(published);
@@ -267,6 +271,7 @@ bool approach() {
     // The player stopped the walk (Backslash again, or any movement or
     // menu key). stopAutoWalk and physical input both advance the input
     // revision; our own stops record it. Do not walk again on our own.
+    if(active.approaching && autoWalkRouteFailureRevision()!=active.walkFailure) {stop("approach route lost");return false;}
     if(active.approaching && autoWalkInputRevision()!=active.walkInput) {stop("approach walk stopped by the player");return false;}
     // Ask again when the walk ended short of the zone (another hook stopped
     // it at a touch), or when a request never started a walk.
@@ -322,6 +327,7 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
         if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
         active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent; active.walkInput=autoWalkInputRevision();
+        active.walkFailure=autoWalkRouteFailureRevision();
         if(remembered.epoch==active.epoch && remembered.chunk==script.chunk && remembered.worker==target.worker) active.touch=remembered.radius;
         learnedTouch(active.target);
         active.walk=active.held=walk && plan.walkConsent;
@@ -357,8 +363,8 @@ void updatePedestalInput() {
         strayResume=false;
         // Step 8 via the plain Pedestal row: the walk had arrived, but the
         // touch moved the player out of reach, so facing fails. Route again.
-        NavLeg leg;if(navLeg(leg) && leg.arrived) {if(!faceNavigationTarget(leg.target)) nav::submitNavigationQuery(nav::Query::Path);}
-        else startAutoWalk();
+        NavLeg leg;if(navLeg(leg) && leg.arrived) {if(!faceNavigationTarget(leg.target)) nav::submitNavigationQuery(nav::Query::SilentPath);}
+        else startAutoWalk(false);
     }
     walkSeen=!armed && autoWalkActive();
     if(!armed) return;
@@ -457,12 +463,16 @@ void updatePedestalInput() {
         const auto& next=active.plan.moves[active.segment];
         if(active.target.pushControl<=2 && !active.started) {
             if(!active.contact) {
-                const auto radius=active.target.zone.contactRadius,height=active.target.zone.height;
+                const auto radius=active.target.zone.contactRadius,height=active.target.zone.height<0?1e30:active.target.zone.height;
+                const auto side=active.target.zone.approach;
+                const auto minY=active.target.zone.contactMinY,maxY=active.target.zone.contactMaxY;
                 active.target.zone={};active.target.zone.shape=1;active.target.zone.center=active.target.position;
                 active.target.zone.range=radius-.15;active.target.zone.height=height;active.target.zone.valid=std::isfinite(radius) && radius>.5;
+                active.target.zone.approach=side;
+                active.target.zone.contactMinY=minY;active.target.zone.contactMaxY=maxY;
                 if(!active.target.zone.valid) {stop("contact target unavailable",true);return;}
                 active.contact=true;
-                output(L"Pushing pedestal",false,"pedestal-push");
+                announcePush();
                 approach();
             }
             return;
@@ -477,7 +487,7 @@ void updatePedestalInput() {
         if(next.mode==PushMode::Single) {
             if(!active.single) { inject(active.consent&(~active.consent+1u)); active.single=true; }
         } else {
-            if(!active.started && !injected) output(L"Pushing pedestal",false,"pedestal-push");
+            if(!active.started && !injected) announcePush();
             inject(active.directions[active.segment]);
         }
     } catch (...) { stop("unreadable native push state"); }

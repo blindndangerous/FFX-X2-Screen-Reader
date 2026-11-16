@@ -118,11 +118,18 @@ bool pedestalCrossingZone(Entity& target) {
 bool pedestalContactZone(Entity& target) {
     if(target.pushControl<1 || target.pushControl>2) return false;
     const auto radius=target.zone.contactRadius;
-    const auto height=target.zone.height;
+    const auto height=target.zone.height<0?1e30:target.zone.height;
+    auto approach=target.zone.approach;
+    PedestalPlan plan;if(pedestalActivePlan(target,plan) && !plan.moves.empty()) {
+        const auto delta=pushVector(plan.moves.front(),target.position);approach={-delta.x,0,-delta.z};
+    }
+    const auto minY=target.zone.contactMinY,maxY=target.zone.contactMaxY;
     // Ordinary DI/pad walking makes the native collision edge. Aggregate-only
     // script directions cannot move the player across the staging gap.
     target.zone={}; target.zone.shape=1; target.zone.center=target.position;
     target.zone.range=radius-.15; target.zone.height=height;
+    target.zone.approach=approach;
+    target.zone.contactMinY=minY;target.zone.contactMaxY=maxY;
     target.zone.valid=std::isfinite(radius) && radius>.5;
     return target.zone.valid;
 }

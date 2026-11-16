@@ -270,7 +270,13 @@ void pedestalZone(Entity& e,const Scene& s,const WorkerFact& w,const std::array<
         e.inactive=!e.zone.valid || entries(*edge,rows[edge->global].channels,EntryMask{1u<<6}).empty();return;
     }
     if(activePedestal(s,e) && s.pedestal.contact) {
-        const auto radius=e.zone.contactRadius,height=e.zone.height;e.zone={};e.zone.shape=1;e.zone.center=e.position;
+        const auto radius=e.zone.contactRadius,height=e.zone.height<0?1e30:e.zone.height;
+        const auto minY=e.zone.contactMinY,maxY=e.zone.contactMaxY;e.zone={};e.zone.shape=1;e.zone.center=e.position;
+        e.zone.contactMinY=minY;e.zone.contactMaxY=maxY;
+        if(!s.pedestal.plan.moves.empty()) {
+            const auto goal=s.pedestal.plan.moves.front().goal;const double x=goal.x-e.position.x,z=goal.z-e.position.z;
+            e.zone.approach=std::abs(x)>std::abs(z)?Point{x>0?-1.0:1.0,0,0}:Point{0,0,z>0?-1.0:1.0};
+        }
         e.zone.range=radius-.15;e.zone.height=height;e.zone.valid=std::isfinite(radius) && radius>.5;e.inactive=e.inactive || !e.zone.valid;return;
     }
     // In-game F27: walks keep outside a learned off-side touch.

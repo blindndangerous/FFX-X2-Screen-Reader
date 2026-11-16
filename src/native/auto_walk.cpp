@@ -28,6 +28,7 @@ std::atomic<NavigationKeyboardAssist> keyboardAssist{nullptr};
 std::atomic<NavigationControllerAssist> controllerAssist{nullptr};
 std::atomic<bool> engaged{false},cancel{false};
 std::atomic<unsigned> manualRevision{1};
+std::atomic<unsigned> routeFailures{0};
 std::atomic<unsigned> mask{0},maskEpoch{0};
 std::atomic<unsigned> maskCollisionSerial{0};
 std::atomic<uint64_t> stamp{0};
@@ -109,6 +110,7 @@ bool resumable(const char* reason) {
     return true;
 }
 void stop(const char* reason,const wchar_t* spokenReason=nullptr,bool routeFailure=false) {
+    if(routeFailure) routeFailures.fetch_add(1,std::memory_order_acq_rel);
     const bool was=engaged.exchange(false); mask=0; cancel=false; stamp=0;messageGuard={};arrival={};
     if(was) {
         recordLog("auto walk stopped: %s",reason);
@@ -181,12 +183,13 @@ bool toggleAutoWalkOff(void (*cancelCommand)()) {
     if(cancelCommand) cancelCommand();else stopAutoWalk();
     output(L"Auto walk stopped",true,"auto-walk");return true;
 }
-void releaseAutoWalk() {manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
+void releaseAutoWalk() {routeFailures.fetch_add(1,std::memory_order_acq_rel);manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
 bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}
 unsigned autoWalkInputRevision() {return manualRevision.load(std::memory_order_acquire);}
 bool autoWalkActive() { return engaged && !cancel; }
-void startAutoWalk() {
+unsigned autoWalkRouteFailureRevision() {return routeFailures.load(std::memory_order_acquire);}
+void startAutoWalk(bool announce) {
     stop("new route");takeover={};
     NavLeg leg;
     if(!safe() || !navLeg(leg) || leg.pendingCollision || leg.arrived || leg.target.inactive) return;
@@ -207,9 +210,11 @@ void startAutoWalk() {
     const auto now=nowMs(); improved=movingSince=now; unstickUntil=0;
     last=playerPosition(); cancel=false; engaged=true;
     scans=movementKeys();
-    TextPlan announcement;prepareTextPlan(announcement,"auto-walk",false);
-    announcement.headline=planConcat(announcement,planLiteral(announcement,L"Auto walking to "),planLiteral(announcement,leg.target.name.data()));
-    commitTextPlan(announcement);
+    if(announce) {
+        TextPlan announcement;prepareTextPlan(announcement,"auto-walk",false);
+        announcement.headline=planConcat(announcement,planLiteral(announcement,L"Auto walking to "),planLiteral(announcement,leg.target.name.data()));
+        commitTextPlan(announcement);
+    }
     updateAutoWalk();
 }
 // Walking outside the battle means the player took over; battle commands and
@@ -310,12 +315,14 @@ void updateAutoWalk() {
         if(best<0 || distance<best-1) { best=distance; improved=now; }
         else if(now-improved>=15000) { stop("no progress",L"no progress"); return; }
     }
+    const bool pedestalRoute=leg.target.pushControl || leg.target.zone.obstacleRadius>0;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
         if(leg.target.butterfly) { stop("butterfly route stalled",L"butterfly route stalled"); return; }
         refreshNavCollision();
         if(!navLeg(leg) || leg.arrived) { stop("replan unavailable",L"replan unavailable",true); return; }
-        unstickRight=!unstickRight; unstickUntil=now+700; movingSince=now;
-        recordLog("auto walk bounded sidestep/replan at %.2f %.2f %.2f",player.x,player.y,player.z);
+        if(!pedestalRoute) unstickRight=!unstickRight;
+        unstickUntil=pedestalRoute?0:now+700;movingSince=now;
+        recordLog("auto walk %s at %.2f %.2f %.2f",pedestalRoute?"pedestal replan":"bounded sidestep/replan",player.x,player.y,player.z);
     }
     Point steer=leg.goal;
     const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length2=x*x+z*z;
@@ -331,7 +338,7 @@ void updateAutoWalk() {
     if(!relativeBearing({steer.x-player.x,0,steer.z-player.z},pan,front)) { stop("camera unavailable",L"camera unavailable"); return; }
     const auto degrees=std::atan2(pan,front)*180/3.14159265358979323846;
     int desired=(static_cast<int>(std::round(degrees/45))+8)&7;
-    if(octant>=0 && desired!=octant) {
+    if(octant>=0 && desired!=octant && !pedestalRoute) {
         auto difference=degrees-octant*45; while(difference>180) difference-=360; while(difference< -180) difference+=360;
         const int gap=std::abs(desired-octant);
         if(std::abs(difference)<=32.5 || ((gap==1 || gap==7) && now-octantSince<250)) desired=octant;

@@ -1,5 +1,86 @@
 # Navigation, route validity, audio and movement
 
+## Kilika Round12 — November16
+
+This worktree contains uncommitted repairs against deployed `cd26e6b`. No game
+attachment, input, deployment, commit or cherry-pick occurred. Offline checks do
+not establish successful gameplay or audible output.
+
+Contact conversion previously discarded the planned push side and changed native
+horizontal contact into a three-dimensional sphere test. The native session,
+copied scene and direct refresh now retain the centre line and native vertical
+bounds. The keep-out fallback removed in `052a5bd` stays removed. Round12 logs
+contain relative offsets but no absolute positions, floor IDs or captured mesh;
+the precise connected-floor refusal cannot be reproduced from those logs alone.
+
+Route failures now have a separate revision from user cancellation. Ordinary
+routes refresh their obstacle from the live pedestal snapshot. Pedestal detours
+disable the 250 ms octant hold and unchecked recovery sidesteps. Automatic
+restarts suppress destination announcements; a push leg announces only once.
+The guide recognizes Kilika's reset pose and verified three-leg corridor, holds
+its state during messages and names Enter to close them. The Glyph Sphere wall
+placement is a checkpoint. Actual route data for steps 16–22 retains the native
+depression, carried-sphere, socket, chest-bit and cleared-door dependencies.
+
+The requested `cmd /c "src\proxy\build_dinput8.bat --no-deploy"` exited 0.
+`src\native\tests\run_tests.bat` exited 0: 81 PASS lines and 3 SKIP lines,
+matching baseline. Skips are readers (`hudTextureClipBody.bin`), reachability
+(`collisionReplayBody.bin`) and utilities (`maps_v3.json`). The build retains
+the existing C4244 warning in the unchanged chained guide-state initialization.
+Test outputs used `%TEMP%\ffx-r12-evidence\test-build`, with read-only evidence
+located through junctions to the established evidence directories. Receipts in
+this worktree are `.r12-build-final.log`, `.r12-tests.log` and `.r12-focused.log`.
+Focused fixtures cover centre-line retention after
+refresh, slope bounds, radial escape, refreshed obstacles, immediate turns,
+bounded recovery, speech repetition, cancellation and the actual Kilika route's
+steps 14–22. Native resource/script/geometry tests that require unavailable
+private evidence remain explicit skips; no game bytes were added to source.
+The bounded Luna delegation read only the two named Round12 logs. Sol compared
+the extracted offsets and failure order with the source; no delegated edits or
+unresolved delegation remain.
+
+Changed runtime files under `src/native`: `auto_walk.cpp`, `auto_walk.hpp`,
+`butterfly_navigation.cpp`, `nav_zones.cpp`, `navigation.cpp`, `navigation.hpp`,
+`navigation_intents.cpp`, `navigation_intents.hpp`, `navigation_observations.hpp`,
+`navigation_scene.cpp`, `pedestal_input.cpp`, `pedestal_state.cpp`,
+`puzzle_guide.hpp`, `puzzle_guide_data.hpp`, `puzzle_guide_owned.cpp` and
+`puzzle_guide_progress.hpp`.
+
+Changed fixtures under `src/native/tests`: `auto_walk_fixture.cpp`,
+`navigation_service_fixture.cpp`, `navigation_zone_followups.inc`,
+`pedestal_fixture.cpp`, `puzzle_guide_progress_fixture.cpp`,
+`puzzle_guide_route_fixture.inc`, `reader_fixture.cpp` and `utility_fixture.cpp`.
+Documentation changes are `CHANGELOG.md`, `CODEX_MEMORY.md` and this record.
+
+Prioritized nonvisual gameplay procedure, after a separately authorized deployment:
+
+1. At the current post-leg-two pedestal, request step detection. Expect step 15.
+   Start the assisted push from the east pocket or south side. Expect a centred
+   south approach, north push, native plunge and step 16. Repeat from the reset
+   pose when available: north to Z170, east to X50.011, then north across
+   Z196.276. Stop on any off-side-contact loop, refusal, unexpected stop or short
+   push; retain the exact speech and log time. No failed route may blame input
+   unless input occurred.
+2. Follow steps 16–22 in order: take the lower Kilika Sphere, insert it in the
+   antechamber door, take the Destruction Sphere, insert it in the emptied lower
+   recess, open the treasure, remove the door sphere, then enter the antechamber.
+   Confirm each expected step after closing messages. The depression must finish
+   before the lower sphere, the lower recess must be empty before the Destruction
+   Sphere, and the door must be extinguished before exiting. Any missing target,
+   wrong sphere action, duplicated speech, route refusal or control loss fails
+   this procedure. Offline flag fixtures do not prove these live paths, native
+   animation timing, detour clearance under load or audible speech.
+3. When replaying a pre-step13 save, check ordinary walks from beside the pedestal and
+   past it, especially storage recess 1 to the fire chamber wall. Expect an
+   outward first leg near the actor, clearance while passing, one destination
+   announcement, no pedestal touch and no loss of player control. Interrupt one
+   walk manually; expect it to remain stopped.
+4. After the Glyph Sphere wall insertion, close its message with Enter and ask
+   for the expected step: 14. After the reset tile, expect 15. With a message
+   open, expect “Press Enter to close the message”; native scenes without a
+   message keep the wait instruction. Re-approaches must not repeat either the
+   destination headline or “Pushing pedestal” for the same leg.
+
 [November1 Mushroom Rock/shared route repair](mushroom_rock_lag_20261101.md) is
 offline verified and guarded-deployed:433 map assets/327 native floors audited,
 20928 visibility/654 route comparisons and both reader profiles pass. Private

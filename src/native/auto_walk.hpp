@@ -2,7 +2,8 @@
 #include "navigation.hpp"
 #include "controller_model.hpp"
 namespace ffx {
-void startAutoWalk();
+void startAutoWalk(bool announce=true);
+unsigned autoWalkRouteFailureRevision();
 void stopAutoWalk();
 // Stops for a lost route. Unlike stopAutoWalk it is not a player command, so a
 // pending battle resume survives; a walk it ends is never resumed.

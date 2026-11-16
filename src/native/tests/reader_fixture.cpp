@@ -109,7 +109,7 @@ bool toggleAutoWalkOff(void (*)()) {return false;}
 void suspendAutoWalk() {}
 void setAutoWalkResume(AutoWalkResume) {}
 unsigned autoStarts=0;
-void startAutoWalk() { ++autoStarts; }
+void startAutoWalk(bool) { ++autoStarts; }
 void installAutoWalk() {}
 void armPedestal(const Entity&) {}
 void cancelPedestal() {}

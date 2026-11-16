@@ -161,7 +161,8 @@ void announce(const Pending& event,bool interrupt=true,bool index=true) {
 void intent(const Pending& event,const Entity& target,nav::Intent kind) {
     const auto refusal=nav::intentRefusalText(owned().observation.controlled);
     if(refusal && kind!=nav::Intent::AssistFailed) {emit(event,refusal,"navigation-action-refused",false);return;}
-    if(!nav::submitNavigationIntent(owned().observation,target,kind,event.query.manual,event.query.intentRevision))
+    if(!nav::submitNavigationIntent(owned().observation,target,kind,event.query.manual,event.query.intentRevision,
+        kind!=nav::Intent::AssistStart && event.query.query!=nav::Query::Resume && event.query.query!=nav::Query::SilentPath))
         emit(event,L"Navigation action is unavailable or busy. Request the route again after it recovers.","navigation-pressure",false);
 }
 void beacon(const Pending&) {
@@ -252,7 +253,7 @@ void execute(const Pending& event) {
         lockSelected();beacon(event);break;
     }
     case nav::Query::Distance:announce(event,true,false);break;
-    case nav::Query::Path:pathfind(event);break;
+    case nav::Query::Path:case nav::Query::SilentPath:pathfind(event);break;
     case nav::Query::Resume: {
         nav::ResumeRequest request;
         if(!resumeTarget.take(request)) {emit(event,L"Auto walk not resumed","navigation-path",false);break;}
