@@ -1,5 +1,35 @@
 # Runtime, output, text and input
 
+## Mergecheck integration — November16
+
+The working merge of `31844f4` onto detached `3e7aa54` retains the whole-mod
+toggle and mergecheck fixes. Shift+F11 explains an unsupported ordinary field;
+while navigation is pending it submits the guide request. Navigation captures
+retain one pressure notice per episode, worker-owned failure feedback for each
+manual request, and a single readiness announcement. Query/capture entry points
+reject mod-Off before producing feedback or reading the current room.
+
+All 94 fixture entry sources include `fixture_runtime.hpp`, including the two
+new toggle hosts. Navigation service uses the controlled message-mode callback
+and rejects raw `0x46C840`; the runner executes its evidence-gated block once and
+links the swimming implementation. The load-popup revision guard is unchanged;
+the merged menu fixture passes 432 checks covering resume focus and duplicate
+Yes/status suppression. Kilika routing, detour and neutral height diagnostics
+remain unchanged by integration.
+
+No-deploy build and full native suite exit 0: 101 PASS records plus proxy
+forwarding, 4 evidence SKIPs, 0 failures. Separate ATEL lifetime checks exit 0.
+The skips require the archived reader body, collision replay body, retained
+Kilika floor inputs and utility maps. Logs and machine-readable counts are in
+`.local/merge-{build,tests,atel-tests}.log` and `.local/merge-verification.json`.
+The existing whole-mod toggle gameplay procedure below remains pending; this
+integration did not launch/control the game or verify audible speech.
+
+The Git index still has six unmerged entries because the sandbox denies writing
+the shared metadata's `index.lock`. Working files contain no conflict markers.
+No commit, deployment or push occurred; the prepared message is
+`.local/merge-commit-message.txt`.
+
 ## Initialization and ownership
 
 `src/proxy/dinput8_proxy.cpp` forwards the native DirectInput API and starts the
@@ -84,6 +114,136 @@ be presented as verified in every language. See
 `polish_text_followups.inc`/`help_native_replay.inc`.
 
 ## Input and settings
+
+### Whole-mod toggle — November16
+
+Ctrl+Shift+F12 toggles the process-lifetime, default-On `modEnabled` atomic in
+`mod_state.hpp`. It is separate from the saved Speech preference. The shared
+proxy starts `mod_toggle.cpp`'s foreground-qualified keyboard listener for FFX,
+FFX-2 and Will; unsupported fixture executables never install a desktop hook.
+The listener keeps press/repeat/release ownership and only requests work from
+the verified FFX PInput owner. FFX-2 retains its existing unsupported-reader
+status but can speak the two toggle confirmations.
+
+`hooks.cpp` skips ordinary enter/return readers when Off; installed
+trampolines stay in place. Four allocation-lifetime observers continue bounded
+capture/invalidation: EV loader, allocator, free and ATEL worker construction.
+Native resource scopes also remain tracked without running their reader
+callbacks, so enabling waits for a safe owner boundary without blocking it.
+DirectInput COM adapters and XInput imports also
+forward the original result. Pending native actions and input commands lose
+their generation. The PInput transition cancels Auto walk including battle
+resume, pedestal/puzzle/minigame assistance, console context, captured keys,
+controller mode and audio previews. Controller edges collected before the
+transition are discarded; held controls drain before accepting fresh commands.
+The first DirectInput snapshot seeds physical holds without firing old shortcuts;
+the first buffered batch remains game-owned, including Peek/consume pairing.
+The SDL mixer submits silence while Off.
+The existing speech worker owns stop and exact toggle feedback through a
+reserved control slot independent of full ordinary queues. A durable toggle
+serial clears repeat history even when generation markers are dropped.
+
+November16 follow-up: the user's 18:29 log shows generations 11/12 on the
+"Load this file?" dialog. The reserved toggle path bypassed the ordinary text
+log and discarded the requested interrupt flag. Thus the missing text record
+does not prove a generation or Off-gate rejection; the original backend result
+was not recorded. The worker now submits both confirmations with interruption
+and logs their text, toggle serial, acceptance and backend-call duration.
+The old one-utterance resume protection let a second automatic focus line cut
+off On. Protection now lasts until the next input-silence request, and text logs
+report the actual interrupt flag sent to PRISM.
+
+Resume previously treated `scene == 0` as a field, although title/save-load
+room 23 also has no field-window ID. Automatic map reading now requires
+`activeField()`. Native navigation collection excludes room 23, while genuine
+field-data failures still report explicit requests. These errors were fresh
+generation-12 output, not evidence of a replayed old speech queue. Native
+Yes/No callbacks re-read current focus after reset, including focus changed
+while Off; no cached answer is replayed. Claude's removal of the injected-key
+filter is preserved.
+
+On re-enable, the owner retries a temporarily unavailable reset, then captures
+the current game context, visible dialogue, battle or Grid state. Initial menu
+observations use `Event.arrival` to read an unchanged native focus. No missed
+event queue is replayed. Allocation receipts and prepared immutable ATEL data
+now retain their actual allocation lifetime across Off/On. Speech generations
+still cancel old commands, speech and navigation snapshots; they no longer
+retire live resources. Frees and replacements observed while Off invalidate
+exact receipts, including address reuse. Worker cleanup preserves live banks
+while Off, and newly loaded files are captured/prepared while Off. A full
+receipt registry refuses a new capture until an actual free makes room; a
+toggle cannot evict a still-live receipt. No pointer scan or current-memory
+rehydration fallback was added. Field facts, geometry, names, destinations and
+puzzle state are freshly captured after enabling in the current area.
+
+November16 field follow-up: the user reports working Load-dialog confirmations
+but dead Besaid Great Hall navigation after Off/On. The requested log had already
+restarted at 18:56:44 when read, so it no longer contains the reported earlier
+sequence. Source and fixtures reproduce two causes: the toggle lifetime floor
+hid all earlier receipts, and Off made worker cleanup regard live banks as dead.
+The capture-failure latch then spoke only the first unavailable request.
+Failed captures now send bounded failure metadata to the preparation worker.
+That worker reports each distinct waiting user command once, preserves automatic
+refresh silence, and announces "Navigation ready." once after recovery.
+F9/F10/F11 can reach guide requests while navigation is pending, even when the
+trial identity is not ready. Ordinary ready fields retain contextual key handback;
+the controller puzzle shortcut still requires a supported guide. Resets cancel
+pending commands and the pending readiness announcement.
+
+Offline coverage includes installed mixed-ABI hook passthrough, native keyboard
+and XInput handback, speech queue pressure/history, unchanged menu arrival,
+mixed audio silence, retained live ATEL receipts, Off-state frees/address reuse,
+full receipt pressure, same-area navigation/guide recovery, an area loaded while
+Off, repeated waiting feedback and one readiness announcement. The actual
+navigation service fixture now runs in the standard suite (also available as
+`--navigation-service`). Its controlled engine endpoints were brought current
+with the native message-mode getter and movement/audio handbacks. See
+`src/native/tests/run_tests.bat` and its `--atel-resources` target. Real gameplay,
+audible output and physical input timing remain unverified for the repair.
+Only the user's explicitly supplied session log was read. No deployment,
+game launch/control, Tester Logs access or commit occurred.
+
+Prioritized nonvisual gameplay procedure after an independently authorized
+deployment:
+
+1. In Besaid Great Hall, toggle Off/On without changing area. Press `]`: expect
+   a current destination. If preparation is still pending, each `]`, F9 and
+   Shift+F11 request must speak the waiting message; recovery announces
+   "Navigation ready." once. Great Hall itself has no supported trial guide.
+   In a supported Cloister, repeat without changing area: F9 and Shift+F11
+   must read current guide state. Toggle rapidly, then load/change area while
+   Off and enable there: destinations and guide state must belong to the new
+   area. No old walk, puzzle action or readiness announcement may resume.
+   Report silence, persistent waiting, wrong-area targets or an old action.
+   Fixtures use owned original scripts and controlled native endpoints; they
+   do not prove game timing, physical keys, controller hardware or NVDA audio.
+2. On "Load this file?", toggle Off. Expect "Screen reader mod off" as the
+   final utterance. Change Yes/No while Off, then toggle On. Expect "Screen
+   reader mod on", followed by the current answer without cutting off On.
+   Leave the dialog idle for at least five seconds: no old answer, map-name
+   error or navigation-unavailable announcement should follow. Repeat without
+   changing focus. The log must record both toggle texts and accepted backend
+   submissions; log acceptance alone does not prove audible NVDA delivery.
+3. In a field, start Auto walk or pedestal assistance and a cue/preview. Hold a
+   captured key, toggle Off and release it. Expect only "Screen reader mod off",
+   stopped movement/cues and normal game keys. Footsteps must stop when native
+   movement is released. Repeated held toggle presses must not toggle again.
+4. In an unchanged menu, toggle Off/On. Expect "Screen reader mod on" followed
+   by the current focus. Repeat on a shop row/quantity, Save/Load, confirmation,
+   naming and Grid screen; I/U must describe the current selection. While Off,
+   change native focus and confirm no old selection is read on return.
+5. In battle, toggle Off across a native turn, then On. Expect current battle
+   state without old damage/dialogue or a suspended Auto walk resuming. Repeat
+   with rapid Off/On pairs and focus changes; no key or controller latch.
+6. In FFX-2, verify both toggle confirmations and native key passthrough only;
+   this does not add FFX-2 reading. Verify plain F12 still reaches NVDA.
+
+Luna made the player documentation and three mechanical shop/naming arrival
+edits; the implementation owner reviewed those changes. A separate code review
+identified the dialogue, snapshot, pressure, reset-retry and receipt repairs.
+Build/test evidence and final counts are recorded in `CODEX_MEMORY.md`.
+
+### Native input and saved settings
 
 `input.cpp` routes context-owned commands through a64-command FIFO, draining at
 qualified native PInput/Help/field returns. Focus, generation, revision and

@@ -81,13 +81,14 @@ EntityKey key(const Entity& e) {
     if(e.actor>=0 && e.id==0x2101 && e.category==L"NPC") return {true,false,-1,e.id,0};
     return {true,e.worker>=0,e.worker>=0?e.worker:e.actor,e.id,e.pushControl};
 }
-struct Pending {speechq::Header header;nav::QueryObservation query;std::optional<QueuedPuzzleTarget> direct;};
+struct Pending {speechq::Header header;nav::QueryObservation query;std::optional<QueuedPuzzleTarget> direct;bool notified=false;};
 struct Owned {
     speechq::Header header{};
     nav::Scene observation;Mesh mesh;std::vector<Entity> entities;std::deque<Pending> pending;
     std::map<int,std::wstring> areas;nav::AreaNameDemand names;
     nav::ListStability list;EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;int step=1;bool ready=false,haveMesh=false;
     nav::NativeGeometryContext meshContext;
+    bool unavailable=false,announceReady=false;
 };
 ProcessStorage<Owned> storage;
 std::atomic<bool> interested{false};
@@ -317,24 +318,39 @@ void processPending() {
     }
     nav::navigationWaitingForData(!s.pending.empty());
 }
+void reportWaiting() {
+    auto& s=owned();s.unavailable=true;
+    for(auto& event:s.pending) {
+        if(event.notified || event.query.epoch!=generation() || event.query.revision!=nav::navigationObservationRevision()) continue;
+        // Automatic refresh/motion/resume work must not invent a user request.
+        if(event.query.query==nav::Query::Refresh || event.query.query==nav::Query::Motion ||
+           event.query.query==nav::Query::Resume || event.query.query==nav::Query::SilentPath ||
+           event.query.query==nav::Query::GuideCompleted || event.query.query==nav::Query::GuideTileCompleted) continue;
+        emit(event,L"Navigation data is unavailable. Waiting for the field to become ready.","navigation-data-unavailable",false);
+        event.notified=true;s.announceReady=true;
+    }
+    nav::navigationWaitingForData(true);
+}
 void resetOwned(unsigned) {
     releaseOwnedGuideRefresh();
-    if(!storage.ready()) return;auto& s=owned();s.entities.clear();s.pending.erase(std::remove_if(s.pending.begin(),s.pending.end(),[&](const Pending& event) {return event.query.epoch!=generation() || event.query.revision!=nav::navigationObservationRevision();}),s.pending.end());s.areas.clear();s.names={};s.selection={};s.epoch=0;s.revision=0;s.ready=s.haveMesh=false;s.selected=0;s.mesh={};interested=false;retireOwnedReachability();
+    if(!storage.ready()) return;auto& s=owned();s.entities.clear();s.pending.erase(std::remove_if(s.pending.begin(),s.pending.end(),[&](const Pending& event) {return event.query.epoch!=generation() || event.query.revision!=nav::navigationObservationRevision();}),s.pending.end());s.areas.clear();s.names={};s.selection={};s.epoch=0;s.revision=0;s.ready=s.haveMesh=false;s.unavailable=s.announceReady=false;s.selected=0;s.mesh={};interested=false;retireOwnedReachability();
 }
 void receiveQuery(const speechq::Header& header,const nav::QueryObservation& query) {
+    if((owned().epoch && owned().epoch!=query.epoch) || (owned().revision && owned().revision!=query.revision)) resetOwned(query.epoch);
     auto& s=owned();if(s.pending.size()>=128) {if(query.query==nav::Query::GuideTarget) {QueuedPuzzleTarget retired;takePuzzleGuideTarget(query.local,query.resourceSerial,retired);}speechq::emitOwned(L"Navigation is busy. Try the command again after it recovers.",header,"navigation-pressure",false,false);return;}
     Pending event{header,query,{}};
     if(query.query==nav::Query::GuideTarget) {event.direct.emplace();if(!takePuzzleGuideTarget(query.local,query.resourceSerial,*event.direct)) {speechq::emitOwned(L"Navigation action is unavailable or retired. Request the route again.",header,"utility-reply",false,false);return;}}
-    s.pending.push_back(std::move(event));processPending();
+    s.pending.push_back(std::move(event));processPending();if(s.unavailable) reportWaiting();
 }
 void receiveScene(const speechq::Header& header,const nav::SceneObservation& captured) {
     auto& s=owned();const auto& observation=captured.scene;
-    if(observation.collisionSerial!=navCollisionSerial()) {nav::requestNavigationScene();return;}
     if((s.revision && s.revision!=observation.revision) || (s.epoch && s.epoch!=observation.epoch)) resetOwned(observation.epoch);
+    if(!captured.available) {s.epoch=observation.epoch;s.revision=observation.revision;s.ready=false;reportWaiting();return;}
+    if(observation.collisionSerial!=navCollisionSerial()) {nav::requestNavigationScene();return;}
     s.header=header;s.observation=observation;s.epoch=observation.epoch;s.revision=observation.revision;s.requested=captured.requested;s.ready=false;
     for(unsigned part=0;part<observation.partCount;++part) {
         const auto& fact=observation.parts[part];AtelIdentity identity;
-        if(fact.bindingsExpected && !fact.identityReady && readyAtelIdentity(fact.span.chunk,identity) && identity.span.serial==fact.span.serial) {nav::requestNavigationScene();nav::navigationWaitingForData(true);return;}
+        if(fact.bindingsExpected && !fact.identityReady && readyAtelIdentity(fact.span.chunk,identity) && identity.span.serial==fact.span.serial) {nav::requestNavigationScene();reportWaiting();return;}
     }
     nav::ComputationScope computation(nav::navigationRevisionCounter(),observation.revision);
     nav::CameraScope camera(observation.forward,observation.right,observation.cameraValid);const auto controls=copiedControlContext(observation.controls);
@@ -346,7 +362,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
         missing=true;for(unsigned i=0;i<names.count;++i) if(names.indices[i]==index) return std::wstring{};
         if(names.count<names.indices.size()) names.indices[names.count++]=index;else overflow=true;return std::wstring{};
     },[&](int index) {return nav::scenePersonName(observation,index,controls);});
-    if(!ready) {nav::navigationWaitingForData(true);return;}
+    if(!ready) {reportWaiting();return;}
     if(overflow) {for(const auto& event:s.pending) emit(event,L"Navigation names exceed the supported observation capacity. The command is unavailable.","navigation-data-unavailable",false);s.pending.clear();nav::navigationWaitingForData(false);return;}
     if(missing) {if(names.count!=s.names.count) {s.names=names;nav::requestNavigationAreaNames(names);}nav::navigationWaitingForData(true);return;}
     // Before guideTargets copies a recess zone onto its pedestal.
@@ -370,6 +386,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
         s.selection={};nav::orderEntities(s.entities,{},key,false);requestOwnedReachability(observation,s.entities,true);rows=filtered();
     }
     s.ready=true;
+    s.unavailable=false;
     const std::wstring pedestal=s.selected<rows.size() && rows[s.selected]->pushControl?instruction(*rows[s.selected]):std::wstring{};
     const bool hadRoute=navRouteKnown();updateOwnedNavAudio(observation,s.mesh,s.entities,header,pedestal);
     if(lostSelection) {
@@ -378,6 +395,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     }
     if(observation.pedestal.armed && observation.control) for(const auto& e:s.entities) if(e.worker==observation.pedestal.worker && e.id==observation.pedestal.id && e.pushControl==observation.pedestal.control) {nav::submitNavigationIntent(observation,e,nav::Intent::UpdatePedestal,autoWalkInputRevision(),nav::navigationIntentRevision());break;}
     processPending();
+    if(s.announceReady) {s.announceReady=false;speechq::emitOwned(L"Navigation ready.",header,"navigation-ready",false,false);}
 }
 void maintenance() {
     retirePuzzleGuideTargets();

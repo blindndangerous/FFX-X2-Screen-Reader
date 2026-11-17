@@ -256,6 +256,7 @@ bool toggleAutoWalkOff(void (*cancelCommand)()) {
 }
 void releaseAutoWalk() {routeFailures.fetch_add(1,std::memory_order_acq_rel);manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
 bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
+void cancelAutoWalk() {stopAutoWalk();resumePhase=ResumeNone;resumeCancel=true;readerOwned.fill(false);physicalDown.fill(false);readerModifier=false;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}
 unsigned autoWalkInputRevision() {return manualRevision.load(std::memory_order_acquire);}
 bool autoWalkActive() { return engaged && !cancel; }

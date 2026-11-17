@@ -19,6 +19,8 @@
 #include <cstdlib>
 namespace ffx {
 bool fixtureNativeOwner=true;
+bool navigationPending=false;
+namespace nav {bool navigationDataPending() {return navigationPending;}}
 bool nativeGameThread() {return fixtureNativeOwner;}
 bool captureControllerBinding(uint64_t);
 std::vector<SpeechBackendChoice> speechBackendChoices() { return {{0,L"Automatic"},{1,L"NVDA"},{3,L"SAPI"}}; }
@@ -413,6 +415,11 @@ int main() {
     const auto beforeNoGuide=said.size();
     pressForTest(VK_F11,true);pressForTest(VK_F11,true);
     check(said.size()==beforeNoGuide+2 && said[beforeNoGuide]==L"No puzzle guide for this area." && said.back()==L"No puzzle guide for this area.","repeated ordinary-field Shift F11 explains unavailable guide without repeating history");
+    navigationPending=true;puzzleAction.clear();pressForTest(VK_F9,false);
+    check(puzzleAction==L"previous","F9 reaches guide request while field navigation is waiting");
+    puzzleAction.clear();pressForTest(VK_F11,true);
+    check(puzzleAction==L"expected","Shift F11 reaches guide request while field navigation is waiting");
+    navigationPending=false;
     viaPresent=true;check(puzzleGuidanceAvailable(),"controller guidance includes Via's actual guide");viaPresent=false;
     trialPresent=true;check(puzzleGuidanceAvailable(),"controller guidance shares actual trial availability");
     fixtureNativeOwner=false;check(!puzzleGuidanceAvailable(),"worker cannot enter native controller guide availability");fixtureNativeOwner=true;

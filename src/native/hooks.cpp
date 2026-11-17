@@ -3,6 +3,7 @@
 #include "native_image.hpp"
 #include "resource_reset.hpp"
 #include "hook_calls.hpp"
+#include "mod_state.hpp"
 #include <MinHook.h>
 #include <memory>
 #include <map>
@@ -13,6 +14,7 @@ namespace ffx {
 namespace {
 struct Listener { Handler enter, leave; };
 struct Hook { uintptr_t target = 0, original = 0; void* stub = nullptr;
+    std::atomic<unsigned> resumedEpoch{0};
     unsigned rva = 0;std::array<Listener,NativeListenerLimit> listeners{};
     std::atomic<unsigned> count{0};std::atomic<bool> snapshotOnly{false}; };
 
@@ -51,6 +53,9 @@ struct NativeErrorState {
 };
 bool failed = false;
 bool resourceCall(unsigned rva) { return rva==0x46fed0 || rva==0x5093b0 || rva==map_transition::Initialize; }
+// These four reviewed POD/copy observers track physical allocation lifetimes,
+// including loads/frees while Off. Ordinary readers and other snapshots stop.
+bool allocationLifetimeCall(unsigned rva) {return rva==0x48d230 || rva==0x2871c0 || rva==0x48d490 || rva==0x46ca90;}
 void latchCallOverflow(uintptr_t stack,uintptr_t returnAddress,unsigned rva) {
     if(overflowStack) return; // The outermost untracked call decides recovery.
     overflowStack=stack;overflowReturn=returnAddress;
@@ -73,6 +78,7 @@ void clearCallOverflow(uintptr_t stack,uintptr_t returnAddress,bool returning) {
 }
 
 void dispatch(Handler fn, Event& event) {
+    if(!modEnabled.load() && !allocationLifetimeCall(event.rva)) return;
     if (!fn || (nativeResourceLoading() && !resourceCall(event.rva) && !event.captureOnly)) return;
     if(!resourceCall(event.rva) && !event.captureOnly && !nativeGameThread()) return;
     if(!resourceCall(event.rva) && !event.captureOnly && !ownerResetReady() && !serviceOwnerReset()) return;
@@ -133,7 +139,14 @@ extern "C" void __cdecl enterBridge(uintptr_t* r) {
     Hook* h = reinterpret_cast<Hook*>(r[9]);
     r[9] = h->original;
     if (inReader) return;
-    if(h->rva==0x225930) observeGameThread();
+    if(h->rva==0x225930) {
+        if(observeGameThread() && !nativeResourceLoading()) {
+            inReader=true;
+            try {serviceModToggle();} catch(...) {recordLog("mod toggle owner reset failed");}
+            inReader=false;
+        }
+    }
+    if(!modEnabled.load() && !allocationLifetimeCall(h->rva) && !resourceCall(h->rva)) return;
     // User32/DirectInput methods are process-wide. SDL and other native
     // workers can enter them while the input owner waits inside a callback.
     // Reject foreign producers before acquiring the shared reader lock.
@@ -188,6 +201,8 @@ extern "C" void __cdecl enterBridge(uintptr_t* r) {
             event.edi=r[0];event.nativeStack=stack;
             event.parentRva=calls.empty()?0:static_cast<Hook*>(calls.back().hook)->rva;
             event.captureOnly=snapshot;
+            const auto resume=modResumeEpoch.load();
+            event.arrival=!snapshot && resume && resume==generation() && h->resumedEpoch!=resume;
             // A function that entered during loading has no valid before
             // snapshot. Do not run its return reader after loading finishes.
             if(!readerReady) event.epoch=0;
@@ -196,6 +211,7 @@ extern "C" void __cdecl enterBridge(uintptr_t* r) {
 
         }
         calls.push(pending);pending=nullptr;
+        if(!snapshot) h->resumedEpoch.store(modResumeEpoch.load(),std::memory_order_relaxed);
         openingResource=false;
         calls.back().originalStarted=GetTickCount();
         r[10] = reinterpret_cast<uintptr_t>(leaving);
@@ -216,7 +232,7 @@ void drainActions() {
         {
             if(nativeResourceLoading() || !ownerResetReady() || !calls.empty()) break;
             action=actions.take();
-            if(action.epoch!=generation()) continue;
+            if(!modEnabled.load() || action.epoch!=generation()) continue;
             inReader=true;
             try { ready=action.prepare && action.prepare(action); } catch(...) { recordLog("native action preparation failed"); }
             inReader=false;
@@ -257,7 +273,7 @@ extern "C" void __cdecl leaveBridge(uintptr_t* r) {
         // no old resource-dependent snapshot is revived for ordinary readers.
         if(h->rva==map_transition::Initialize && !resourceDepth) e.epoch=generation();
         // Teardown invalidates resource-dependent snapshots from older calls.
-        if (e.epoch == generation()) {
+        if (e.epoch == generation() || allocationLifetimeCall(h->rva)) {
             dispatch(h->listeners[i].leave, e);
             if(e.overrideResult) r[7]=e.result;
         }
@@ -281,16 +297,16 @@ bool observeGameThread() {
 }
 bool nativeGameThread() { return gameOwner.load()==GetCurrentThreadId(); }
 bool nativeResourceLoading() noexcept {return overflowThreads.load(std::memory_order_acquire)!=0 || resourceDepth.load(std::memory_order_acquire)!=0;}
-bool nativeReaderResourcesReady() noexcept {return !nativeResourceLoading() && ownerResetReady();}
+bool nativeReaderResourcesReady() noexcept {return modEnabled.load() && !nativeResourceLoading() && ownerResetReady();}
 bool tryNativeReaderAccess() noexcept {
     NativeErrorState errorState;
-    if(!nativeGameThread()) return false;
+    if(!modEnabled.load() || !nativeGameThread()) return false;
     if(nativeResourceLoading() || !serviceOwnerReset()) return false;
     return true;
 }
 void releaseNativeReaderAccess() noexcept {} // Owner access has no cross-thread lock to release.
 bool deferNativeAction(NativeAction action) {
-    if(!nativeGameThread() || actions.size()>=8 || !action.prepare || !action.invoke) return false;
+    if(!modEnabled.load() || !nativeGameThread() || actions.size()>=8 || !action.prepare || !action.invoke) return false;
     return actions.push(action);
 }
 // A target that cannot be installed is skipped so the rest of the batch still

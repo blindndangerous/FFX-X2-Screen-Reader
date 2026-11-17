@@ -2,6 +2,7 @@
 // Focused observation pressure protocol. The scene is synthetic so this host
 // exercises native ticket/queue lifetime without reading retained EV inputs.
 #include "../navigation_observations.hpp"
+#include "../mod_state.hpp"
 #include "test_speech_domains.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -10,6 +11,8 @@
 namespace {
 unsigned fixtureEpoch=1;
 bool owner=true;
+uint16_t room=1;
+unsigned roomReads=0;
 std::vector<std::wstring> said;
 std::vector<ffx::nav::QueryObservation> acceptedQueries;
 unsigned acceptedScenes=0;
@@ -41,6 +44,11 @@ unsigned generation() {return fixtureEpoch;}
 bool nativeGameThread() {return owner;}
 bool inBattle() {return false;}
 bool nativeReaderResourcesReady() noexcept {return true;}
+uintptr_t address(unsigned rva) {check(rva==0xd2ca90,"only the current room is mapped");return reinterpret_cast<uintptr_t>(&room);}
+bool copy(uintptr_t source,void* target,size_t bytes) {
+    check(owner && source==reinterpret_cast<uintptr_t>(&room) && bytes==sizeof(room),"room read uses the native-owned fixture adapter");
+    ++roomReads;std::memcpy(target,&room,bytes);return true;
+}
 unsigned autoWalkInputRevision() {return 1;}
 bool onAtelPrepared(AtelPreparedHandler) {return true;}
 int setting(Setting) {return 1;}
@@ -61,11 +69,19 @@ namespace ffx::speechq {void notifyPreparation() noexcept {}}
 
 int main() {
     using namespace ffx;
+    modEnabled=false;
+    check(!nav::submitNavigationQuery(nav::Query::GuideExpected) && said.empty(),
+        "disabled guide before observer startup stays silent");
+    modEnabled=true;
     check(!nav::submitNavigationQuery(nav::Query::GuideExpected) && said.size()==1 &&
         said.back()==L"Navigation is not ready. Try again shortly.","manual guide before observer startup explains unavailable data");
     check(!nav::submitNavigationQuery(nav::Query::GuideCompleted) && said.size()==1,
         "automatic guide completion before startup stays silent");
     nav::startNavigationObservations(acceptQuery,acceptScene,resetObserver);
+    modEnabled=false;const auto readsBefore=roomReads;
+    check(!nav::submitNavigationQuery(nav::Query::Distance) && !nav::captureRequestedNavigationScene(false,true) && roomReads==readsBefore,
+        "disabled navigation refuses requests and capture before native reads");
+    modEnabled=true;
     for(unsigned i=0;i<5;++i) check(nav::submitNavigationQuery(nav::Query::Distance),"equal independent requests admitted");
     check(nav::captureRequestedNavigationScene(false),"native owner services whole request burst");
     for(unsigned i=1;i<4;++i) check(nav::captureRequestedNavigationScene(false,true),"held worker capture slot admitted");

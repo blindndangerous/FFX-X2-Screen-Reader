@@ -1,4 +1,108 @@
-# FFX current memory — November4
+# FFX current memory — November16
+
+November16 mergecheck integration: working files resolve all six conflicts between
+detached `3e7aa54` and `feat/mod-toggle` `31844f4`. Both guide fallback and pending
+guide requests remain; navigation keeps pressure-episode suppression and worker
+failure/recovery packets. The controlled message-mode callback retains the raw
+`0x46C840` guard. Kilika diagnostics and the `4245b9d` load-popup revision fix remain.
+New toggle fixtures include pre-main dialog suppression. The runner has one
+evidence-gated navigation-service block with the swimming implementation linked.
+Navigation query/capture entry points reject Off before speech or native reads;
+a focused regression failed before the guard and passes in the final suite.
+No-deploy build exits 0. Full native suite exits 0: 101 PASS records plus proxy
+forwarding, 4 evidence SKIPs, 0 failures. Separate ATEL run exits 0 with 2 PASS
+records. Missing evidence: archived reader body, collision replay body, Kilika
+floor inputs and utility maps. Actual game speech/timing remains unverified.
+Receipts: `.local/merge-build.log`, `.local/merge-tests.log`,
+`.local/merge-atel-tests.log`, `.local/merge-verification.json`.
+Git staging failed with permission denied creating the shared worktree metadata's
+`index.lock`; its directory lies outside this session's writable root. The index
+still records six unmerged paths, and no merge commit exists. Finish by staging
+the resolved files and committing with `.local/merge-commit-message.txt` in a
+session permitted to write this worktree's Git metadata. No deploy, push or other
+worktree changes. Luna performed a read-only fixture/runner path audit; the parent
+reviewed its findings, made all edits and ran verification. No delegated issues
+remain. See the [runtime integration record](Docs/features/runtime/index.md#mergecheck-integration--november16).
+
+November16 current-area toggle repair is offline verified, uncommitted on
+`feat/mod-toggle` at base `41cef74`. The user reports Load-dialog Off/On now
+works, but field helpers fail after enabling in Besaid Great Hall. The supplied
+log had restarted at 18:56:44 when read; the earlier reported sequence was absent.
+No deployment, commit, game control/probe or Tester Logs access.
+
+Cause: toggles advanced the allocation lifetime floor, Off hid native ATEL
+receipts, and resource-worker cleanup could reclaim still-live prepared banks.
+All hooks previously skipped allocation/free observation while Off. Native
+capture failure then latched its one waiting message; F9/F11 context gates also
+rejected requests without a ready trial identity. Resource lifetime observers
+and native load scopes now stay active while Off, with bounded native capture
+and worker decoding. Frees/replacements still retire exact serials. Speech,
+commands, movement and navigation snapshots retain generation cancellation;
+current-area field/puzzle state is recaptured after enable without another load.
+Worker failure packets report each waiting command, then one readiness notice.
+Pending navigation admits keyboard guide requests; ordinary ready-field key
+handback and supported-guide-only controller availability remain intact.
+
+Focused fixtures reproduced receipt loss, skipped Off lifetime/load callbacks,
+the silent second query and blocked F9. Current-area navigation/guide, area load
+while Off, address reuse, cache pressure, worker cleanup and readiness recovery
+have targeted coverage. No-deploy build exits 0; full native suite exits 0 with
+91 PASS records / 3 SKIP / 0 failures (prior 86/3). Separate ATEL resource fixture
+passes, including zero native heap operations and zero worker engine reads. Resume fixture 17
+checks and hook ABI 11000 mixed calls pass. Warm same-area toggle through first
+navigation output measured 19.004 ms in controlled fixture scheduling; cold
+copied pipeline 15.794 ms. Actual game timing and audible NVDA remain unverified.
+Warnings: C4244 conversion, C4459 shadow declarations and suite D9026 remain.
+Skips: archived reader body, collision replay body and utility maps evidence
+are absent. Receipts use
+`build/field-toggle-*.log`. Follow the updated
+[runtime contract and prioritized test procedure](Docs/features/runtime/index.md#whole-mod-toggle--november16).
+The earlier fresh-area-load limitation below is superseded by this repair.
+
+
+November16 toggle speech follow-up is offline verified, uncommitted on
+`feat/mod-toggle` at `43bd042`. Claude's injected-key allowance in
+`src/native/mod_toggle.cpp:19` is preserved. The user's supplied 18:29 session
+log was read; no deployment, commit, game launch/control or Tester Logs access.
+Toggle feedback used a reserved path that discarded `interrupt=true` and
+logged neither its text nor its backend result. Generation/Off gates did not
+reject that path in the real speech-worker fixture; the exact original live
+Off loss remains unproven. Both confirmations now interrupt and log backend
+acceptance. Automatic resume lines queue until the next input, fixing the
+one-line protection that let Yes interrupt On. Resume requires a valid field
+before announcing its map; navigation capture excludes title/save-load room23.
+Fresh Yes/No callbacks read unchanged focus or focus changed while Off.
+
+Requested no-deploy build exits0. Full `src/native/tests/run_tests.bat` exits0:
+86 PASS records /3 SKIP /0 failures (prior84/3). Menu fixture414 checks;
+new native-owner resume fixture15 checks. Speech fixtures cover exact feedback
+interruption, multiple resume lines, input restoring interruption, Off capture/API
+rejection, delayed Off-generation results, full queues and cleared repeat history.
+Red fixtures reproduced feedback interruption, false map arrival and false
+title navigation failure before their fixes. Existing Kilika C4244, fixture
+shadow and D9026 warnings remain. Skips: archived reader body, collision replay
+body and utility maps evidence are absent. Receipts: `build/toggle-build.log`,
+`build/toggle-suite.log`, `build/toggle-*-red.log`; final runtime sequence in
+`build/toggle-tests/runtime_test.log`. Real NVDA audio remains unverified;
+ATEL helpers still need a fresh observed resource load after enable.
+See the updated [runtime contract and prioritized dialog test](Docs/features/runtime/index.md#whole-mod-toggle--november16).
+
+Earlier implementation checkpoint:
+
+November16 whole-mod toggle is implemented, uncommitted in `feat/mod-toggle`
+(`ffx-wt-modtoggle`; base `0d7166e`). Ctrl+Shift+F12 toggles the default-On mod
+using one flag, persistent hooks, native-owner cancellation/key handback and
+fresh state arrival. FFX-2 gets the shared toggle listener, not screen reading.
+The standard native suite exits0:84 PASS /3 SKIP (baseline81/3); separate ATEL
+and hook-threading fixtures pass, including full stale receipt recovery and
+controller/speech-pressure replay prevention. Final no-deploy build exits0;
+the final three input fixtures pass after the held-key rearm repair. Existing
+Kilika C4244 and fixture shadow warnings remain. Full changed-file/gate locations
+and receipts: `build/modtoggle-report.txt` (local artifact).
+ATEL-dependent helpers need a fresh observed resource load after re-enable;
+live gameplay, physical key/audio response and FFX-2 remain unverified. No
+commit, deployment, game/probe or Tester Logs access. See the
+[architecture, exact recovery limit and prioritized gameplay procedure](Docs/features/runtime/index.md#whole-mod-toggle--november16).
 
 November16 late-session floor/guide/fixture follow-up on detached `0ba4a49`.
 The user confirms that this deployed revision's homing and one-cue push speech

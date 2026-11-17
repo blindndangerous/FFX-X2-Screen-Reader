@@ -77,8 +77,8 @@ void check(bool ok,const char* why) {++checks;if(!ok) {std::fprintf(stderr,"FAIL
 template<class T> void set(unsigned off,T value) {check(write<T>(address(off),value),"synthetic write");}
 void drain() {owner=false;drainSpeechDomainsForTest();owner=true;}
 void expect(const wchar_t* expected,const char* why) {check(!said.empty() && said.back().first==expected,why);}
-void event(unsigned id,uintptr_t arg,const std::function<void()>& change={},unsigned parent=0) {
-    auto listener=listeners.at(id);Event e;e.rva=id;e.args[0]=arg;e.epoch=generation();e.parentRva=parent;
+void event(unsigned id,uintptr_t arg,const std::function<void()>& change={},unsigned parent=0,bool arrival=false) {
+    auto listener=listeners.at(id);Event e;e.rva=id;e.args[0]=arg;e.epoch=generation();e.parentRva=parent;e.arrival=arrival;
     if(listener.enter) listener.enter(e);if(change) change();if(listener.leave) listener.leave(e);drain();
 }
 void encoded(unsigned off,const wchar_t* text) {
@@ -116,6 +116,7 @@ void emptyItems() {
     check(said.size()==n+1,"zero quantity speaks once without automatic stale detail");expect(L"Empty","zero quantity announces Empty");
     check(readSelectionDetail(),"empty item retains detail context");drain();expect(L"No native description is available for this selection.","zero quantity retires prior detail");
     n=said.size();event(0x4c6da0,address(win));check(said.size()==n,"idle empty item stays silent");
+    event(0x4c6da0,address(win),{},0,true);check(said.size()==n+1,"enable arrival re-reads unchanged visible selection");
     event(0x4c6da0,address(win),[]{set<int>(win+0x58,1);set<uint8_t>(0x1197736,0);});expect(L"Empty","adjacent empty cell speaks despite equal text");
     setSetting(Setting::AutoDetail,0);items();event(0x4c6da0,address(win),[]{set<int16_t>(win+0x48,1);set<int>(win+0x58,1);});
     expect(L"Empty","odd final row trailing cell announces Empty");
@@ -172,6 +173,13 @@ void yesNo() {
         set<int>(0x8e72f0,cursor);event(popup,0);event(0x2efd90,0);
         expect(cursor?L"Yes":L"No","initial answer speaks");
         auto n=said.size();event(0x2efd90,0);check(said.size()==n,"idle answer stays silent");
+        resetSystemMenus();n=said.size();event(0x2efd90,0,{},0,true);
+        check(said.size()==n+1,"toggle resume re-reads unchanged Yes/No focus");
+        expect(cursor?L"Yes":L"No","resume uses current native answer");
+        resetSystemMenus();set<int>(0x8e72f0,1-cursor);n=said.size();event(0x2efd90,0,{},0,true);
+        check(said.size()==n+1,"toggle resume reads a focus changed while off");
+        expect(cursor?L"No":L"Yes","resume never replays old Yes/No focus");
+        set<int>(0x8e72f0,cursor);
         event(popup,0);n=said.size();event(0x2efd90,0);
         check(said.size()==n+1,"same answer speaks for both reopened popup types");
         expect(cursor?L"Yes":L"No","reopened answer label");

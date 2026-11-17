@@ -14,6 +14,7 @@
 #include "../auto_walk.hpp"
 #include "../reachability.hpp"
 #include "../text_plan.hpp"
+#include "../mod_state.hpp"
 namespace {
 unsigned starts=0,faces=0,arms=0,actions=0,refusals=0;
 std::array<uint8_t,0x668> cameraBytes{};
@@ -38,12 +39,13 @@ bool deferNativeAction(NativeAction action) {
 }
 void installAutoWalk() {}void installPedestal() {}
 void stopAutoWalk() {++manualInputRevision;}
-void releaseAutoWalk() {}
-void suspendAutoWalk() {}
+void suspendAutoWalk() {stopAutoWalk();}
+void releaseAutoWalk() {stopAutoWalk();}
 bool autoWalkResumePending() {return false;}
 bool toggleAutoWalkOff(void(*)()) {return false;}
 void setAutoWalkResume(bool(*)(const NativeRouteTarget&)) {}
 bool utilityBusy() {return false;}
+std::wstring nativeButtonMaskName(uint16_t) {return L"Confirm";}
 void startAutoWalk(bool) {check(nativeOwner,"approved start stays Native");++starts;}
 void cancelPedestal() {}
 void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {check(nativeOwner,"arming stays Native");++arms;}
@@ -70,6 +72,7 @@ ffx::Entity selected() {ffx::Entity target;nativeOwner=false;check(ffx::navigati
 }
 int main() {try {
     check(ffx::address(0x46c840)!=0x46c840,"message-mode getter must resolve to a fixture callback, never raw game RVA");
+    std::setvbuf(stdout,nullptr,_IONBF,0);
     using namespace ffx;check(startAtelResources(),"pipeline resource bootstrap");installAtelResources();installNavigation();
     // Native encoded title getter: all requested IDs share a controlled ready
     // game-format string; exact getter bounds, copying and decoder are real.
@@ -149,6 +152,47 @@ int main() {try {
     check(queuePuzzleGuidePoint(fixedGoal.position,-1,false,L"Stand beside the panel.",intro),"admit fixed typed guide point without Native Entity");intro={};fresh(3);
     check(navigationSaid.size()==typedBefore+1 && navigationSaid.back().find(L"Step 1 of 11. Reach the panel.")==0,"copied direct guide prefix and route form one output after source reset");
     check(!foreignReads,"typed direct guide uses no Worker engine reads");
+    // Keep the current EV allocation across Off/On; no prepare/load call here.
+    AtelIdentity resumedIdentity;check(readyAtelIdentity(chunk,resumedIdentity),"current guide resource is prepared before toggle");
+    const auto resumedSerial=resumedIdentity.span.serial;
+    const auto resumeBegin=std::chrono::steady_clock::now();
+    modEnabled=false;modLifetimeEpoch=++epoch;resetNavigation();work();
+    nativeOwner=false;drainAtelResourcesForTest();nativeOwner=true;
+    modEnabled=true;modLifetimeEpoch=++epoch;resetNavigation();work();
+    check(readyAtelIdentity(chunk,resumedIdentity) && resumedIdentity.span.serial==resumedSerial,"current-area allocation survives toggle and worker maintenance");
+    const auto resumedBefore=navigationSaid.size();key(VK_OEM_6);fresh();
+    check(!navigationPendingForTest() && navigationSaid.size()>resumedBefore,"navigation resumes in current area without a resource load");
+    const auto resumeMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-resumeBegin).count();
+    const auto guideResumeBefore=navigationSaid.size();
+    check(nav::submitNavigationQuery(nav::Query::GuideStep,false,ownedPuzzleGuideRevision()),"current-area guide request accepted after toggle");fresh();
+    check(navigationSaid.size()==guideResumeBefore+1 && navigationSaid.back().find(L"Step ")==0,"current-area puzzle guide resumes without a resource load");
+    // Break only the native controller readiness, keeping the live EV intact.
+    put(controller.data()+0x1a,static_cast<uint16_t>(1));
+    const std::wstring waitText=L"Navigation data is unavailable. Waiting for the field to become ready.";
+    const auto waitsBefore=std::count(navigationSaid.begin(),navigationSaid.end(),waitText);
+    key(VK_OEM_6);fresh(1);
+    check(std::count(navigationSaid.begin(),navigationSaid.end(),waitText)==waitsBefore+1,"first unavailable command has waiting feedback");
+    key(VK_OEM_6);fresh(1);
+    check(std::count(navigationSaid.begin(),navigationSaid.end(),waitText)==waitsBefore+2,"second unavailable command is not silenced by a latch");
+    check(nav::submitNavigationQuery(nav::Query::GuideExpected,false,ownedPuzzleGuideRevision()),"waiting guide request accepted");fresh(1);
+    check(nav::submitNavigationQuery(nav::Query::AssistInstruction),"waiting instruction request accepted");fresh(1);
+    check(std::count(navigationSaid.begin(),navigationSaid.end(),waitText)==waitsBefore+4,"guide and instruction commands each speak while waiting");
+    const std::wstring readyText=L"Navigation ready.";
+    const auto readyBefore=std::count(navigationSaid.begin(),navigationSaid.end(),readyText);
+    put(controller.data()+0x1a,static_cast<uint16_t>(0));nav::requestNavigationScene();fresh();
+    check(!navigationPendingForTest() && std::count(navigationSaid.begin(),navigationSaid.end(),readyText)==readyBefore+1,"ready field drains requests and announces recovery once");
+    nav::requestNavigationScene();fresh();
+    check(std::count(navigationSaid.begin(),navigationSaid.end(),readyText)==readyBefore+1,"later ready observations do not repeat recovery");
+    put(controller.data()+0x1a,static_cast<uint16_t>(1));key(VK_OEM_6);fresh(1);
+    modEnabled=false;modLifetimeEpoch=++epoch;resetNavigation();work();
+    prepare("cdsp0000");setScene(); // Native area change and preparation while Off.
+    modEnabled=true;modLifetimeEpoch=++epoch;resetNavigation();work();fresh();
+    check(std::count(navigationSaid.begin(),navigationSaid.end(),readyText)==readyBefore+1,"toggle cancels old waiting announcement and commands");
+    check(readyAtelIdentity(chunk,resumedIdentity) && std::strcmp(resumedIdentity.name,"cdsp0000")==0,"field loaded while Off has its own current allocation on enable");
+    key(VK_OEM_6);fresh();check(!navigationPendingForTest(),"field loaded while Off serves navigation without another load");
+    check(!foreignReads,"toggle and waiting recovery use no Worker engine reads");
+    std::puts("PASS: current-area toggle navigation/guide recovery, per-command waiting feedback and one ready announcement.");
+    std::printf("METRIC warm current-area toggle through first navigation output %.3fms; controlled owner/worker scheduling.\n",resumeMs);
     std::printf("PASS: owned direct guide target lease, fixed Native start, manual cancellation and abandoned-marker recovery; semantic endpoints only.\n");
     std::printf("PASS: production owned navigation commands, batched names, five equal outputs, depth route, guarded Native start/manual cancellation, source reuse, pressure and reset.\nMETRIC cold copied pipeline %.3fms; semantic domain/mutation adapters, real EV/getter/resource/route code. No game/backend/audible claim.\n",cold);
     return 0;

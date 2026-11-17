@@ -22,7 +22,7 @@ if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" (
     echo ERROR: SDL3 build failed; see the output above.
     exit /b 1
 )
-set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
+if not defined TEST_BUILD set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
 cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:fixture_runtime_test.exe "%TEST_SRC%fixture_runtime_test.cpp"
@@ -71,6 +71,18 @@ if /I "%~1"=="--startup" goto startup
 if /I "%~1"=="--accessibility" goto accessibility
 if /I "%~1"=="--speech" goto speech
 if /I "%~1"=="--menu-speech" goto menuspeech
+if /I "%~1"=="--atel-resources" goto atelresources
+
+:modtoggle
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:mod_toggle_fixture.exe "%TEST_SRC%mod_toggle_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+mod_toggle_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /WX /EHsc /Gy /std:c++17 /MT /I"%MINHOOK_ROOT%\include" /Fe:mod_resume_fixture.exe "%TEST_SRC%mod_resume_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" "%TEST_SRC%..\navigation_observations.cpp" /link /OPT:REF user32.lib
+if not "%errorlevel%"=="0" goto failed
+mod_resume_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--mod-toggle" goto success
 :menuspeech
 cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:menu_speech_fixture.exe "%TEST_SRC%menu_speech_fixture.cpp" "%TEST_SRC%..\battle_lists.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
@@ -96,7 +108,7 @@ if /I "%~1"=="--message-hints" goto success
 if not exist PrismRuntime mkdir PrismRuntime
 cl /nologo /W4 /EHsc /std:c++17 /MT /LD /Fe:PrismRuntime\prism.dll "%TEST_SRC%fake_prism.cpp" /link /DEF:"%TEST_SRC%fake_prism.def"
 if not "%errorlevel%"=="0" goto failed
-cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_SPEECH_WAKE_TEST /Fe:runtime_tests.exe "%TEST_SRC%runtime_tests.cpp" "%TEST_SRC%..\prism_backend.cpp" "%TEST_SRC%..\speech.cpp" "%TEST_SRC%..\log_capture.cpp" "%TEST_SRC%..\speech_capture.cpp" "%TEST_SRC%..\speech_queue.cpp" "%TEST_SRC%..\speech_domains.cpp" "%TEST_SRC%..\log_history.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\settings.cpp" /link user32.lib
+cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_SPEECH_WAKE_TEST /Fe:runtime_tests.exe "%TEST_SRC%runtime_tests.cpp" "%TEST_SRC%..\mod_toggle.cpp" "%TEST_SRC%..\prism_backend.cpp" "%TEST_SRC%..\speech.cpp" "%TEST_SRC%..\log_capture.cpp" "%TEST_SRC%..\speech_capture.cpp" "%TEST_SRC%..\speech_queue.cpp" "%TEST_SRC%..\speech_domains.cpp" "%TEST_SRC%..\log_history.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\settings.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
 runtime_tests.exe
 if not "%errorlevel%"=="0" goto failed
@@ -245,7 +257,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--controller" goto success
 :navigationservice
 if not exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files\ffx_ps2\ffx\master\jppc\event\obj\kl\klyt1000\klyt1000.ebp" goto navigationservice_missing
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\swimming_route.cpp" /link user32.lib
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" /link user32.lib
 if errorlevel 1 goto failed
 navigation_service_fixture.exe
 if errorlevel 1 goto failed
@@ -504,6 +516,11 @@ goto success
 :sdlowner
 call "%~dp0run_sdl_owner_tests.bat"
 exit /b %errorlevel%
+:atelresources
+cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:atel_resources_fixture.exe "%TEST_SRC%atel_resources_fixture.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\navigation_targets.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+atel_resources_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 :success
 popd
 exit /b 0
