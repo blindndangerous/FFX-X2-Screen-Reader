@@ -1,5 +1,34 @@
 # FFX current memory — November16
 
+November16 toggle speech follow-up is offline verified, uncommitted on
+`feat/mod-toggle` at `43bd042`. Claude's injected-key allowance in
+`src/native/mod_toggle.cpp:19` is preserved. The user's supplied 18:29 session
+log was read; no deployment, commit, game launch/control or Tester Logs access.
+Toggle feedback used a reserved path that discarded `interrupt=true` and
+logged neither its text nor its backend result. Generation/Off gates did not
+reject that path in the real speech-worker fixture; the exact original live
+Off loss remains unproven. Both confirmations now interrupt and log backend
+acceptance. Automatic resume lines queue until the next input, fixing the
+one-line protection that let Yes interrupt On. Resume requires a valid field
+before announcing its map; navigation capture excludes title/save-load room23.
+Fresh Yes/No callbacks read unchanged focus or focus changed while Off.
+
+Requested no-deploy build exits0. Full `src/native/tests/run_tests.bat` exits0:
+86 PASS records /3 SKIP /0 failures (prior84/3). Menu fixture414 checks;
+new native-owner resume fixture15 checks. Speech fixtures cover exact feedback
+interruption, multiple resume lines, input restoring interruption, Off capture/API
+rejection, delayed Off-generation results, full queues and cleared repeat history.
+Red fixtures reproduced feedback interruption, false map arrival and false
+title navigation failure before their fixes. Existing Kilika C4244, fixture
+shadow and D9026 warnings remain. Skips: archived reader body, collision replay
+body and utility maps evidence are absent. Receipts: `build/toggle-build.log`,
+`build/toggle-suite.log`, `build/toggle-*-red.log`; final runtime sequence in
+`build/toggle-tests/runtime_test.log`. Real NVDA audio remains unverified;
+ATEL helpers still need a fresh observed resource load after enable.
+See the updated [runtime contract and prioritized dialog test](Docs/features/runtime/index.md#whole-mod-toggle--november16).
+
+Earlier implementation checkpoint:
+
 November16 whole-mod toggle is implemented, uncommitted in `feat/mod-toggle`
 (`ffx-wt-modtoggle`; base `0d7166e`). Ctrl+Shift+F12 toggles the default-On mod
 using one flag, persistent hooks, native-owner cancellation/key handback and

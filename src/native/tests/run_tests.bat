@@ -65,6 +65,10 @@ cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:mod_toggle_fixture.exe "%TEST_SRC%mo
 if not "%errorlevel%"=="0" goto failed
 mod_toggle_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /WX /EHsc /Gy /std:c++17 /MT /I"%MINHOOK_ROOT%\include" /Fe:mod_resume_fixture.exe "%TEST_SRC%mod_resume_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" "%TEST_SRC%..\navigation_observations.cpp" /link /OPT:REF user32.lib
+if not "%errorlevel%"=="0" goto failed
+mod_resume_fixture.exe
+if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--mod-toggle" goto success
 :menuspeech
 cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:menu_speech_fixture.exe "%TEST_SRC%menu_speech_fixture.cpp" "%TEST_SRC%..\battle_lists.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib

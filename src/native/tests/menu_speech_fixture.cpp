@@ -172,6 +172,13 @@ void yesNo() {
         set<int>(0x8e72f0,cursor);event(popup,0);event(0x2efd90,0);
         expect(cursor?L"Yes":L"No","initial answer speaks");
         auto n=said.size();event(0x2efd90,0);check(said.size()==n,"idle answer stays silent");
+        resetSystemMenus();n=said.size();event(0x2efd90,0,{},0,true);
+        check(said.size()==n+1,"toggle resume re-reads unchanged Yes/No focus");
+        expect(cursor?L"Yes":L"No","resume uses current native answer");
+        resetSystemMenus();set<int>(0x8e72f0,1-cursor);n=said.size();event(0x2efd90,0,{},0,true);
+        check(said.size()==n+1,"toggle resume reads a focus changed while off");
+        expect(cursor?L"No":L"Yes","resume never replays old Yes/No focus");
+        set<int>(0x8e72f0,cursor);
         event(popup,0);n=said.size();event(0x2efd90,0);
         check(said.size()==n+1,"same answer speaks for both reopened popup types");
         expect(cursor?L"Yes":L"No","reopened answer label");
