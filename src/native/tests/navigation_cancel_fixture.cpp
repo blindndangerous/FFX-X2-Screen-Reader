@@ -123,14 +123,18 @@ int main() {
     std::puts("PASS: production pedestal detours and live step-15 loop coordinates reach aligned contact across six headings, four strides and 33/198 ms observations.");
     // A lower-recess observation can enter the zone before native movement
     // settles. Exercise the real walker/cues handshake, including failed entry.
-    unsigned arrivalCases=0;uint64_t longestArrival=0;
+    unsigned arrivalCases=0;uint64_t longestArrival=0,longestSuccessfulArrival=0;
     for(double speed:{10.0,50.0}) for(unsigned frameMs:{17u,33u})
-    for(unsigned latency:{1u,2u}) for(bool warm:{false,true}) for(bool blocked:{false,true}) {
+    for(unsigned latency:{1u,2u}) for(bool warm:{false,true}) for(bool blocked:{false,true})
+    for(unsigned endpoint:{0u,1u,2u}) {
         begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
         player={0,0,16.8};target={};target.worker=35;target.name=L"Lower Kilika Sphere recess";
         target.position={0,0,20};target.zone.valid=target.zone.talk=true;
         target.zone.shape=3;target.zone.center=target.position;
         target.zone.width=target.zone.depth=3;target.zone.height=5;
+        // Route endpoints can sit on the zone edge. A remote live pedestal
+        // still supplies a keep-out, but it cannot block safe local correction.
+        if(endpoint==2) {target.zone.obstacle={100,0,100};target.zone.obstacleRadius=7;}
         observation.epoch=epoch;observation.allowed=true;observation.collisionSerial=navCollisionSerial();
         observation.audioContext=navAudioContextSerial();observation.cameraValid=true;observation.forward=forward;
         speechq::Header header{};header.generation=epoch;
@@ -138,7 +142,7 @@ int main() {
             nativeOwner=false;observation.player=player;
             updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;
         };
-        publish();nativeOwner=false;routeNavAudio({player,{0,0,17.5}},target,true);nativeOwner=true;
+        publish();nativeOwner=false;routeNavAudio({player,{0,0,endpoint?17.0:17.5}},target,true);nativeOwner=true;
         startAutoWalk(false);speech.clear();
         player={0,0,17.1};publish();NavLeg current;
         check(navLeg(current) && current.arrived && speech.empty(),"transient lower-recess entry has no premature success speech");
@@ -162,14 +166,37 @@ int main() {
         check(!autoWalkActive() && speech.size()==1,"ordinary lower-recess arrival has one final outcome");
         if(blocked) check(speech.back()==L"Auto walk stopped: not in interaction range",
             "failed lower-recess correction emits failure without a preceding arrival");
-        else check(inInteractionZone(target.zone,player) && speech.back()==L"Lower Kilika Sphere recess: route destination reached",
-            "successful lower-recess correction settles inside the zone before its sole arrival");
+        else {
+            if(!inInteractionZone(target.zone,player)) std::fprintf(stderr,"arrival case: endpoint=%u speed=%.1f frame=%u latency=%u warm=%d position=%.3f,%.3f elapsed=%llu\n",
+                endpoint,speed,frameMs,latency,warm,player.x,player.z,static_cast<unsigned long long>(clockValue-began));
+            check(inInteractionZone(target.zone,player) && speech.back()==L"Lower Kilika Sphere recess: route destination reached",
+                "successful lower-recess correction settles inside the zone before its sole arrival");
+            longestSuccessfulArrival=std::max(longestSuccessfulArrival,clockValue-began);
+        }
         if(blocked) {target.inactive=true;publish();check(speech.size()==1,
             "worker invalidation after a native arrival failure cannot repeat the failure");}
-        check(clockValue-began<=2500,"ordinary arrival correction has a bounded whole recovery and settle time");
+        check(clockValue-began<=3500,"ordinary arrival correction has a bounded whole recovery and settle time");
         longestArrival=std::max(longestArrival,clockValue-began);++arrivalCases;
     }
-    std::printf("PASS: %u ordinary arrival ramp cases, cold/warm, 17/33ms, one/two-frame pipeline and blocked recovery; longest simulated recovery %llums.\n",arrivalCases,static_cast<unsigned long long>(longestArrival));
+    std::printf("PASS: %u ordinary arrival ramp cases, cold/warm, 17/33ms, one/two-frame pipeline and blocked recovery; longest simulated recovery %llums, longest success %llums.\n",arrivalCases,static_cast<unsigned long long>(longestArrival),static_cast<unsigned long long>(longestSuccessfulArrival));
+    // A remote keep-out permits correction; a pedestal across the correction
+    // segment must still stop it. Transient entry was on the far side.
+    begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+    player={0,0,20};target={};target.worker=35;target.name=L"Guarded recess";
+    target.position=target.zone.center=player;target.zone.valid=target.zone.talk=true;
+    target.zone.shape=3;target.zone.width=target.zone.depth=3;target.zone.height=5;
+    target.zone.obstacle={0,0,18};target.zone.obstacleRadius=.5;
+    observation.epoch=epoch;observation.allowed=true;observation.collisionSerial=navCollisionSerial();
+    observation.audioContext=navAudioContextSerial();speechq::Header guardedHeader{};guardedHeader.generation=epoch;
+    nativeOwner=false;observation.player=player;updateOwnedNavAudio(observation,mesh,{target},guardedHeader,L"");
+    routeNavAudio({player,player},target,true);nativeOwner=true;startAutoWalk(false);speech.clear();
+    player={0,0,16.8};
+    for(unsigned frame=0;frame<100 && autoWalkActive();++frame) {
+        clockValue+=33;updateAutoWalk();const auto keys=keyboard();
+        check(!keys[0xc8] && !keys[0xcb] && !keys[0xd0] && !keys[0xcd],"arrival correction never walks across the active pedestal keep-out");
+    }
+    check(!autoWalkActive() && speech.size()==1 && speech.back()==L"Auto walk stopped: not in interaction range",
+        "unsafe correction reports one failure without crossing the pedestal");
     // Replans within one walk cannot restart settlement indefinitely. Exact
     // coincidence also needs no turn when the native facing setter declines.
     for(bool moving:{false,true}) {

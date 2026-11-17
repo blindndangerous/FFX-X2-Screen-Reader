@@ -119,9 +119,13 @@ void feedbackFixtures() {
         check(said.empty(),"dialogue, disabled control and silent cutscenes suppress camera cuts and resume without a hint");
     }
     cameraForward={1,0,0};
+    NavLeg beforeCut;nativeOwner=true;check(navLeg(beforeCut),"camera-cut fixture has a route leg");nativeOwner=false;
     nativeOwner=true;captureNavCamera();cameraForward={0,0,1};captureNavCamera();
     check(said.empty(),"camera owner captures no synchronous speech");nativeOwner=false;drainSpeechDomainsForTest();
     check(said.size()==1 && said.back().find(L"east")!=std::wstring::npos,"camera cut emits one refreshed next-leg hint from copied camera");
+    NavLeg afterCut;nativeOwner=true;check(navLeg(afterCut),"camera cut retains the route leg");nativeOwner=false;
+    check(distanceXZ(beforeCut.goal,afterCut.goal)<.001 && distanceXZ(beforeCut.final,afterCut.final)<.001 &&
+        beforeCut.arrivalSerial==afterCut.arrivalSerial,"Route to camera speech does not replan or change the destination");
     nativeOwner=true;captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
     check(said.size()==1,"unchanged camera does not repeat cut hint");
     for(unsigned i=1;i<=12;++i) {

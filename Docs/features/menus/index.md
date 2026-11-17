@@ -1,5 +1,10 @@
 # Menus, dialogue, Help and Sphere Grid
 
+November16: [Kilika evening-run repairs](../navigation/index.md#kilika-evening-run-repairs--november16)
+reject a stale Yes/No return after a loading popup replaces its question. This
+also prevents Autodetail from repeating the new loading status. Reopened
+questions retain their initial answer; no text-based suppression was added.
+
 October21: [Formation membership and parameter confirmation speech](../battle/seymour_amount_prompts_20261021.md)
 use the actual front-party roster and copied native prompt/Yes/No values.
 Original descriptions and Autodetail ownership remain intact.

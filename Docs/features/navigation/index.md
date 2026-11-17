@@ -1,5 +1,93 @@
 # Navigation, route validity, audio and movement
 
+## Kilika evening-run repairs — November16
+
+Scope: HEAD `e79200a`, the user's November16 17:25–18:03 session. The supplied
+log was rotated during investigation; its matching 295683-byte archive is
+`logs/FFX_SR_Native-20261116-181941-718-000.log` beside the game. A read-only
+copy is retained in `%TEMP%/ffx-kilika-e79200a/original-session.log`.
+No deployment, commit, game control, injection or Tester Logs access occurred.
+
+Confirmed causes and changes:
+
+- Step 22 used an authored label absent from the destination list. It now
+  names `Exit 1 to Kilika - Antechamber`. The existing identity resolver still
+  selects local worker 37, not worker 39 (`Exit 3`), regardless of list order.
+- Step 21 treated `0x0c000063=3` as permanently sufficient. Original retained
+  `klyt1000` worker 36 writes that milestone at PC `0xe679`; reinsertion writes
+  the carried sphere to `0x0c000062` without clearing the milestone. Removal
+  clears `0x62`. The completion predicate now also requires `0x62=0`; the
+  Kilika final-step correction retires its old progress bits when refilled.
+  Existing scene/message ownership still defers advancement until control returns.
+- Ordinary arrival stopped within 0.25 units of its chosen endpoint even when
+  the actual interaction predicate was false. That produced repeated zero-distance
+  homing attempts. A copied pedestal obstacle also disabled all correction,
+  even across the room. Endpoint proximity now requires actual zone membership;
+  correction checks the segment against the pedestal keep-out instead of rejecting
+  every nonzero obstacle radius. Native pulse/coast settling and one final outcome
+  remain. A 33ms warm-ramp fixture exhausted the old 2000ms budget 0.035 units
+  outside the zone. The correction budget is now 3000ms plus final settling,
+  with a 3500ms whole-recovery fixture bound. No waits, queues or allocations
+  were added to the native movement owner.
+- Loading duplicates came from a returning Yes/No handler after it opened a
+  status popup. The popup reset the cursor latch and replaced the saved prompt;
+  the old handler then emitted `Yes`, followed by Autodetail's copy of the new
+  loading prompt. A native popup revision rejects that obsolete return and
+  latches its retired cursor for the next idle call. This is event-lifetime
+  validation, not text or time-based suppression. Real reopened questions and
+  repeated text remain supported.
+
+Step 19's initial long route is **unresolved**, not claimed fixed. The log lists
+the pedestal as inactive at 17:50:04 and 17:51:27. Existing obstacle retirement
+and a strengthened straight-route fixture reject the proposed stale keep-out
+mechanism for an inactive pedestal. `Route to ...: 9 southwest` at 17:50:50 is
+the camera-cut producer's next-leg description; a production fixture confirms
+that this event changes neither the route goal nor its final endpoint. It is
+not evidence of a replan. The session records no successful-route coordinates,
+floor snapshot/remaps or obstacle dump, and the retained evidence here lacks
+the Kilika collision mesh. The initial south/west/north route therefore cannot
+be distinguished from a necessary lower-floor approach or a route-selection
+defect. No obstacle or floor rule was weakened on that assumption.
+
+The requested no-deploy build and full `run_tests.bat` both exit 0. The suite
+reports 90 PASS groups plus proxy forwarding, with three existing missing-evidence
+SKIPs: readers (`hudTextureClipBody.bin`), reachability (`collisionReplayBody.bin`)
+and utilities (`maps_v3.json`). Existing C4244/C4456/D9026 warnings remain.
+Receipts are `.local/kilika-build-final.log`, `.local/kilika-tests-final.log` and
+`.local/kilika-verification.json`; focused failing/passing fixture logs share the
+`.local/kilika-` prefix. New fixtures exercise real guide selection/progression,
+real menu hooks and owned speech with Autodetail on/off, 96 arrival ramp cases,
+safe/unsafe pedestal correction, camera-cut route retention and inactive-pedestal
+straight-route behavior. Menu speech passes 407 checks. All 96 arrival cases
+pass; longest successful recovery is 2970ms, and longest blocked recovery is
+3366ms including final settling. The prior 192 route/input and 96 pedestal-ramp
+cases remain green. Retained ATEL reads confirmed the door writes; fixture
+movement remains synthetic and does not establish actual game collision or speech.
+
+Prioritized nonvisual gameplay procedure, after a separately authorized deployment:
+
+1. Load the Kilika save. Expect one initial `Yes`, then one loading status after
+   confirmation. Repeat with Autodetail on and off; a reopened question must
+   still speak its initial answer.
+2. At step 2, request the Entry door recess walk once. Expect one reached notice
+   followed by a usable native interaction. Failure: an outside-range stop or
+   needing a second walk. Confirm manual movement/cancel still stops assistance.
+3. Complete the existing pedestal push and steps 16–18. At step 19, note the
+   initial route and any camera-change description separately. Walk to the
+   lower recess once and insert the Destruction Sphere. Then walk to the
+   revealed chest once and collect it. Both arrivals must permit interaction;
+   physical obstructions must still stop assistance rather than push the pedestal.
+   The long initial step-19 route remains an open observation, not an accepted fix.
+4. After the chest, remove the final door sphere and wait for native control.
+   Expect step 22 naming `Exit 1 to Kilika - Antechamber`. Reinsert the sphere,
+   close its message and wait for control; expect step 21 on repeated reads and
+   after reopening the guide. Remove it again; expect step 22. The guide path
+   must choose the same exit as the named list row.
+
+Delegation: Luna performed one bounded read-only decoder-location search. It
+found the existing owned-mesh decoder but no retained Kilika mesh or EBP-floor
+recipe. Root inspected the result; no delegated edits or correctness claims.
+
 ## Visible-message hints — November16
 
 The reported `window=0 message=1 allowed=1 control=0` state does not prove that

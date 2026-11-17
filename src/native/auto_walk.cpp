@@ -159,9 +159,10 @@ bool safe() {return !unsafeReason();}
 // turn can be lost while the character is still moving). Pedestals are never walked into: that
 // would push them. An arrival that never gets inside the zone is reported, not ended as reached.
 constexpr uint64_t ArrivalHomeMs=1500,ArrivalBlockedMs=300,ArrivalSettleMs=300;
-// At 33ms with two-frame input latency, flush/calibration/correction can take
-// 1716ms. Ordinary interactions keep a separate two-second recovery budget.
-constexpr uint64_t InteractionHomeMs=2000;
+// An edge endpoint needs another pulse/coast after flush and calibration.
+// The 33ms warm-ramp fixture exhausted 2000ms 0.035 units outside the zone.
+// Keep the entire correction bounded, including any repeated settlements.
+constexpr uint64_t InteractionHomeMs=3000;
 constexpr double ArrivalHomeUnits=11.13,ArrivalCloseUnits=2.0;
 struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0,began=0;unsigned frames=0;Point origin,seen;} arrival;
 void announceStop(const wchar_t* spokenReason) {
@@ -358,14 +359,25 @@ void updateAutoWalk() {
             if(!target.butterfly && !target.swimDepth) faceNavigationTarget(target);
             stop("arrived");return;
         }
-        if(!arrival.active) {arrival={};arrival.active=true;arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || target.zone.obstacleRadius>0;}
+        if(!arrival.active) {arrival={};arrival.active=true;arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || (!leg.arrivalSerial && target.zone.obstacleRadius>0);}
         const Point center=target.pushControl?target.position:leg.arrivalSerial?leg.final:target.zone.center;
+        // Every ordinary target can carry the live pedestal keep-out, even
+        // across the room. Only a correction that enters it is unsafe.
+        const auto canHome=[&] {
+            if(target.pushControl) return false;
+            if(target.zone.obstacleRadius<=0) return true;
+            const double x=center.x-player.x,z=center.z-player.z,length=x*x+z*z;
+            const auto obstacle=target.zone.obstacle;
+            const double t=length>1e-8?std::clamp(((obstacle.x-player.x)*x+(obstacle.z-player.z)*z)/length,0.0,1.0):0;
+            return std::hypot(player.x+t*x-obstacle.x,player.z+t*z-obstacle.z)>=target.zone.obstacleRadius+.5;
+        };
         if(!arrival.settling) {
             if(distanceXZ(player,arrival.seen)>.1) {arrival.seen=player;arrival.still=now;last=player;}
             double pan=0,front=0;
-            const bool done=distanceXZ(player,center)<=(leg.arrivalSerial?.25:ArrivalCloseUnits) || distanceXZ(player,arrival.origin)>=ArrivalHomeUnits ||
+            const bool done=(distanceXZ(player,center)<=(leg.arrivalSerial?.25:ArrivalCloseUnits) &&
+                (!leg.arrivalSerial || inInteractionZone(target.zone,player))) || distanceXZ(player,arrival.origin)>=ArrivalHomeUnits ||
                 (!leg.arrivalSerial && (now-arrival.still>=ArrivalBlockedMs || now-arrival.since>=ArrivalHomeMs)) ||
-                (leg.arrivalSerial && now-arrival.began>=InteractionHomeMs) || !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front);
+                (leg.arrivalSerial && (now-arrival.began>=InteractionHomeMs || !canHome())) || !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front);
             if(!done) {
                 const auto degrees=std::atan2(pan,front)*180/3.14159265358979323846;
                 const auto bits=octMasks[(static_cast<int>(std::round(degrees/45))+8)&7];
@@ -380,7 +392,7 @@ void updateAutoWalk() {
         if(now-arrival.since<ArrivalSettleMs || (leg.arrivalSerial && arrival.frames<PedestalDrainFrames)) return;
         if(leg.arrivalSerial) {
             const bool inside=inInteractionZone(target.zone,player);
-            if(!inside && !target.zone.obstacleRadius && now-arrival.began<InteractionHomeMs) {
+            if(!inside && canHome() && now-arrival.began<InteractionHomeMs) {
                 arrival.settling=false;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;return;
             }
             if(!inside) {stop("arrived outside the interaction zone",L"not in interaction range",true);return;}

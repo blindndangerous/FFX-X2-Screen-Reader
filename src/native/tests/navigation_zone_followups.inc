@@ -112,6 +112,10 @@ void contactPedestalFixtures(const Mesh& room) {
     const auto afterPush=interactionRoute(room,{60,0,42},list[2].zone);
     check(!afterPush.empty() && inInteractionZone(list[2].zone,afterPush.back()),
         "a player beside a completed pedestal can leave for another recess without a radial escape");
+    const auto direct=interactionRoute(room,{60,0,42},storage.zone);
+    check(afterPush.size()==direct.size() && afterPush.size()==2 &&
+        distanceXZ(afterPush.back(),direct.back())<.001,
+        "an inactive pushed pedestal cannot detour a straight nearby recess route through a stale keep-out");
     list[0].inactive=false;avoidContactPedestals(list);
     check(list[2].zone.obstacleRadius==5,
         "resetting the pedestal restores its active contact keep-out");

@@ -1,5 +1,25 @@
 # FFX current memory — November4
 
+November16 evening-run repair on `e79200a`: step22 now names the actual worker37
+row, `Exit 1 to Kilika - Antechamber`. Step21 requires both the retained0x63=3
+milestone and an empty0x62 recess, and returns after reinsertion. Ordinary
+arrival requires actual zone membership, permits safe correction past a distant
+pedestal keep-out, and allows3000ms correction plus final settling. Popup revisions
+reject obsolete Yes/No returns and their duplicate loading Autodetail. No-deploy
+build/full native suite exit0:90 PASS groups plus proxy forwarding,3 existing
+missing-evidence SKIPs (readers, reachability, utilities). All96 arrival cases
+and407 menu checks pass; longest synthetic success2970ms, blocked recovery3366ms.
+Existing C4244/C4456/D9026 warnings remain. Receipts: `.local/kilika-build-final.log`,
+`.local/kilika-tests-final.log`, `.local/kilika-verification.json`. Gameplay and
+audible speech remain unverified.
+Step19's initial long detour remains unresolved: inactive-pedestal retirement
+passes, and the later `9 southwest` was camera-cut speech, not a replan. Missing
+live floor/route geometry prevents proving whether the original detour was needed.
+The supplied log rotated during work; its matching archive was recovered and
+preserved under `%TEMP%/ffx-kilika-e79200a/original-session.log`. No deployment,
+commit, game control/probe or Tester Logs access. See the
+[causes, limits, verification and prioritized gameplay procedure](Docs/features/navigation/index.md#kilika-evening-run-repairs--november16).
+
 November16 visible-message hint repair on `4dc7d1d` separates native message mode
 from an open TK window with a nonempty text source. Guide close-message hints
 and Auto walk's message-open refusal now require that copied visible-text fact;
