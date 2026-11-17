@@ -24,6 +24,7 @@
 #include "text_plan.hpp"
 #include "esc_details.hpp"
 #include "game_bindings.hpp"
+#include "navigation_observations.hpp"
 #include <atomic>
 #include <stdexcept>
 #include <cstring>
@@ -319,10 +320,13 @@ bool guideKeysAvailable() {
     UtilityScript script;
     return captureUtilityScript(script) && captureCurrentTrial(script)!=nullptr;
 }
+bool guideKeyAvailableOrWaiting() {
+    return guideKeysAvailable() || (!scene && !inBattle() && nav::navigationDataPending());
+}
 bool readKeyAvailable() {
     // Keep contextual naming/puzzle readback and menu/battle repeat, but hand
     // unused field F11 back to native input (F6-F8 remain reserved globally).
-    return namingReadbackAvailable() || guideKeysAvailable() || scene || inBattle() || escMenuActive();
+    return namingReadbackAvailable() || guideKeyAvailableOrWaiting() || scene || inBattle() || escMenuActive();
 }
 // Shift+Slash: one short key list for the current context. Keep these lists in
 // step with Docs/controls.md. Context checks only read already-published state.
@@ -340,7 +344,7 @@ void readPuzzleKey(bool shift) {
     if(gagazetActive()) { guideKey(shift?L"expected":L"step"); return; }
     bool trial=false;
     UtilityScript script;trial=!inBattle() && captureUtilityScript(script) && captureCurrentTrial(script)!=nullptr;
-    if(trial || viaPurificoActive()) guideKey(shift?L"expected":L"step"); else repeatSpeech(shift);
+    if(trial || viaPurificoActive() || (!scene && !inBattle() && nav::navigationDataPending())) guideKey(shift?L"expected":L"step"); else repeatSpeech(shift);
 }
 bool repeatKeyAvailable() {
     // L repeats in every context, including the ordinary field where F11 is
@@ -409,7 +413,7 @@ void modMenuKey(unsigned vk,bool shift) {
 void resetModMenu() { resetWakka(); resetSpherePlanner(); if(active) close(); }
 void installModMenu() {
     installUtilityText();
-    hotkey(VK_F8,menuKey); hotkeyWhen(VK_F9,stepKey,guideKeysAvailable); hotkeyWhen(VK_F10,pathKey,guideKeysAvailable);
+    hotkey(VK_F8,menuKey); hotkeyWhen(VK_F9,stepKey,guideKeyAvailableOrWaiting); hotkeyWhen(VK_F10,pathKey,guideKeyAvailableOrWaiting);
     hotkey(VK_F6,beaconKey); hotkey(VK_F7,detailKey);
     hotkeyWhen(VK_F11,readPuzzleKey,readKeyAvailable);
     hotkeyChordWhen(VK_OEM_2,true,contextHelpKey,[] { return true; });

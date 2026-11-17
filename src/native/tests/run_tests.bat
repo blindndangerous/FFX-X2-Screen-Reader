@@ -60,6 +60,7 @@ if /I "%~1"=="--accessibility" goto accessibility
 if /I "%~1"=="--speech" goto speech
 if /I "%~1"=="--menu-speech" goto menuspeech
 if /I "%~1"=="--atel-resources" goto atelresources
+if /I "%~1"=="--navigation-service" goto navigationservice
 :modtoggle
 cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:mod_toggle_fixture.exe "%TEST_SRC%mod_toggle_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
@@ -70,6 +71,12 @@ if not "%errorlevel%"=="0" goto failed
 mod_resume_fixture.exe
 if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--mod-toggle" goto success
+:navigationservice
+cl /nologo /W4 /EHa /Gy /std:c++17 /MT /DFFX_READER_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\pedestal_rules.cpp" /link /OPT:REF user32.lib
+if not "%errorlevel%"=="0" goto failed
+navigation_service_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--navigation-service" goto success
 :menuspeech
 cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:menu_speech_fixture.exe "%TEST_SRC%menu_speech_fixture.cpp" "%TEST_SRC%..\battle_lists.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed

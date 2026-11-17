@@ -8,6 +8,7 @@
 
 namespace {
 unsigned epoch=1,checks=0,maps=0,messages=0,battles=0,grids=0,navigationCaptures=0;
+unsigned navigationPackets=0;
 uint16_t room=23;
 bool field=false,message=false,battle=false,grid=false,resetReady=true;
 int visibleScene=0;
@@ -84,14 +85,14 @@ unsigned autoWalkInputRevision() {return 1;}
 namespace nav {
 unsigned navigationIntentRevision() {return 1;}
 void prepareNavigationSceneStorage() {}
-bool captureNavigationScene(Scene&,unsigned,bool) {++navigationCaptures;return false;}
+bool captureNavigationScene(Scene& observed,unsigned revision,bool) {++navigationCaptures;observed.epoch=epoch;observed.revision=revision;return false;}
 void captureNavigationAreaNames(Scene&,const AreaNameDemand&) {}
 }
 namespace speechq {
 void registerDomain(unsigned,DomainHandler,DomainReset) {}
 void registerDomainMaintenance(unsigned,DomainMaintenance) {}
 void notifyPreparation() noexcept {}
-bool captureDomain(unsigned,const void*,unsigned,const wchar_t*,unsigned,unsigned) {return true;}
+bool captureDomain(unsigned,const void*,unsigned,const wchar_t*,unsigned,unsigned) {++navigationPackets;return true;}
 }
 }
 extern "C" int __cdecl FfxNative_SpeechReady() {std::abort();}
@@ -117,8 +118,12 @@ int main() {
     nav::captureRequestedNavigationScene(true);
     check(navigationCaptures==0 && said.empty(),"title/load UI never produces a field navigation failure");
     nav::resetNavigationObservations();room=71;
+    navigationPackets=0;
     check(nav::submitNavigationQuery(nav::Query::Refresh),"field query accepted");
     nav::captureRequestedNavigationScene(true);
-    check(navigationCaptures==1 && said.size()==1,"genuine missing field data still reports an explicit query failure");
+    check(navigationCaptures==1 && navigationPackets==2 && said.empty(),"missing field data sends query and failure to worker without native speech");
+    check(nav::submitNavigationQuery(nav::Query::Next),"second field query accepted");
+    nav::captureRequestedNavigationScene(true);
+    check(navigationCaptures==2 && navigationPackets==4 && said.empty(),"second unavailable query and failure reach worker without a latch");
     std::printf("PASS: mod resume owner/context and title navigation gates, %u checks.\n",checks);
 }

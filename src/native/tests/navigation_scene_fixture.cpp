@@ -41,6 +41,7 @@ uintptr_t __cdecl nameTableGetter(unsigned) {if(!nativeOwner) ++foreignReads;ret
 uintptr_t __cdecl areaNameGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignReads;++areaGetterCalls;return reinterpret_cast<uintptr_t>(areaBytes.data());}
 uintptr_t __cdecl personGetter(unsigned) {if(!nativeOwner) ++foreignReads;return reinterpret_cast<uintptr_t>(personBytes.data());}
 uint8_t __cdecl priorityGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignReads;return 0;}
+int __cdecl messageModeGetter() {if(!nativeOwner) ++foreignReads;return 0;}
 uint16_t __cdecl interactionGetter(unsigned,unsigned channel,uintptr_t) {if(!nativeOwner) ++foreignReads;++nativeEntries;return static_cast<uint16_t>(huntFixture && channel==2?4:channel+1);}
 void setScene() {
     actorsPointer=reinterpret_cast<uintptr_t>(actorBodies.data());controlledPointer=actorsPointer;put(controller.data()+0x48,chunk);
@@ -78,6 +79,7 @@ uintptr_t address(unsigned rva) {
     if(rva==0x46c3c0) return reinterpret_cast<uintptr_t>(&areaNameGetter);
     if(rva==0x385070) return reinterpret_cast<uintptr_t>(&personGetter);
     if(rva==0x4767e0) return reinterpret_cast<uintptr_t>(&priorityGetter);
+    if(rva==0x46c840) return reinterpret_cast<uintptr_t>(&messageModeGetter);
     if(rva==0x476360) return reinterpret_cast<uintptr_t>(&interactionGetter);
     return fixtureUtilityAddress(rva);
 }
@@ -99,7 +101,9 @@ OwnedTextContext copiedControlContext(const CopiedControls&) {return {};}
 unsigned pedestalConfirmMask() {return 0x20;}
 PedestalNavigationState capturePedestalNavigationState() {return {};}
 void preparePedestalZone(Entity&,uintptr_t) {}
+#ifndef FFX_NAVIGATION_SERVICE_TEST
 void refreshSwimmingGoal(Entity&) {}
+#endif
 std::wstring nativeAreaName(int) {++foreignReads;return {};}
 std::wstring playerName(int) {++foreignReads;return {};}
 #ifdef FFX_NAVIGATION_REAL_QUEUE_TEST

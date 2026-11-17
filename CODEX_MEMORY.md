@@ -1,5 +1,41 @@
 # FFX current memory — November16
 
+November16 current-area toggle repair is offline verified, uncommitted on
+`feat/mod-toggle` at base `41cef74`. The user reports Load-dialog Off/On now
+works, but field helpers fail after enabling in Besaid Great Hall. The supplied
+log had restarted at 18:56:44 when read; the earlier reported sequence was absent.
+No deployment, commit, game control/probe or Tester Logs access.
+
+Cause: toggles advanced the allocation lifetime floor, Off hid native ATEL
+receipts, and resource-worker cleanup could reclaim still-live prepared banks.
+All hooks previously skipped allocation/free observation while Off. Native
+capture failure then latched its one waiting message; F9/F11 context gates also
+rejected requests without a ready trial identity. Resource lifetime observers
+and native load scopes now stay active while Off, with bounded native capture
+and worker decoding. Frees/replacements still retire exact serials. Speech,
+commands, movement and navigation snapshots retain generation cancellation;
+current-area field/puzzle state is recaptured after enable without another load.
+Worker failure packets report each waiting command, then one readiness notice.
+Pending navigation admits keyboard guide requests; ordinary ready-field key
+handback and supported-guide-only controller availability remain intact.
+
+Focused fixtures reproduced receipt loss, skipped Off lifetime/load callbacks,
+the silent second query and blocked F9. Current-area navigation/guide, area load
+while Off, address reuse, cache pressure, worker cleanup and readiness recovery
+have targeted coverage. No-deploy build exits 0; full native suite exits 0 with
+91 PASS records / 3 SKIP / 0 failures (prior 86/3). Separate ATEL resource fixture
+passes, including zero native heap operations and zero worker engine reads. Resume fixture 17
+checks and hook ABI 11000 mixed calls pass. Warm same-area toggle through first
+navigation output measured 19.004 ms in controlled fixture scheduling; cold
+copied pipeline 15.794 ms. Actual game timing and audible NVDA remain unverified.
+Warnings: C4244 conversion, C4459 shadow declarations and suite D9026 remain.
+Skips: archived reader body, collision replay body and utility maps evidence
+are absent. Receipts use
+`build/field-toggle-*.log`. Follow the updated
+[runtime contract and prioritized test procedure](Docs/features/runtime/index.md#whole-mod-toggle--november16).
+The earlier fresh-area-load limitation below is superseded by this repair.
+
+
 November16 toggle speech follow-up is offline verified, uncommitted on
 `feat/mod-toggle` at `43bd042`. Claude's injected-key allowance in
 `src/native/mod_toggle.cpp:19` is preserved. The user's supplied 18:29 session
