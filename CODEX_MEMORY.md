@@ -15,12 +15,8 @@ records. Missing evidence: archived reader body, collision replay body, Kilika
 floor inputs and utility maps. Actual game speech/timing remains unverified.
 Receipts: `.local/merge-build.log`, `.local/merge-tests.log`,
 `.local/merge-atel-tests.log`, `.local/merge-verification.json`.
-Git staging failed with permission denied creating the shared worktree metadata's
-`index.lock`; its directory lies outside this session's writable root. The index
-still records six unmerged paths, and no merge commit exists. Finish by staging
-the resolved files and committing with `.local/merge-commit-message.txt` in a
-session permitted to write this worktree's Git metadata. No deploy, push or other
-worktree changes. Luna performed a read-only fixture/runner path audit; the parent
+Merge committed as `ff72657` (Codex's sandbox could not write the worktree's
+Git metadata, so Claude staged and committed it). No push. Luna performed a read-only fixture/runner path audit; the parent
 reviewed its findings, made all edits and ran verification. No delegated issues
 remain. See the [runtime integration record](Docs/features/runtime/index.md#mergecheck-integration--november16).
 
