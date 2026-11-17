@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Production assistance/resource qualification plus original native float and
 // typed operand readers. Engine ownership, VM scope/PC and rendering/inventory
 // are controlled dependencies; this does not execute the full game interpreter.

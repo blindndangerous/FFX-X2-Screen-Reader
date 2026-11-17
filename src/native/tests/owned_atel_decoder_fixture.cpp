@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../atel.hpp"
 #include "../owned_atel_decoder.hpp"
 #include <cstdio>

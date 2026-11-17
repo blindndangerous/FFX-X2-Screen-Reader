@@ -1,4 +1,5 @@
 #pragma once
+#include "fixture_runtime.hpp"
 // Original test adapter only. Game implementations are separately supplied local
 // evidence outside every Git tree; never generate/copy their bytes into sources.
 // Match the production Windows boundary even when this header is the first
@@ -49,7 +50,7 @@ inline std::filesystem::path evidenceRoot() {
 template<size_t N> struct Bytes {unsigned char bytes[N]{};};
 template<size_t N> Bytes<N> load(const char* relative,uint64_t expectedHash) {
     // Some evidence loads run before main; missing data must not open a WER dialog.
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    initializeRuntime();
     const std::filesystem::path name(relative);
     if(name.is_absolute()) throw std::runtime_error("Fixture name must be relative to the external evidence root");
     for(const auto& part:name) if(part==L"..") throw std::runtime_error("Fixture name cannot escape its external evidence root");

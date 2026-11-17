@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../sphere_grid.hpp"
 #include "../sphere_owned.hpp"

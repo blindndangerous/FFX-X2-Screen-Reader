@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../native_action.hpp"
 #include <atomic>
 #include <cstdlib>

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../prism_backend.hpp"
 #include <windows.h>
 #include <cstdio>

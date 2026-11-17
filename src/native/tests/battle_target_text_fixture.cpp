@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../text_plan.hpp"
 #include "../events.hpp"
 #include "../settings.hpp"

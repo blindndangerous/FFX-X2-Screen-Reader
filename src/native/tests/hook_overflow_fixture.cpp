@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../hook_calls.hpp"
 #include "../resource_reset.hpp"
@@ -33,7 +34,7 @@ __declspec(noinline) int __cdecl ping(int value) { volatile int result=value; re
 }
 int main() {
     if(!ffx::observeGameThread()) return 1;
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     check(MH_Initialize()==MH_OK,"initialize hooks");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(load),ResourceRva,ignore,ignore),"resource hook");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(ping),OrdinaryRva,ignore,ignore),"ordinary hook");

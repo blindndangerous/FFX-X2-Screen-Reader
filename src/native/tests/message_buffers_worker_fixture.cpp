@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../field_controls.hpp"
 #include "../blitz_review.hpp"

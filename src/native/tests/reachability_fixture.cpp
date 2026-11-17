@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include "../reachability.hpp"
 #include "../reachability_shared.hpp"

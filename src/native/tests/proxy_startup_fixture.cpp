@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Exercises real proxy bootstrap and system forwarding with injected failures.
 // This is an isolated test process; no game is launched or attached.
 #define WIN32_LEAN_AND_MEAN

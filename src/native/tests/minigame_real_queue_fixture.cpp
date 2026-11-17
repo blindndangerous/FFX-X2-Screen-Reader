@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 // Actual production capture/domain/preparation/sink and resource cache.
 // Native getters use controlled archived-data host state; no SDK/game/device.

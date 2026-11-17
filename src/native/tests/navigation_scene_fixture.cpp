@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 // Actual production scene capture/resource leases/proofs/labels/geometry, with
 // affine getter adapters and retained EV data. No game or SDK is executed.
@@ -28,6 +29,8 @@ unsigned actorCapacity=128;int triangleCount=0;float geometryScale=1;
 std::array<uint8_t,0x68c0> savedData{};
 std::array<unsigned,65> collision{};
 unsigned nativeEntries=0;bool huntFixture=false,leavingFixture=false;
+int messageMode=0;
+std::array<uintptr_t,8> messageWindows{};
 std::array<uint8_t,40> personBytes{};
 std::array<uint8_t,256> areaBytes{};uint16_t nameTableSize=0xfffc;unsigned areaGetterCalls=0;
 #ifdef FFX_NAVIGATION_REAL_QUEUE_TEST
@@ -41,6 +44,7 @@ uintptr_t __cdecl nameTableGetter(unsigned) {if(!nativeOwner) ++foreignReads;ret
 uintptr_t __cdecl areaNameGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignReads;++areaGetterCalls;return reinterpret_cast<uintptr_t>(areaBytes.data());}
 uintptr_t __cdecl personGetter(unsigned) {if(!nativeOwner) ++foreignReads;return reinterpret_cast<uintptr_t>(personBytes.data());}
 uint8_t __cdecl priorityGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignReads;return 0;}
+int __cdecl messageModeGetter() {check(nativeOwner,"message mode stays on native owner");return messageMode;}
 uint16_t __cdecl interactionGetter(unsigned,unsigned channel,uintptr_t) {if(!nativeOwner) ++foreignReads;++nativeEntries;return static_cast<uint16_t>(huntFixture && channel==2?4:channel+1);}
 void setScene() {
     actorsPointer=reinterpret_cast<uintptr_t>(actorBodies.data());controlledPointer=actorsPointer;put(controller.data()+0x48,chunk);
@@ -79,7 +83,13 @@ uintptr_t address(unsigned rva) {
     if(rva==0x385070) return reinterpret_cast<uintptr_t>(&personGetter);
     if(rva==0x4767e0) return reinterpret_cast<uintptr_t>(&priorityGetter);
     if(rva==0x476360) return reinterpret_cast<uintptr_t>(&interactionGetter);
-    return fixtureUtilityAddress(rva);
+    if(rva==0x46c840) return reinterpret_cast<uintptr_t>(&messageModeGetter);
+    if(rva==0x14676b0) return reinterpret_cast<uintptr_t>(messageWindows.data());
+    // Resource capture compares the loader return address; it never calls it.
+    if(rva==0x48d230) return rva;
+    if(rva==0xf26ae8 || rva==0x46a7c0 || rva==0x46c500) return fixtureUtilityAddress(rva);
+    // Absent optional native globals are null, never addresses inside this EXE.
+    if(rva<0x900000) {std::fprintf(stderr,"unmapped scene address 0x%x\n",rva);check(false,"unmapped native function in scene fixture");}return 0;
 }
 bool butterflyNavigationLeaving(const AtelSpan&) {return leavingFixture;}
 int setting(Setting id) {

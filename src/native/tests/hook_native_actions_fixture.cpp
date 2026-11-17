@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include <MinHook.h>
 #include <atomic>
@@ -115,7 +116,7 @@ void install() {
 }
 }
 int main() {
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     install(); boundary();
     check(ffx::nativeGameThread(),"owner known after PInput callback");
     std::thread wrongOwner([] {

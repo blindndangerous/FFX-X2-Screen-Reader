@@ -55,7 +55,11 @@ void startNavigationObservations(QueryConsumer queries,SceneConsumer scenes,Obse
     speechq::registerDomain(Domain,process,reset);speechq::registerDomainMaintenance(Domain,retireCanceled);started.store(true,std::memory_order_release);
 }
 bool submitNavigationQuery(Query query,bool shift,unsigned policyRevision,unsigned local,uintptr_t chunk,unsigned resourceSerial) {
-    if(!started.load(std::memory_order_acquire)) return false;
+    if(!started.load(std::memory_order_acquire)) {
+        if(query!=Query::GuideCompleted && query!=Query::GuideTileCompleted)
+            output(L"Navigation is not ready. Try again shortly.",false,"navigation-data-unavailable");
+        return false;
+    }
     Packet p;p.query={generation(),revision.load(std::memory_order_acquire),nonzero(nextQuery),nonzero(requested),query,shift};
     p.query.manual=autoWalkInputRevision();p.query.intentRevision=navigationIntentRevision();
     p.query.policyRevision=policyRevision;p.query.local=local;p.query.chunk=chunk;p.query.resourceSerial=resourceSerial;

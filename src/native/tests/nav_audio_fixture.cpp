@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 #include "../nav_audio.hpp"
 #include "../sdl_runtime.hpp"

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../wakka.hpp"
 #include "../settings.hpp"
 #include "../profile.hpp"

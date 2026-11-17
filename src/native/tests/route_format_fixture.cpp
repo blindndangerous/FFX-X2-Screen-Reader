@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Standalone route wording fixture: needs no private game evidence.
 #include "../nav_format.hpp"
 #include "../camera_direction.hpp"

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Actual speech capture/preparation plus production navigation over retained EVs.
 // Native engine/input/audio endpoints remain controlled fixtures; no game/SDK.
 #define FFX_NAVIGATION_REAL_QUEUE_TEST

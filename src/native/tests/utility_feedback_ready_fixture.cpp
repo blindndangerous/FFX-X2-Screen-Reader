@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../utilities.hpp"
 #include "../speech_capture.hpp"
 #include <array>

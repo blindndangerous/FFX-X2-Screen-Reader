@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include <atomic>
 #include "../minigames.hpp"

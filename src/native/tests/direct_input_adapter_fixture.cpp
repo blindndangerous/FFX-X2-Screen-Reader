@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>

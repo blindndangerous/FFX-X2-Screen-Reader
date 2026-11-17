@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../owned_retirement.hpp"
 #include "../resource_reset.hpp"
 #include <atomic>

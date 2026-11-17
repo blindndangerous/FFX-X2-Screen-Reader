@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 // Isolated native input/script callbacks. Never launches or attaches to the game.
 #include "../pedestal.hpp"

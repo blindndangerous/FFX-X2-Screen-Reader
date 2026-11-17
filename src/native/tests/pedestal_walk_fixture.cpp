@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Real pedestal session and per-frame walker. Only copied worker handbacks,
 // native API boundaries, input devices and speech sinks are synthetic.
 #define FFX_PEDESTAL_WALK_INTEGRATION

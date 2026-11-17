@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Reuse only the synthetic native/input and semantic speech adapters. Both
 // route retirement and Auto walk below link their production implementations.
 #include "../navigation_scene.hpp"

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../nav_audio.hpp"
 #include "../navigation_scene.hpp"
 #include "../navigation_observations.hpp"

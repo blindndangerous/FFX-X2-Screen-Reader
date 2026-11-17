@@ -116,7 +116,8 @@ F11 reads puzzle guidance in supported Cloister, Via, and Gagazet guide contexts
 In native menus, battle, or the Escape menu, it repeats the current speech.
 Ordinary field F11 is passed through to the game. **F9/F10** select the
 previous/next step only while a supported guide is active; Shift+F11 reads the
-step inferred from game state when identifiable.
+step inferred from game state when identifiable. Outside supported field guides,
+Shift+F11 says "No puzzle guide for this area."
 
 **L** repeats the last speech everywhere, including the ordinary field, and
 interrupts current speech. It replays the last game or navigation line, not

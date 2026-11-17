@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Production completion adapter + real prepared EV resources and original x86
 // typed variable base/pointer/setter. VM event scheduling, request dispatch,
 // focus and renderer/animation are controlled boundaries, not gameplay proof.

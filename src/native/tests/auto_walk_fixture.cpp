@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 // Synthetic owner/input events only; never launches or connects to the game.
 #include "../auto_walk.hpp"

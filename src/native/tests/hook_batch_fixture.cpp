@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../hook_calls.hpp"
 #include "../resource_reset.hpp"
@@ -32,7 +33,7 @@ uintptr_t uncommitted() {
 }
 int main() {
     if(!ffx::observeGameThread()) return 1;
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     check(MH_Initialize()==MH_OK,"initialize hooks");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(ping),OrdinaryRva,listener<0>,nullptr),"ordinary hook");
     check(!ffx::hookAddress(uncommitted(),BadRva,listener<1>,nullptr),"an unavailable hook target is reported");

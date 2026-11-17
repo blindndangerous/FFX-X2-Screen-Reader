@@ -1,5 +1,15 @@
 # Navigation, route validity, audio and movement
 
+## Kilika floor, guide fallback, and fixture startup - November16
+
+Follow-up on `0ba4a49`: exact retained Kilika collision reproduces the stair detour;
+no direct crossing was tested. Group 55 and routing remain unchanged, with a
+neutral height-change diagnostic. Shift+F11 outside trials now explains that no
+guide applies. Standalone fixtures embed crash-dialog suppression; the service
+fixture's unmapped message-mode callback is repaired and enters the full suite.
+See [root causes, verification, source locations, and nonvisual procedure](kilika_floor_guide_fixtures_20261116.md).
+
+
 ## Kilika detour diagnostics and automatic push speech — November16
 
 Scope: detached `b3d6d9d`, with the user's 19:38–19:40 Kilika session on

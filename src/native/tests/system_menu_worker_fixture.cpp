@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../selection_details.hpp"
 #include "../system_menu_capture.hpp"
 #include "../speech_queue.hpp"

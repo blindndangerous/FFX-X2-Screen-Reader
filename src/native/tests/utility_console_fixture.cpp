@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Actual console transport and feedback with copied tokens and fake Win32 UI.
 // No fixtureGame, desktop window, registry, speech SDK or real console thread is used.
 #include "../utilities.hpp"

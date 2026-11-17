@@ -217,7 +217,7 @@ void pathfind(const Pending& event,bool assist=false) {
     }
     const auto diagnostic=interactionRouteDiagnostics(s.mesh,player,target,s.entities,points);
     if(!diagnostic.empty()) {
-        recordLog("route-detour request=%u epoch=%u collision=%u data-age-ms=%llu",event.query.serial,s.observation.epoch,s.observation.collisionSerial,GetTickCount64()-s.observation.capturedAt);
+        recordLog("route-diagnostic request=%u epoch=%u collision=%u data-age-ms=%llu",event.query.serial,s.observation.epoch,s.observation.collisionSerial,GetTickCount64()-s.observation.capturedAt);
         for(const auto& row:diagnostic) recordLog("%s",row.c_str());
     }
     routeNavAudio(points,target,setting(Setting::AutoWalk) && !target.inactive);

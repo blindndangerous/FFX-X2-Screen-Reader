@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../ready_game_text.hpp"
 #include "../settings.hpp"

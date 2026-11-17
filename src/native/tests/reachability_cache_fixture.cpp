@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../reachability_shared.hpp"
 #include <cstdio>
 #include <cstdlib>

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // DirectInput COM lifetime fixture; it never acquires
 // keyboard focus, injects keys, starts speech or opens the game.
 #include "../events.hpp"

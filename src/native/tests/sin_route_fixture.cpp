@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Offline investigation adapter: execute production routing over separately
 // retained Sea of Sorrow collision and script facts. No game process, installed
 // archive read, native pointer or game implementation is part of this host.

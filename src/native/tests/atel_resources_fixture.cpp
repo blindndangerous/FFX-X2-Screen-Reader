@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include "../atel_resources.hpp"
 #include "../events.hpp"

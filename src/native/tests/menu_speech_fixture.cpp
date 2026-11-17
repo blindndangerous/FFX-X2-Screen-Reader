@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Synthetic memory only: exercise production menu hooks, copied plans and workers.
 #include "../events.hpp"
 #include "../profile.hpp"

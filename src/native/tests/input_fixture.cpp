@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 #include "../input_device.hpp"
 #include "../events.hpp"

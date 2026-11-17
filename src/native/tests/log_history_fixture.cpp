@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../runtime.hpp"
 #include "../log_history.hpp"
 #include <cstdio>

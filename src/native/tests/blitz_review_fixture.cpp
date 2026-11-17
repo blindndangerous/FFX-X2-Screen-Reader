@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 #include "../blitz_review.hpp"
 #include "../utility_memory.hpp"

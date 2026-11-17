@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Isolated fake-Win32 tests for the production Sphere Grid number-entry dialog.
 // No native game reads, desktop windows, worker threads, or game process are used.
 #include "../events.hpp"

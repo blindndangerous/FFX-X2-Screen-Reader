@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../profile.hpp"
 #include "../events.hpp"
 #include "../profile_extensions_data.hpp"

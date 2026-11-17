@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 #include "external_fixture.hpp"
 #include "native_heap_counter.hpp"
@@ -407,7 +408,7 @@ ffx::MessagePage messagePage(unsigned slot,uintptr_t source) {
 #include "equipment_overflow_followups.inc"
 int main(int argc, char** argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     SetUnhandledExceptionFilter([](EXCEPTION_POINTERS* p)->LONG {
         std::fprintf(stderr,"FAIL: isolated reader exception %lx at %p (mapped offset %lx), operand %p\n",
             p->ExceptionRecord->ExceptionCode,reinterpret_cast<void*>(p->ContextRecord->Eip),

@@ -11,7 +11,7 @@ public static class FixtureErrorMode {
     public static extern uint SetErrorMode(uint mode);
 }
 '@
-[void][FixtureErrorMode]::SetErrorMode(0x0001 -bor 0x0002) # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX
+[void][FixtureErrorMode]::SetErrorMode(0x0001 -bor 0x0002 -bor 0x8000) # FAILCRITICALERRORS | NOGPFAULTERRORBOX | NOOPENFILEERRORBOX
 $env:FFX_TEST_NO_DIALOGS = '1'
 & $TestScript @TestArguments
 exit $LASTEXITCODE

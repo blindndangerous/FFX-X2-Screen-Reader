@@ -1,4 +1,5 @@
-﻿// Real production hook adapter + MinHook, on this host's own functions only.
+﻿#include "fixture_runtime.hpp"
+// Real production hook adapter + MinHook, on this host's own functions only.
 // Measure the added globally hot getter while assistance is Off; native ABI,
 // return-pointer preservation and nested interpreter ownership are included.
 #include "../events.hpp"

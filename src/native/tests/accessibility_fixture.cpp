@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "ready_speech_adapter.hpp"
 #include "ready_utility_adapter.hpp"
 #include "../text_plan.hpp"
@@ -132,7 +133,13 @@ namespace ffx { void captureSpeech(bool value) { captured=value; speechq::fixtur
 using namespace ffx;
 void menuKeyForTest(unsigned key,bool shift=false) {ffx::modMenuKey(key,shift);drainSpeechDomainsForTest();}
 void openMenuForTest(const ModMenuState& state) {ffx::openModMenu(state);drainSpeechDomainsForTest();}
-void pressForTest(unsigned key,bool shift=false) {if(!contexts.count(key) || contexts[key]()) keys[key](shift);drainSpeechDomainsForTest();}
+void pressForTest(unsigned key,bool shift=false) {
+    const unsigned chord=key|0x100;
+    const bool chordReady=shift && keys.count(chord) && (!contexts.count(chord) || contexts[chord]());
+    const unsigned dispatch=chordReady?chord:key;
+    if(keys.count(dispatch) && (!contexts.count(dispatch) || contexts[dispatch]())) keys[dispatch](shift);
+    drainSpeechDomainsForTest();
+}
 void check(bool ok,const char* message) { if(!ok) { fprintf(stderr,"FAIL: %s\n",message); exit(1); } }
 std::wstring contextHelpForTest() {
     const unsigned key=VK_OEM_2|0x100;
@@ -149,7 +156,7 @@ void selectRow(const std::wstring& label) {
 }
 int main() {
     installTextPlans();
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX|SEM_NOOPENFILEERRORBOX);
+    ffx_fixture::initializeRuntime();
     initializeControllerBindings();
     pad::Router router; pad::State state;
     router.update(state,true,false); check(!router.draining,"neutral focus acquisition");
@@ -402,6 +409,10 @@ int main() {
     setSetting(Setting::BeaconVolume,60); resetControllerBindings();
     drainSettingsForTest();loadSettings(); check(setting(Setting::Speech)==1,"persisted settings reload");
     check(!puzzleGuidanceAvailable(),"ordinary field does not acquire the controller puzzle shortcut");
+    check(keys.count((VK_F11|0x100))!=0,"Shift F11 registers its ordinary-field guide explanation chord");
+    const auto beforeNoGuide=said.size();
+    pressForTest(VK_F11,true);pressForTest(VK_F11,true);
+    check(said.size()==beforeNoGuide+2 && said[beforeNoGuide]==L"No puzzle guide for this area." && said.back()==L"No puzzle guide for this area.","repeated ordinary-field Shift F11 explains unavailable guide without repeating history");
     viaPresent=true;check(puzzleGuidanceAvailable(),"controller guidance includes Via's actual guide");viaPresent=false;
     trialPresent=true;check(puzzleGuidanceAvailable(),"controller guidance shares actual trial availability");
     fixtureNativeOwner=false;check(!puzzleGuidanceAvailable(),"worker cannot enter native controller guide availability");fixtureNativeOwner=true;
@@ -493,13 +504,17 @@ int main() {
     check(repeats==beforeRepeat,"F11 is handed back on the ordinary field after leaving a trial");
     fixtureEsc=true;pressForTest(VK_F11,false);fixtureEsc=false;
     check(repeats==beforeRepeat+1,"F11 retains repeat in the native Escape menu");
+    const auto beforeShiftMenu=said.size();fixtureEsc=true;pressForTest(VK_F11,true);fixtureEsc=false;
+    check(said.size()==beforeShiftMenu && repeats==beforeRepeat+2,"Shift F11 keeps native-menu speech repeat");
+    fixtureBattle=true;const auto beforeShiftBattle=said.size();pressForTest(VK_F11,true);fixtureBattle=false;
+    check(said.size()==beforeShiftBattle && repeats==beforeRepeat+3,"Shift F11 keeps battle speech repeat");
     check(keys.count('L')!=0,"L is registered as the repeat-last-speech key");
     pressForTest('L',false);
-    check(repeats==beforeRepeat+2,"L repeats the last speech on the ordinary field");
+    check(repeats==beforeRepeat+4,"L repeats the last speech on the ordinary field");
     fixtureEsc=true;pressForTest('L',false);fixtureEsc=false;
-    check(repeats==beforeRepeat+3,"L repeats the last speech in the native Escape menu");
+    check(repeats==beforeRepeat+5,"L repeats the last speech in the native Escape menu");
     fixtureGameScan=0x26;pressForTest('L',false);fixtureGameScan=0;
-    check(repeats==beforeRepeat+3,"L is handed back when a game keyboard action uses it");
+    check(repeats==beforeRepeat+5,"L is handed back when a game keyboard action uses it");
     check(settingInfo(Setting::MenuIndex).initial==0 && settingInfo(Setting::AutoWalkPath).initial==0,"new accessibility defaults are off");
     pressForTest(VK_F8,false); selectRow(L"Miscellaneous, submenu"); menuKeyForTest(VK_RETURN);
     selectRow(L"Menu indexing:"); setSetting(Setting::MenuIndex,1); menuKeyForTest(VK_LEFT);

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../hook_calls.hpp"
 #include "../owned_retirement.hpp"
 #include <atomic>

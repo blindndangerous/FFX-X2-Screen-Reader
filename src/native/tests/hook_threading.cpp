@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../map_transition.hpp"
 #include <MinHook.h>
@@ -86,7 +87,7 @@ void concurrent() {
 }
 }
 int main() {
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     check(ffx::observeGameThread(),"establish the qualified native owner before ordinary callbacks");
     check(MH_Initialize()==MH_OK,"initialize native hooks");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(observed),1,reader,reader),"ordinary event hook");

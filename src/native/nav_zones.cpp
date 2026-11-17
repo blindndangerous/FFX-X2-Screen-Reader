@@ -346,7 +346,12 @@ std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point play
     const auto id=[&](int polygon) {return polygon>=0 && static_cast<size_t>(polygon)<components.size()?components[polygon]:-1;};
     std::vector<std::string> rows;char line[512];
     if(!route.empty()) {
-        std::snprintf(line,sizeof(line),"interaction-route-detour worker=%d straight=%.3f route=%.3f destination=%.3f,%.3f,%.3f waypoints=%zu",
+        // A long floor-connected approach between levels is not evidence of a
+        // bad shortcut test. Keep the geometry diagnostic as informational;
+        // this classification never changes floor eligibility or route choice.
+        const bool heightChange=!mesh.fixedHeight && std::abs(route.back().y-player.y)>8;
+        std::snprintf(line,sizeof(line),"%s worker=%d straight=%.3f route=%.3f destination=%.3f,%.3f,%.3f waypoints=%zu",
+            heightChange?"interaction-route-height-change":"interaction-route-detour",
             target.worker,straight,length,target.position.x,target.position.y,target.position.z,route.size());rows.emplace_back(line);
         for(size_t i=0;i<route.size() && i<128;++i) {
             nav::checkComputation();const auto p=route[i];const int polygon=findTriangle(mesh,p);

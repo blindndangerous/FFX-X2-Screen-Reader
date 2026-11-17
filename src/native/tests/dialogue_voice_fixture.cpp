@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <atomic>
 #include "../events.hpp"
 #include "../dialogue_voice.hpp"

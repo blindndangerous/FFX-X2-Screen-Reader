@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include <MinHook.h>
 #include <cstdio>
@@ -57,7 +58,7 @@ __declspec(naked) int __cdecl dialogueClose(int) {
 }
 int main() {
     if(!ffx::observeGameThread()) return 1;
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     check(MH_Initialize()==MH_OK,"initialize hooks");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(dialogueClose),10,before,after),"close hook");
     check(ffx::hookAddress(reinterpret_cast<uintptr_t>(pageInit),11,before,after),"page hook");

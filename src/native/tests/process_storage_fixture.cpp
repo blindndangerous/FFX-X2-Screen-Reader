@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../runtime.hpp"
 #include "../process_storage.hpp"
 #include <map>

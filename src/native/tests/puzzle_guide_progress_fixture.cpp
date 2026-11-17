@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Synthetic trial routes for the expected-step tracker. Needs no game data.
 #include "../puzzle_guide_progress.hpp"
 #include "../puzzle_guide_data.hpp"

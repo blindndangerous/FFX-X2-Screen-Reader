@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../battle_sensor.hpp"
 #include "../message_text.hpp"
 #include "../ready_game_text.hpp"

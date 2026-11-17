@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../owned_nav_target.hpp"
 #include <cstdlib>
 #include <iostream>

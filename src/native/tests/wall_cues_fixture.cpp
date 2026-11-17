@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 // Production bounded capture, real Surface geometry, and the actual owned
 // decoder/ray implementation. Native facts are controlled; no game or SDK.

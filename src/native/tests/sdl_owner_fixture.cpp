@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../controller.hpp"
 #include "../physical_gamepad.hpp"

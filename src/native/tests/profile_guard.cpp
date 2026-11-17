@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../profile.hpp"
 #include <cstdio>
 

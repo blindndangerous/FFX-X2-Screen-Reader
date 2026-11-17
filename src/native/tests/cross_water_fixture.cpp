@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include "../owned_mesh_decoder.hpp"
 #include <fstream>

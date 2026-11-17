@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../log_capture.hpp"
 #include <atomic>
 #include <cstdlib>

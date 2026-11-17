@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 // Actual utility memory consumer and resource owner, retained EV data, controlled
 // affine getters. No game, SDK, registry, or installer operations.

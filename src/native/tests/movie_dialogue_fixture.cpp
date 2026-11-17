@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../events.hpp"
 #include "../movie_dialogue.hpp"
 #include "../settings.hpp"

@@ -1,5 +1,29 @@
 # FFX current memory — November4
 
+November16 late-session floor/guide/fixture follow-up on detached `0ba4a49`.
+The user confirms that this deployed revision's homing and one-cue push speech
+work. Exact read-only extraction of `klyt/klyt10/bin/mapout.vpa` reproduces the
+273.708-unit stair route and 0.129274 first-gap fraction. The native completion
+opens group 53 and blocks group 55; no supported floor joins Y -10 to Y +10 at
+the pedestal. The user clarified that nobody crossed directly. Routing and
+all drop checks remain unchanged. The retained diagnostic classifies these
+long approaches as informational height changes, retaining the full gap data.
+Shift+F11 outside trials now says "No puzzle guide for this area." Manual
+navigation requests before observation startup also explain unavailable data.
+All 92 fixture entry sources embed pre-main process-local error-mode, CRT-abort
+and WER no-UI suppression. The service fixture's unmapped message-mode getter
+jumped to raw 0x46C840; the old adapter reproduces an access violation there.
+Its controlled callback/window adapters and current semantic endpoints are
+repaired; the default suite now includes it. Five deliberate hidden failures
+verify suppression independently of runner inheritance, including CRT assertions.
+Final no-deploy build and full native suite both exit 0: 96 PASS groups plus
+proxy forwarding; three missing-evidence skips (readers, reachability, utilities).
+The Windows `small` macro collision was also repaired. Full receipts are in
+`.local/three-verification.json` and the linked record. No deployment, commit,
+game control, probe, packaging or Tester Logs access. See the [root causes, final verification,
+changed locations and prioritized nonvisual procedure](Docs/features/navigation/kilika_floor_guide_fixtures_20261116.md).
+
+
 November16 Kilika detour/speech follow-up on detached `b3d6d9d`, using the user's
 19:38–19:40 live log from `4245b9d`: the long step-16 route remains unexplained.
 Retained event data lacks the actual collision floor; the synthetic inactive-

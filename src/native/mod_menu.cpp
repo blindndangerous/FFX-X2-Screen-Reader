@@ -324,6 +324,9 @@ bool readKeyAvailable() {
     // unused field F11 back to native input (F6-F8 remain reserved globally).
     return namingReadbackAvailable() || guideKeysAvailable() || scene || inBattle() || escMenuActive();
 }
+bool ordinaryFieldGuideFallbackAvailable() {
+    return !scene && !inBattle() && !escMenuActive() && !sphereGridOpen() && !namingReadbackAvailable();
+}
 // Shift+Slash: one short key list for the current context. Keep these lists in
 // step with Docs/controls.md. Context checks only read already-published state.
 const wchar_t* contextHelpText() {
@@ -340,7 +343,9 @@ void readPuzzleKey(bool shift) {
     if(gagazetActive()) { guideKey(shift?L"expected":L"step"); return; }
     bool trial=false;
     UtilityScript script;trial=!inBattle() && captureUtilityScript(script) && captureCurrentTrial(script)!=nullptr;
-    if(trial || viaPurificoActive()) guideKey(shift?L"expected":L"step"); else repeatSpeech(shift);
+    if(trial || viaPurificoActive()) guideKey(shift?L"expected":L"step");
+    else if(shift && ordinaryFieldGuideFallbackAvailable()) emitReady(L"No puzzle guide for this area.");
+    else repeatSpeech(shift);
 }
 bool repeatKeyAvailable() {
     // L repeats in every context, including the ordinary field where F11 is
@@ -412,6 +417,7 @@ void installModMenu() {
     hotkey(VK_F8,menuKey); hotkeyWhen(VK_F9,stepKey,guideKeysAvailable); hotkeyWhen(VK_F10,pathKey,guideKeysAvailable);
     hotkey(VK_F6,beaconKey); hotkey(VK_F7,detailKey);
     hotkeyWhen(VK_F11,readPuzzleKey,readKeyAvailable);
+    hotkeyChordWhen(VK_F11,true,readPuzzleKey,ordinaryFieldGuideFallbackAvailable);
     hotkeyChordWhen(VK_OEM_2,true,contextHelpKey,[] { return true; });
     hotkeyWhen('L',repeatSpeech,repeatKeyAvailable);
 }

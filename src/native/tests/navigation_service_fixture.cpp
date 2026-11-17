@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Production command/scene/resource/route/intent pipeline over retained EVs.
 // Native scene/getter and mutation endpoints are controlled adapters. Domain
 // transport is semantic; actual capture/SDK/MinHook ownership has separate hosts.
@@ -37,6 +38,12 @@ bool deferNativeAction(NativeAction action) {
 }
 void installAutoWalk() {}void installPedestal() {}
 void stopAutoWalk() {++manualInputRevision;}
+void releaseAutoWalk() {}
+void suspendAutoWalk() {}
+bool autoWalkResumePending() {return false;}
+bool toggleAutoWalkOff(void(*)()) {return false;}
+void setAutoWalkResume(bool(*)(const NativeRouteTarget&)) {}
+bool utilityBusy() {return false;}
 void startAutoWalk(bool) {check(nativeOwner,"approved start stays Native");++starts;}
 void cancelPedestal() {}
 void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {check(nativeOwner,"arming stays Native");++arms;}
@@ -51,6 +58,7 @@ std::wstring menuIndex(unsigned,unsigned) {return {};}
 void installWallCues() {}void captureWallCues() {}void cancelWallCues() {}
 void publishNavAudio(const NavAudioState&) {}void pauseNavAudio() {}void pauseNavRouteAudio() {}void stopNavPreview() {}
 void navAudioArrival() {}void publishPositionalCue(float,float,bool,unsigned) {}
+void setFieldAudioAllowed(bool) {}
 }
 #ifndef FFX_NAVIGATION_REAL_QUEUE_TEST
 namespace {
@@ -61,11 +69,19 @@ void fresh(unsigned events=3) {for(unsigned i=0;i<events;++i) {ownerEvent();work
 ffx::Entity selected() {ffx::Entity target;nativeOwner=false;check(ffx::navigationSelectedForTest(target),"owned command selection available");nativeOwner=true;return target;}
 }
 int main() {try {
+    check(ffx::address(0x46c840)!=0x46c840,"message-mode getter must resolve to a fixture callback, never raw game RVA");
     using namespace ffx;check(startAtelResources(),"pipeline resource bootstrap");installAtelResources();installNavigation();
     // Native encoded title getter: all requested IDs share a controlled ready
     // game-format string; exact getter bounds, copying and decoder are real.
     areaBytes[0]=0x50;areaBytes[1]=0x82;areaBytes[2]=0x74;areaBytes[3]=0x70;areaBytes[4]=0;
     prepare("cdsp0000");setScene();cameraPointer=reinterpret_cast<uintptr_t>(cameraBytes.data());put(cameraBytes.data()+0x40,1.f);
+    for(const int mode:{0,1}) {
+        messageMode=mode;
+        check(nav::captureNavigationScene(sceneCapture,nav::navigationObservationRevision(),false) &&
+            sceneCapture.message==(mode!=0) && !sceneCapture.visibleMessage,
+            "scene capture calls the owned message-mode adapter without touching fixture code pages");
+    }
+    messageMode=0;
     put(actorBodies[0].bytes.data()+0x4fc,300.f);
     const auto begin=std::chrono::steady_clock::now();key(VK_OEM_3);fresh();
     check(!navigationPendingForTest() && !navigationSaid.empty() && areaGetterCalls>0,"cold scan resolves names in one batched Native getter handback");

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Production focus-policy regression using only synthetic HWND/PID mappings.
 // settings.cpp is compiled normally; no window, process, game, or writer exists.
 #include "../settings.hpp"

@@ -146,6 +146,10 @@ Run `run_tests.bat --input`, `--controller`, `--sdl-owner`, `--speech`, `--abi`,
 foreign-process focus. Changing producer ownership requires downstream output,
 retirement and source-to-usable tests, not only a helper benchmark.
 
+November16: Shift+F11 also answers in ordinary fields without a supported guide:
+"No puzzle guide for this area." Plain F11 retains the ownership described below.
+See the [fallback and fixture verification](../navigation/kilika_floor_guide_fixtures_20261116.md).
+
 October20: F9/F10 now require a supported guide, and F11 requires naming, guide,
 native menu, battle or Escape. Ordinary field F1–F5/F9–F12 pass through; F6–F8
 remain reserved. [Ownership, native evidence and verification](../puzzles/airship_keys_20261020.md)

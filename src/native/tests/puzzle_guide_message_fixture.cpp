@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Production guide wording with synthetic owned state; no game assets or native calls.
 #include "../puzzle_guide_owned.hpp"
 #include "../utility_trials_data.hpp"
@@ -42,8 +43,13 @@ bool submitNavigationIntent(const Scene&,const Entity&,Intent,unsigned,unsigned,
 }
 }
 int main() {
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     using namespace ffx;
+    static nav::Scene noTrial;
+    for(const auto action:{OwnedGuideAction::Step,OwnedGuideAction::Expected,OwnedGuideAction::Path,OwnedGuideAction::Next,OwnedGuideAction::Previous})
+        check(puzzleGuideOwned(action,noTrial,Mesh{},std::vector<Entity>{},speechq::Header{},0,0)==L"No puzzle guide for this area.","manual no-context guide actions use the concise unavailable-guide response");
+    check(puzzleGuideOwned(OwnedGuideAction::Completed,noTrial,Mesh{},std::vector<Entity>{},speechq::Header{},0,0).empty(),"completed no-context event stays silent");
+    check(puzzleGuideOwned(OwnedGuideAction::TileCompleted,noTrial,Mesh{},std::vector<Entity>{},speechq::Header{},0,0).empty(),"tile-completed no-context event stays silent");
     static nav::Scene observation;
     observation.epoch=1;observation.primary=0x10000;observation.partCount=1;
     identity.span={observation.primary,observation.epoch,1,0x100};

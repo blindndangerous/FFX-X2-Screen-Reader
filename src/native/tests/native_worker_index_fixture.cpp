@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include "../native_worker_index.hpp"
 #include <cstdio>

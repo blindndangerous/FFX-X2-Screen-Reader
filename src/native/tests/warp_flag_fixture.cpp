@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Synthetic fixture for utilityWarp's forced-jump bit (0x80 of the field
 // controller's first byte). No game data is needed. The drain below follows
 // hooks.cpp drainActions: prepare, invoke under catch(...), then complete only
@@ -112,7 +113,7 @@ bool readyAtelWorkerHeader(uintptr_t,unsigned,unsigned&) { return false; }
 }
 
 int main() {
-    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    ffx_fixture::initializeRuntime();
     globals=static_cast<uint8_t*>(VirtualAlloc(nullptr,0x2000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
     check(globals!=nullptr,"globals page");
 

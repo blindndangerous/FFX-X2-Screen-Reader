@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Focused observation pressure protocol. The scene is synthetic so this host
 // exercises native ticket/queue lifetime without reading retained EV inputs.
 #include "../navigation_observations.hpp"
@@ -60,6 +61,10 @@ namespace ffx::speechq {void notifyPreparation() noexcept {}}
 
 int main() {
     using namespace ffx;
+    check(!nav::submitNavigationQuery(nav::Query::GuideExpected) && said.size()==1 &&
+        said.back()==L"Navigation is not ready. Try again shortly.","manual guide before observer startup explains unavailable data");
+    check(!nav::submitNavigationQuery(nav::Query::GuideCompleted) && said.size()==1,
+        "automatic guide completion before startup stays silent");
     nav::startNavigationObservations(acceptQuery,acceptScene,resetObserver);
     for(unsigned i=0;i<5;++i) check(nav::submitNavigationQuery(nav::Query::Distance),"equal independent requests admitted");
     check(nav::captureRequestedNavigationScene(false),"native owner services whole request burst");

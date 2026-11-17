@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include <algorithm>
 #include "../atel.hpp"
 #include "../navigation.hpp"

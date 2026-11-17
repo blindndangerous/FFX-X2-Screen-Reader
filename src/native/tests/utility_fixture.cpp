@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 #include <atomic>
 // Real archived code identities, synthetic memory/native API boundaries.
@@ -393,7 +394,7 @@ void retirePuzzleGuideTargets() { std::abort(); }
 #include "gagazet_fixture.inc"
 #include "gagazet_timing_fixture.inc"
 #include "puzzle_guide_route_fixture.inc"
-int main() try { SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);std::setvbuf(stdout,nullptr,_IONBF,0);installUtilities();
+int main() try { ffx_fixture::initializeRuntime();std::setvbuf(stdout,nullptr,_IONBF,0);installUtilities();
     nativeQueuedKilikaFixture();
     trialCollectionFixtures();
     djoseSolverFixtures();

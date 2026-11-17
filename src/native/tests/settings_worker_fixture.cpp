@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../settings.hpp"
 #include "../controller.hpp"
 #include "ready_speech_adapter.hpp"

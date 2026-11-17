@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../navigation_order.hpp"
 #include "../camera_direction.hpp"
 #include "../intent_cancel_text.hpp"

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../ready_game_text.hpp"
 #include "../speech_queue.hpp"
 #include "../events.hpp"

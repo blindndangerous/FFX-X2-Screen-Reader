@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../settings.hpp"
 #include <fstream>
 #include <cstdio>

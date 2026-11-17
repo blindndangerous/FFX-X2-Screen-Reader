@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 // Actual approved City/Nucleus floors through the production owned decoder and
 // route solver. Native collision83E4E0 is executed from external retained bytes;
 // controlled globals replace only actor ownership and the16 mutable remaps.

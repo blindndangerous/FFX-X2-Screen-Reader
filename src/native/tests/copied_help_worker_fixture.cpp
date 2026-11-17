@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "../copied_text.hpp"
 #include "../settings.hpp"
 #include <atomic>

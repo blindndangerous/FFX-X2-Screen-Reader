@@ -25,6 +25,11 @@ if not exist "%REPO_ROOT%\install\sdl3-x86\SDL3.lib" (
 set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:fixture_runtime_test.exe "%TEST_SRC%fixture_runtime_test.cpp"
+if errorlevel 1 goto failed
+fixture_runtime_test.exe
+if errorlevel 1 goto failed
+if /I "%~1"=="--fixture-runtime" goto success
 if /I "%~1"=="--review" goto review
 if /I "%~1"=="--message-hints" goto messagehints
 if /I "%~1"=="--abi" goto abi
@@ -49,6 +54,7 @@ if /I "%~1"=="--dialogue" goto dialogue
 if /I "%~1"=="--butterflies" goto butterflies
 if /I "%~1"=="--minigames" goto minigames
 if /I "%~1"=="--minigame-completion" goto minigamecompletion
+if /I "%~1"=="--navigation-service" goto navigationservice
 if /I "%~1"=="--navigation-audio" goto navigationaudio
 if /I "%~1"=="--navigation-cues" goto navigationcues
 if /I "%~1"=="--navigation-observations" goto navigationcues
@@ -237,6 +243,17 @@ if not "%errorlevel%"=="0" goto failed
 controller_bridge_fixture.exe
 if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--controller" goto success
+:navigationservice
+if not exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files\ffx_ps2\ffx\master\jppc\event\obj\kl\klyt1000\klyt1000.ebp" goto navigationservice_missing
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\swimming_route.cpp" /link user32.lib
+if errorlevel 1 goto failed
+navigation_service_fixture.exe
+if errorlevel 1 goto failed
+goto navigationservice_done
+:navigationservice_missing
+echo SKIP: navigation service needs retained field EV assets
+:navigationservice_done
+if /I "%~1"=="--navigation-service" goto success
 :navigationaudio
 cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:navigation_cancel_fixture.exe "%TEST_SRC%navigation_cancel_fixture.cpp" "%TEST_SRC%..\auto_walk.cpp" "%TEST_SRC%..\movement_keys.cpp" "%TEST_SRC%..\game_binding_input.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\owned_retirement.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
@@ -392,6 +409,15 @@ echo SKIP: navigationgeometry needs "%FFX_EVIDENCE_ROOT%\offline-output\gagazet_
 if "%~1"=="" goto pedestal
 goto success
 :navigationgeometry_have
+if not exist "%FFX_EVIDENCE_ROOT%\kilika-floor\triangles.bin" goto kilika_floor_missing
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:kilika_floor_fixture.exe "%TEST_SRC%kilika_floor_fixture.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp"
+if errorlevel 1 goto failed
+kilika_floor_fixture.exe
+if errorlevel 1 goto failed
+goto kilika_floor_done
+:kilika_floor_missing
+echo SKIP: Kilika original floor needs separately retained kilika-floor inputs
+:kilika_floor_done
 cl /nologo /W4 /WX /O2 /EHsc /std:c++17 /MT /Fe:cross_water_fixture.exe "%TEST_SRC%cross_water_fixture.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp"
 if not "%errorlevel%"=="0" goto failed
 cross_water_fixture.exe

@@ -1,3 +1,4 @@
+#include "fixture_runtime.hpp"
 #include "external_fixture.hpp"
 // Actual production capture/domain/preparation/sink/resource and seven-channel
 // interaction capture, using controlled affine getters and real archived EV.
