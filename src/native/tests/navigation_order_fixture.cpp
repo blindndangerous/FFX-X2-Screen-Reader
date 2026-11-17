@@ -1,11 +1,31 @@
 #include "../navigation_order.hpp"
 #include "../camera_direction.hpp"
 #include "../intent_cancel_text.hpp"
+#include "../field_controls.hpp"
+#include "../puzzle_guide_progress.hpp"
 #include "../route_text_cap.hpp"
 #include <array>
 #include <cstdio>
 #include <string>
 #include <cstdlib>
+#include <cstring>
+
+namespace {
+std::array<uintptr_t,8> messageWindows{};
+std::array<uint8_t,0x98> messageWindow{};
+std::array<uint8_t,4> messageText{{0x50,0,0,0}};
+}
+namespace ffx {
+uintptr_t address(unsigned rva) {return rva==0x14676b0?reinterpret_cast<uintptr_t>(messageWindows.data()):0;}
+bool copy(uintptr_t source,void* destination,size_t length) {
+    const auto in=[&](const auto& bytes) {
+        const auto begin=reinterpret_cast<uintptr_t>(bytes.data());
+        return source>=begin && source-begin<=sizeof(bytes) && length<=sizeof(bytes)-(source-begin);
+    };
+    if(!in(messageWindows) && !in(messageWindow) && !in(messageText)) return false;
+    std::memcpy(destination,reinterpret_cast<const void*>(source),length);return true;
+}
+}
 
 namespace {
 void check(bool value,const char* message) {
@@ -44,6 +64,35 @@ struct Replay {
 unsigned said(const Replay& r,int id) {unsigned n=0;for(const int s:r.spoken) n+=s==id;return n;}
 }
 int main() {
+    if(GetEnvironmentVariableW(L"FFX_TEST_NO_DIALOGS",nullptr,0))
+        check((GetErrorMode()&(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX))==(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX),
+            "fixture inherits crash-dialog suppression before main");
+    {
+        using ffx::nativeVisibleMessageText;
+        using ffx::nav::routeStartRefusal;
+        check(!nativeVisibleMessageText(),"no TK window has no visible message");
+        for(unsigned slot=0;slot<8;++slot) {
+            messageWindows={};messageWindows[slot]=reinterpret_cast<uintptr_t>(messageWindow.data());
+            for(uint16_t phase=0;phase<4;++phase) for(unsigned content=0;content<6;++content) {
+                const uintptr_t source=content==0?0:content==1?0x1234:reinterpret_cast<uintptr_t>(messageText.data());
+                messageText[0]=static_cast<uint8_t>(content==5?0x50:content-2);
+                std::memcpy(messageWindow.data()+0x2c,&phase,sizeof(phase));
+                std::memcpy(messageWindow.data()+0x94,&source,sizeof(source));
+                const bool visible=nativeVisibleMessageText(),expected=(phase==1 || phase==2) && content==5;
+                check(visible==expected,"only an open TK window with readable nonempty text is visible");
+                const std::wstring refusal=routeStartRefusal(true,true,false,true,true,visible);
+                check((refusal.find(L"while a message is open")!=std::wstring::npos)==expected,
+                    "raw message=1 control=0 names dialogue only with visible text");
+                const std::wstring hint=ffx::puzzleGuideWaitText(visible);
+                check((hint.find(L"Press Enter")!=std::wstring::npos)==expected,
+                    "close-message hint follows visible text, not stale message mode");
+            }
+        }
+        messageWindows={};
+        check(std::wstring(routeStartRefusal(true,true,true,true,true,false)).find(L"Wait for the current scene or push")!=std::wstring::npos,
+            "message mode without text still refuses movement even if control is enabled");
+        std::puts("PASS: 192 TK visibility cases, stale-message refusal/hint wording and inherited fixture error mode.");
+    }
     using namespace ffx;
     const auto identity=[](const Entity& e){return e.actor;};
     std::vector<Entity> previous{row(1,1),row(2,2),row(3,3)};
@@ -113,15 +162,15 @@ int main() {
         // Backslash during a scene read the route and then refused. Refuse first, truthfully.
         using ffx::nav::routeStartRefusal;
         const auto during=[](const wchar_t* text) {return text && std::wstring(text)==L"Auto walk unavailable during a scene.";};
-        check(during(routeStartRefusal(true,false,true,true,false)),"a route request during a scene refuses before any route, saying a scene is playing");
+        check(during(routeStartRefusal(true,false,true,true,false,false)),"a route request during a scene refuses before any route, saying a scene is playing");
         // Djose: an open message box was called a scene, and 20 seconds after the Destruction Sphere
         // insert, with field control still held by the game's script, "during a scene" was said with
         // no scene visible. Name what actually holds the field.
         const auto is=[](const wchar_t* text,const wchar_t* expected) {return text && std::wstring(text)==expected;};
-        check(is(routeStartRefusal(true,true,false,false,true),L"Auto walk unavailable while a message is open.") && is(routeStartRefusal(true,false,false,true,true),L"Auto walk unavailable while a message is open."),"a route request with a message box open names the message");
-        check(is(routeStartRefusal(true,true,false,false,false),L"Auto walk unavailable: the game is controlling the player. Try again when you can move."),"field control held by the game without a scene or message says so");
-        check(routeStartRefusal(true,true,true,false,false)==ffx::nav::intentRefusalText(false),"a field without the controlled character refuses before any route");
-        check(!routeStartRefusal(true,true,true,true,false) && !routeStartRefusal(false,false,false,false,true),"an open field, or Auto walk off, reads the route as before");
+        check(is(routeStartRefusal(true,true,false,false,true,true),L"Auto walk unavailable while a message is open.") && is(routeStartRefusal(true,false,false,true,true,true),L"Auto walk unavailable while a message is open."),"a route request with a message box open names the message");
+        check(is(routeStartRefusal(true,true,false,false,false,false),L"Auto walk unavailable. Wait for the current scene or push to finish, then ask again."),"field control held by the game without visible text asks the player to wait");
+        check(routeStartRefusal(true,true,true,false,false,false)==ffx::nav::intentRefusalText(false),"a field without the controlled character refuses before any route");
+        check(!routeStartRefusal(true,true,true,true,false,false) && !routeStartRefusal(false,false,false,false,true,true),"an open field, or Auto walk off, reads the route as before");
         // Djose: Backslash on "Pedestal reset tile, currently inactive" said only "12 west" and never walked.
         check(ffx::nav::inactiveRouteText(L"Pedestal reset tile",L"12 west")==L"Auto walk unavailable: Pedestal reset tile is currently inactive. Route: 12 west","an inactive destination refuses Auto walk by name and still reads the route");
         check(ffx::nav::inactiveRouteText(L"Pedestal",L"")==L"Auto walk unavailable: Pedestal is currently inactive.","an inactive destination inside its zone refuses without an empty route");

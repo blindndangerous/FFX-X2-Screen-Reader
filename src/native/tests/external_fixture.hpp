@@ -48,6 +48,8 @@ inline std::filesystem::path evidenceRoot() {
 // must outlive static initialization and all later fixture setup/stack reuse.
 template<size_t N> struct Bytes {unsigned char bytes[N]{};};
 template<size_t N> Bytes<N> load(const char* relative,uint64_t expectedHash) {
+    // Some evidence loads run before main; missing data must not open a WER dialog.
+    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
     const std::filesystem::path name(relative);
     if(name.is_absolute()) throw std::runtime_error("Fixture name must be relative to the external evidence root");
     for(const auto& part:name) if(part==L"..") throw std::runtime_error("Fixture name cannot escape its external evidence root");

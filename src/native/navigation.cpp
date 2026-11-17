@@ -179,8 +179,8 @@ void pathfind(const Pending& event,bool assist=false) {
     if(!s.mesh.events.ready) {resetNavAudio();emit(event,L"Navigation data is unavailable. Waiting for the field to become ready.","navigation-data-unavailable");return;}
     if(!assist) {
         const auto& o=s.observation;
-        if(const auto refusal=nav::routeStartRefusal(setting(Setting::AutoWalk)!=0,o.allowed,o.control,o.controlled,o.message)) {
-            recordLog("auto walk refused before route: window=%d message=%d allowed=%d control=%d controlled=%d battle=%d age-ms=%llu",o.window,o.message?1:0,o.allowed?1:0,o.control?1:0,o.controlled?1:0,inBattle()?1:0,GetTickCount64()-o.capturedAt);
+        if(const auto refusal=nav::routeStartRefusal(setting(Setting::AutoWalk)!=0,o.allowed,o.control,o.controlled,o.message,o.visibleMessage)) {
+            recordLog("auto walk refused before route: window=%d message=%d allowed=%d control=%d controlled=%d battle=%d age-ms=%llu visible-message=%d",o.window,o.message?1:0,o.allowed?1:0,o.control?1:0,o.controlled?1:0,inBattle()?1:0,GetTickCount64()-o.capturedAt,o.visibleMessage?1:0);
             emit(event,refusal,"navigation-action-refused");return;
         }
     }

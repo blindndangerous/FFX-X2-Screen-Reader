@@ -35,6 +35,7 @@ struct Scene {
     unsigned confirmMask=0,audioContext=0,collisionSerial=0;
     bool surfaceReady=false;
     bool allowed=false,cameraValid=false,control=false,controlled=false,swimming=false,dive=false,geometryValid=false,message=false;
+    bool visibleMessage=false; // Open TK window with a nonempty text source, captured on the native owner.
     int window=0;
     // Exact Baaj request-time diagnostic facts, captured with its existing
     // native scene event. No polling or game pointer crosses into preparation.

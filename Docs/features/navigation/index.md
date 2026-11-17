@@ -1,5 +1,57 @@
 # Navigation, route validity, audio and movement
 
+## Visible-message hints — November16
+
+The reported `window=0 message=1 allowed=1 control=0` state does not prove that
+dialogue is visible. `window` is the mod's scene ID; `message` is native message
+mode, which can remain set while a script owns the player. The guide previously
+treated either value as a reason to press Enter.
+
+Navigation capture now copies a separate `visibleMessage` boolean using the
+existing safe state readers: one of eight TK slots must have an open window
+(phase 1 or 2, matching dialogue review) and a readable, nonempty encoded text
+source. The fixed eight-slot read stays on the native owner. Workers receive
+only the boolean; no pointer, wait, text decoding, or new speech producer is
+added. Raw message/control guards still prevent movement and step advancement.
+
+The guide uses the visible-text fact for its close-message hint. Without it,
+script/control holds use the existing scene-or-push wait hint. Auto walk uses
+the same distinction and logs `visible-message` alongside the original fields.
+Scene refusals retain their existing wording; disabled control or raw message
+mode without visible text asks the player to wait.
+
+The native test runner sets `SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX`
+before launching its children. External evidence loads also set it before
+possible pre-main exceptions, including the scene fixture's static loads.
+An already-built stale executable must be rebuilt or run through the harness
+to receive this protection.
+
+Offline checks cover 192 TK slot/phase/text cases and 32 calls to the production
+guide across control, message mode, scene ID, visible text, and push state.
+Restoring the old guide branch makes the new production-guide fixture fail.
+The requested no-deploy build exits 0. The full native suite exits 0 with
+89 PASS groups plus proxy forwarding and three existing missing-evidence
+SKIPs (readers, reachability, utilities). Installer verification passes 667
+assertions and UI compilation; PRISM-dependent cases remain skipped.
+Existing C4244/C4456/D9026 warnings remain. Receipts are
+`.local/message-build.log`, `.local/message-tests.log`,
+`.local/message-installer-tests.log`, and `.local/message-verification.json`.
+These checks do not establish actual rendered visibility or audible delivery
+in a running game. No deployment, commit, game access, or tester-log access is
+part of this task.
+
+Prioritized nonvisual procedure, after a separately authorized deployment:
+
+1. During the pedestal sphere script or a scene with no visible text, request
+   the selected guide step with F11. Expect the scene-or-push wait hint, never
+   a request to close a message. Request Auto walk to a selected target; expect
+   a wait/scene refusal and no movement while native control is held.
+2. Open an ordinary dialogue window, then request the guide and Auto walk.
+   Expect one close-message hint and one message-open refusal per request.
+   Close the dialogue normally before continuing progression.
+3. After native player control returns, request both again. Expect ordinary
+   guidance and navigation; no stale close-message hint or duplicate speech.
+
 ## Kilika steps 16-17 after the completed push — November16
 
 The user confirms that `19cca78` completes all three step-15 legs and says

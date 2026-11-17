@@ -1,5 +1,23 @@
 # FFX current memory — November4
 
+November16 visible-message hint repair on `4dc7d1d` separates native message mode
+from an open TK window with a nonempty text source. Guide close-message hints
+and Auto walk's message-open refusal now require that copied visible-text fact;
+script/control holds without text use scene/push wait wording. Movement guards
+and the existing speech producer remain unchanged. The fixture runner suppresses
+Windows crash dialogs in child processes; external evidence loads also set the
+error mode before possible pre-main exceptions. No-deploy build and full native
+suite exit 0: 89 PASS groups plus proxy forwarding, 3 existing missing-evidence
+SKIPs (readers, reachability, utilities). Regression coverage includes 192 TK
+visibility cases and 32 production guide cases; the old guide branch fails.
+Installer tests pass 667 assertions and UI compilation; PRISM-dependent cases
+remain skipped. Existing C4244/C4456/D9026 warnings remain. Receipts:
+`.local/message-build.log`, `.local/message-tests.log`,
+`.local/message-installer-tests.log`, `.local/message-verification.json`.
+Gameplay/rendered visibility/audible speech remain unverified. No deployment,
+commit, game access or Tester Logs access occurred. See the
+[cause, offline limits and prioritized procedure](Docs/features/navigation/index.md#visible-message-hints--november16).
+
 November16 steps16–17 repair follows the user's live confirmation that `19cca78`
 completes all three step15 legs and says “Pedestal push complete.” Inactive
 contact pedestals no longer propagate or retain ordinary-target keep-outs.

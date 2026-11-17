@@ -1,5 +1,9 @@
 @echo off
 setlocal
+if defined FFX_TEST_NO_DIALOGS goto run
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run_without_dialogs.ps1" "%~f0" %*
+exit /b %errorlevel%
+:run
 rem The suite starts the executables it just built by bare name from the working
 rem directory. Hardened shells set this variable, which stops that lookup.
 set "NoDefaultCurrentDirectoryInExePath="
@@ -22,6 +26,7 @@ set "TEST_BUILD=%FFX_EVIDENCE_ROOT%\test-build"
 if not exist "%TEST_BUILD%" mkdir "%TEST_BUILD%"
 pushd "%TEST_BUILD%"
 if /I "%~1"=="--review" goto review
+if /I "%~1"=="--message-hints" goto messagehints
 if /I "%~1"=="--abi" goto abi
 if /I "%~1"=="--threading" goto threading
 if /I "%~1"=="--tail" goto tail
@@ -75,6 +80,12 @@ cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:puzzle_guide_progress_fixture.exe "%
 if not "%errorlevel%"=="0" goto failed
 puzzle_guide_progress_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+:messagehints
+cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:puzzle_guide_message_fixture.exe "%TEST_SRC%puzzle_guide_message_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp"
+if not "%errorlevel%"=="0" goto failed
+puzzle_guide_message_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--message-hints" goto success
 :speech
 if not exist PrismRuntime mkdir PrismRuntime
 cl /nologo /W4 /EHsc /std:c++17 /MT /LD /Fe:PrismRuntime\prism.dll "%TEST_SRC%fake_prism.cpp" /link /DEF:"%TEST_SRC%fake_prism.def"
