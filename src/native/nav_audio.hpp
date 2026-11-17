@@ -21,7 +21,8 @@ inline bool claimNavRouteStopSpeech() noexcept {return !navRouteStopReported.exc
 inline std::atomic<unsigned> navArrivalConfirmation{0};
 struct NavAudioState {unsigned contextSerial=navAudioContextSerial(); float pan=0,front=1,steps=0; unsigned walls=0; bool beacon=false,active=false; };
 struct NavLeg { Point start,goal,final; NativeRouteTarget target; unsigned epoch=0; bool arrived=false;
-    unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false;unsigned arrivalSerial=0; };
+    unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false;unsigned arrivalSerial=0;
+    Point arrivalInside;bool arrivalUnreachable=false; };
 bool navLeg(NavLeg&);
 void publishNavAudio(const NavAudioState&);
 void pauseNavAudio();

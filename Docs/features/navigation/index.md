@@ -1,5 +1,76 @@
 # Navigation, route validity, audio and movement
 
+## Kilika arrival homing follow-up — November16
+
+Scope: detached `4245b9d`, following the user's 18:59 Entry door recess and
+19:09 Fire chamber wall recess failures. The explicitly supplied live log was
+read without controlling the game. The 300–333ms interval starts at the **end**
+of homing: it is the existing neutral settling period, not the homing duration.
+Those old records contain neither the starting pose nor the exit reason, so
+they cannot establish which condition ended either individual live correction.
+
+The production walker had an unconditional 3000ms whole-homing cutoff and
+steered back to the original navigation endpoint. Checking zone membership
+only in the proximity branch did not remove that cutoff. A corrected native-ramp
+fixture starts 4.5 units outside, at 10 units/second, 33ms frames and one-frame
+input latency. Linked against the original walker, it fails at 3333ms with
+player Z=16.996, outside the rectangle starting at Z=17. The old diagnostic
+assertion alone is disabled in that comparison because the old walker has no
+diagnostics. An earlier test setup incorrectly counted its artificial pose
+displacement as a native stride; the retained fixture starts native sampling
+after setup, and the original-walker comparison uses that corrected fixture.
+
+The owned navigation worker now computes one cached correction route from the
+observed outside pose with the existing interaction-zone/floor/obstacle solver.
+It publishes the next steering point, nearest reachable inside endpoint and
+unreachable result as copied facts. Target or collision replans invalidate that
+cache. Native steering uses the correction point, stops for actual membership,
+and confirms success only after neutral input settling. It can resume if coast
+leaves the zone. The 3000ms limit now measures lack of improvement by more than
+0.1 units toward the steering point; a separate 15000ms total cap bounds repeated
+progress or changes. Blocked pedestal segments, unavailable camera and existing
+manual/context cancellation still release input. Push/contact routes retain
+their existing behavior. No floor scans, route allocation, waits or log formatting
+were added to the native owner.
+
+Every outside-zone outcome captures player X/Z, original destination, correction
+point, nearest inside endpoint and validity, distance, zone shape/centre/end,
+angle/width/depth/range/height, player/zone Y, obstacle and radius, homing duration,
+total duration, time without progress, unreachable status and homing exit reason.
+The existing log worker formats these owned records. Successful homing also
+records duration and exit reason.
+
+Verification: the focused production walker/route fixture passes 384 combinations
+of 0.2/2/4.5-unit starts, cold/warm ramps, 17/33ms frames, one/two-frame input
+latency, 10/50 units/second, blocked movement and four original endpoints
+(including a far-side endpoint). Longest successful synthetic recovery: 4059ms.
+Blocked cases assert complete diagnostic records and one failure announcement.
+An additional disconnected-floor case checks no movement and one bounded failure.
+Full native suite and final no-deploy build exit 0: 90 PASS groups plus proxy
+forwarding, with the same three missing-evidence SKIPs for readers, reachability
+and utilities. Existing C4244/C4456/D9026 warnings remain. Receipts and hashes:
+`.local/homing-verification.json`, `.local/homing-tests-final.log` and
+`.local/homing-build-final.log`.
+Test executables use `%TEMP%/ffx-homing-4245b9d` because the sandbox cannot write
+the default external test-build directory. No deployment or commit is authorized.
+
+Prioritized nonvisual gameplay procedure, after a separately authorized deployment:
+1. At Kilika guide step 2, select Entry door recess and start Auto walk from the
+   previously failing approach. Expect one arrival after correction and settling;
+   Enter must address that recess. Repeat from close range and after moving away.
+2. Progress normally to step 10 and repeat for Fire chamber wall recess. Test both
+   a cold start and an immediate retry. No early arrival or duplicate failure
+   should precede the final result.
+3. Cancel a correction with manual movement. Expect immediate input handback.
+   If a route cannot enter the zone, expect one failure and stopped movement;
+   preserve the new geometry/duration/reason records from that same session.
+
+Limits: synthetic geometry and native input-ramp adapters do not prove the live
+Kilika collision layout, actual controller consumption, worker scheduling or
+audible output. The 15000ms cap is a safety bound, not an expected response time.
+Existing route-solver endpoint selection and copied-scene freshness remain the
+limits on nearest reachable point selection; no new live capture was performed.
+
 ## Kilika evening-run repairs — November16
 
 Scope: HEAD `e79200a`, the user's November16 17:25–18:03 session. The supplied

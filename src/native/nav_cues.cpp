@@ -53,6 +53,9 @@ struct State {
     Mesh collision;
     std::vector<Entity> live;
     std::vector<Point> legs;
+    std::vector<Point> arrivalRoute;
+    size_t arrivalNext=1;
+    bool arrivalRouted=false;
     size_t nextLeg=1;
     std::wstring destination,pedestal;
     Entity target;
@@ -80,6 +83,14 @@ void publishLeg() {
     if(s.legs.size()>1 && s.nextLeg<s.legs.size() && !s.destination.empty() && (s.routeEpoch==s.epoch || s.arrived)) {
         p.valid=1;p.leg.start=s.legs[s.nextLeg-1];p.leg.goal=s.legs[s.nextLeg];p.leg.final=s.legs.back();p.leg.epoch=s.epoch;p.leg.arrived=s.arrived;p.leg.collisionSerial=s.routeCollisionSerial;
         p.leg.arrivalSerial=s.arrivalSerial;
+        p.leg.arrivalInside=p.leg.final;
+        if(s.arrivalSerial && s.arrivalRouted) {
+            p.leg.arrivalUnreachable=s.arrivalRoute.empty();
+            if(!p.leg.arrivalUnreachable) {
+                p.leg.start=s.arrivalRoute[s.arrivalNext-1];p.leg.goal=s.arrivalRoute[s.arrivalNext];
+                p.leg.arrivalInside=s.arrivalRoute.back();
+            }
+        }
         OwnedNavTarget copied;std::memset(&copied,0,sizeof(copied));if(!captureOwnedNavTarget(s.target,copied)) {publishEmpty();return;}p.leg.target=copied.native;
     }
     publishSnapshot(p);
@@ -103,6 +114,7 @@ bool sameTarget(const Entity& a,const Entity& b) {
 }
 void setRoute(const std::vector<Point>& points,const Entity& target,bool newRoute=false,bool assisted=false) {
     reconcile();auto& s=owned();s.epoch=generation();s.legs=points;s.nextLeg=1;s.routeEpoch=s.epoch;s.arrived=false;s.missing=0;
+    s.arrivalRoute.clear();s.arrivalNext=1;s.arrivalRouted=false;
     s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;
     s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();
     const bool confirm=(newRoute?assisted:s.arrivalSerial!=0) && target.zone.valid && target.zone.talk && !target.zone.crossing && !target.pushControl && !target.butterfly && !target.swimDepth && !target.swimApproach;
@@ -143,6 +155,20 @@ void advance() {
             double pan=0,front=1;
             if(relativeBearing({goal.x-s.player.x,0,goal.z-s.player.z},pan,front)) {audio.beacon=true;audio.pan=static_cast<float>(pan);audio.front=static_cast<float>(front);audio.steps=static_cast<float>(steps);}
         }
+    }
+    // The worker selects the nearest reachable zone endpoint from the settled
+    // approach side, rather than forcing a return to the original destination.
+    // Keep that path stable during pulse/coast calibration. Geometry/target
+    // revisions go through setRoute and invalidate it with the original route.
+    if(s.routeEpoch==s.epoch && s.arrived && s.arrivalSerial && !inInteractionZone(s.target.zone,s.player)) {
+        if(!s.arrivalRouted) {
+            auto correction=interactionRoute(s.collision,s.player,s.target.zone);
+            s.arrivalRoute=std::move(correction);s.arrivalNext=1;s.arrivalRouted=true;
+            if(s.arrivalRoute.size()<2) s.arrivalRoute.clear();
+        }
+        while(s.arrivalNext+1<s.arrivalRoute.size() &&
+            distanceXZ(s.player,s.arrivalRoute[s.arrivalNext])<=.25 &&
+            std::abs(s.player.y-s.arrivalRoute[s.arrivalNext].y)<=8) ++s.arrivalNext;
     }
     if(!current()) return;
     publishLeg();publishNavAudio(audio);

@@ -1,5 +1,24 @@
 # FFX current memory — November4
 
+November16 late-run arrival follow-up on detached `4245b9d`: the user's supplied
+Entry door/Fire chamber log confirms failure after the 300–333ms settling phase;
+it does not reveal the preceding homing duration or exit branch. The original
+walker fails a corrected cold native-ramp fixture starting 4.5 units outside:
+33ms frames, 10 units/second, one-frame input latency, Z=16.996 at 3333ms where
+the zone begins at Z=17. Its fixed 3000ms cutoff and original-endpoint steering
+are replaced by a cached worker correction to the nearest reachable zone point,
+actual-membership settling, a 3000ms no-progress deadline and a 15000ms safety
+cap. Outside-zone failures now capture geometry, nearest-point validity,
+distance, homing/total/no-progress timing and exit reason through owned logging.
+The 384-case ramp matrix and disconnected-floor failure case pass; longest
+synthetic success 4059ms. Final no-deploy build and full native suite exit 0:
+90 PASS groups plus proxy forwarding, 3 existing missing-evidence SKIPs
+(readers, reachability, utilities). Existing C4244/C4456/D9026 warnings remain.
+Receipts: `.local/homing-verification.json`, `.local/homing-build-final.log`,
+`.local/homing-tests-final.log`, `.local/homing-baseline-result.log`. Gameplay and
+audible output remain unverified. No deployment, commit, game control/probe or
+Tester Logs access. See the [cause, limits and prioritized nonvisual procedure](Docs/features/navigation/index.md#kilika-arrival-homing-follow-up--november16).
+
 November16 evening-run repair on `e79200a`: step22 now names the actual worker37
 row, `Exit 1 to Kilika - Antechamber`. Step21 requires both the retained0x63=3
 milestone and an empty0x62 recess, and returns after reinsertion. Ordinary

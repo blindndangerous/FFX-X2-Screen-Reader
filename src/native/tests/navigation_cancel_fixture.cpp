@@ -124,9 +124,15 @@ int main() {
     // A lower-recess observation can enter the zone before native movement
     // settles. Exercise the real walker/cues handshake, including failed entry.
     unsigned arrivalCases=0;uint64_t longestArrival=0,longestSuccessfulArrival=0;
+    static std::vector<std::string> arrivalDiagnostics;
+    logCaptureHandler.store([](const LogCapture& packet) noexcept {
+        if(std::strstr(packet.format.data(),"auto walk arrival ") && packet.formatter) {
+            char text[1024]{};packet.formatter(packet,text,sizeof(text));arrivalDiagnostics.emplace_back(text);
+        }
+    });
     for(double speed:{10.0,50.0}) for(unsigned frameMs:{17u,33u})
     for(unsigned latency:{1u,2u}) for(bool warm:{false,true}) for(bool blocked:{false,true})
-    for(unsigned endpoint:{0u,1u,2u}) {
+    for(unsigned endpoint:{0u,1u,2u,3u}) for(double outside:{.2,2.0,4.5}) {
         begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
         player={0,0,16.8};target={};target.worker=35;target.name=L"Lower Kilika Sphere recess";
         target.position={0,0,20};target.zone.valid=target.zone.talk=true;
@@ -142,14 +148,19 @@ int main() {
             nativeOwner=false;observation.player=player;
             updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;
         };
-        publish();nativeOwner=false;routeNavAudio({player,{0,0,endpoint?17.0:17.5}},target,true);nativeOwner=true;
-        startAutoWalk(false);speech.clear();
+        publish();nativeOwner=false;routeNavAudio({player,{0,0,endpoint==3?22.5:endpoint?17.0:17.5}},target,true);nativeOwner=true;
+        speech.clear();
         player={0,0,17.1};publish();NavLeg current;
         check(navLeg(current) && current.arrived && speech.empty(),"transient lower-recess entry has no premature success speech");
-        player={0,0,16.8};std::array<unsigned,3> pending{};std::array<double,4> ramps{};
+        player={0,0,17-outside};std::array<unsigned,3> pending{};std::array<double,4> ramps{};
+        // Start native sampling here: the setup displacement is not one native
+        // movement frame and must not become the calibrated maximum stride.
+        publish();startAutoWalk(false);arrivalDiagnostics.clear();
+        check(navLeg(current) && current.goal.z>=17 && current.goal.z<=17.25,
+            "homing selects the nearest reachable inside point, not the old far-side destination");
         if(warm) {pending.fill(4);ramps[2]=256;}
         const auto began=clockValue;
-        for(unsigned frame=0;frame<300 && autoWalkActive();++frame) {
+        for(unsigned frame=0;frame<16000/frameMs && autoWalkActive();++frame) {
             clockValue+=frameMs;updateAutoWalk();const auto keys=keyboard();
             const unsigned bits=(keys[0xc8]?1u:0)|(keys[0xcb]?2u:0)|(keys[0xd0]?4u:0)|(keys[0xcd]?8u:0);
             const auto consumed=pending[0];
@@ -164,21 +175,29 @@ int main() {
         }
         publish();
         check(!autoWalkActive() && speech.size()==1,"ordinary lower-recess arrival has one final outcome");
-        if(blocked) check(speech.back()==L"Auto walk stopped: not in interaction range",
-            "failed lower-recess correction emits failure without a preceding arrival");
+        if(blocked) {
+            check(speech.back()==L"Auto walk stopped: not in interaction range",
+                "failed lower-recess correction emits failure without a preceding arrival");
+            check(arrivalDiagnostics.size()==3 && arrivalDiagnostics[0].find("destination ")!=std::string::npos &&
+                arrivalDiagnostics[0].find("nearest-inside 0.000 17.000")!=std::string::npos &&
+                arrivalDiagnostics[0].find("distance ")!=std::string::npos && arrivalDiagnostics[1].find("shape 3")!=std::string::npos &&
+                arrivalDiagnostics[2].find("no progress deadline")!=std::string::npos && arrivalDiagnostics[2].find("homing-ms ")!=std::string::npos,
+                "every failed arrival logs pose, destination, shape, nearest inside point, distance, duration and end reason");
+        }
         else {
-            if(!inInteractionZone(target.zone,player)) std::fprintf(stderr,"arrival case: endpoint=%u speed=%.1f frame=%u latency=%u warm=%d position=%.3f,%.3f elapsed=%llu\n",
-                endpoint,speed,frameMs,latency,warm,player.x,player.z,static_cast<unsigned long long>(clockValue-began));
+            if(!inInteractionZone(target.zone,player)) std::fprintf(stderr,"arrival case: endpoint=%u outside=%.1f speed=%.1f frame=%u latency=%u warm=%d position=%.3f,%.3f elapsed=%llu\n",
+                endpoint,outside,speed,frameMs,latency,warm,player.x,player.z,static_cast<unsigned long long>(clockValue-began));
             check(inInteractionZone(target.zone,player) && speech.back()==L"Lower Kilika Sphere recess: route destination reached",
                 "successful lower-recess correction settles inside the zone before its sole arrival");
             longestSuccessfulArrival=std::max(longestSuccessfulArrival,clockValue-began);
         }
         if(blocked) {target.inactive=true;publish();check(speech.size()==1,
             "worker invalidation after a native arrival failure cannot repeat the failure");}
-        check(clockValue-began<=3500,"ordinary arrival correction has a bounded whole recovery and settle time");
+        check(clockValue-began<=(blocked?3500u:15500u),"ordinary arrival correction has bounded no-progress and whole recovery deadlines");
         longestArrival=std::max(longestArrival,clockValue-began);++arrivalCases;
     }
     std::printf("PASS: %u ordinary arrival ramp cases, cold/warm, 17/33ms, one/two-frame pipeline and blocked recovery; longest simulated recovery %llums, longest success %llums.\n",arrivalCases,static_cast<unsigned long long>(longestArrival),static_cast<unsigned long long>(longestSuccessfulArrival));
+    logCaptureHandler.store(nullptr);
     // A remote keep-out permits correction; a pedestal across the correction
     // segment must still stop it. Transient entry was on the far side.
     begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
@@ -197,6 +216,24 @@ int main() {
     }
     check(!autoWalkActive() && speech.size()==1 && speech.back()==L"Auto walk stopped: not in interaction range",
         "unsafe correction reports one failure without crossing the pedestal");
+    // Once a zone was observed in range, a later owned floor snapshot can
+    // prove that the displaced player has no connected correction route.
+    begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+    target.zone.obstacleRadius=0;player={0,0,20};observation.player=player;
+    nativeOwner=false;updateOwnedNavAudio(observation,mesh,{target},guardedHeader,L"");
+    routeNavAudio({player,player},target,true);nativeOwner=true;
+    player={0,0,12.5};observation.player=player;
+    Mesh disconnected;nativeOwner=false;updateOwnedNavAudio(observation,disconnected,{target},guardedHeader,L"");nativeOwner=true;
+    NavLeg unreachable;
+    check(navLeg(unreachable) && unreachable.arrived && unreachable.arrivalUnreachable,
+        "owned geometry marks a correction with no connected floor unreachable");
+    speech.clear();startAutoWalk(false);const auto unreachableBegan=clockValue;
+    while(autoWalkActive() && clockValue-unreachableBegan<1000) {
+        clockValue+=33;updateAutoWalk();const auto keys=keyboard();
+        check(!keys[0xc8] && !keys[0xcb] && !keys[0xd0] && !keys[0xcd],"unreachable correction never injects movement");
+    }
+    check(!autoWalkActive() && speech.size()==1 && speech.back()==L"Auto walk stopped: not in interaction range",
+        "unreachable correction reports one bounded failure");
     // Replans within one walk cannot restart settlement indefinitely. Exact
     // coincidence also needs no turn when the native facing setter declines.
     for(bool moving:{false,true}) {

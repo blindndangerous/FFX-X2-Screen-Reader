@@ -163,8 +163,11 @@ constexpr uint64_t ArrivalHomeMs=1500,ArrivalBlockedMs=300,ArrivalSettleMs=300;
 // The 33ms warm-ramp fixture exhausted 2000ms 0.035 units outside the zone.
 // Keep the entire correction bounded, including any repeated settlements.
 constexpr uint64_t InteractionHomeMs=3000;
+// The 3000ms limit is a lack-of-progress deadline, not a total pulse budget.
+// A cold correction from 4.5 units outside previously timed out while advancing.
+constexpr uint64_t InteractionHomeDeadlineMs=15000;
 constexpr double ArrivalHomeUnits=11.13,ArrivalCloseUnits=2.0;
-struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0,began=0;unsigned frames=0;Point origin,seen;} arrival;
+struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0,began=0,progressed=0,homingMs=0;unsigned frames=0;Point origin,seen,goal;double best=-1;const char* ended="initial settling";} arrival;
 void announceStop(const wchar_t* spokenReason) {
     if(stopAnnounced) return;
     stopAnnounced=true;
@@ -359,31 +362,56 @@ void updateAutoWalk() {
             if(!target.butterfly && !target.swimDepth) faceNavigationTarget(target);
             stop("arrived");return;
         }
-        if(!arrival.active) {arrival={};arrival.active=true;arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || (!leg.arrivalSerial && target.zone.obstacleRadius>0);}
-        const Point center=target.pushControl?target.position:leg.arrivalSerial?leg.final:target.zone.center;
+        if(!arrival.active) {arrival={};arrival.active=true;arrival.progressed=arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || (!leg.arrivalSerial && target.zone.obstacleRadius>0);}
+        const Point center=target.pushControl?target.position:leg.arrivalSerial?leg.goal:target.zone.center;
+        progressGoal=center;
         // Every ordinary target can carry the live pedestal keep-out, even
         // across the room. Only a correction that enters it is unsafe.
         const auto canHome=[&] {
-            if(target.pushControl) return false;
+            if(target.pushControl || leg.arrivalUnreachable) return false;
             if(target.zone.obstacleRadius<=0) return true;
             const double x=center.x-player.x,z=center.z-player.z,length=x*x+z*z;
             const auto obstacle=target.zone.obstacle;
             const double t=length>1e-8?std::clamp(((obstacle.x-player.x)*x+(obstacle.z-player.z)*z)/length,0.0,1.0):0;
             return std::hypot(player.x+t*x-obstacle.x,player.z+t*z-obstacle.z)>=target.zone.obstacleRadius+.5;
         };
+        const auto logOutside=[&] {
+            const auto& zone=target.zone;const auto nearest=leg.arrivalSerial?leg.arrivalInside:center;
+            recordLog("auto walk arrival outside: player %.3f %.3f, destination %.3f %.3f, nearest-inside %.3f %.3f, distance %.3f, steering %.3f %.3f, nearest-valid %u",
+                player.x,player.z,leg.final.x,leg.final.z,nearest.x,nearest.z,distanceXZ(player,nearest),center.x,center.z,
+                static_cast<unsigned>(!leg.arrivalUnreachable && inInteractionZone(zone,nearest)));
+            recordLog("auto walk arrival zone: shape %u center %.3f %.3f end %.3f %.3f angle %.5f width %.3f depth %.3f range %.3f height %.3f player-y %.3f zone-y %.3f",
+                zone.shape,zone.center.x,zone.center.z,zone.end.x,zone.end.z,zone.angle,zone.width,zone.depth,zone.range,zone.height,player.y,zone.center.y);
+            recordLog("auto walk arrival ended: %s, homing-ms %llu total-ms %llu no-progress-ms %llu unreachable %u obstacle %.3f %.3f radius %.3f",
+                arrival.ended,arrival.homingMs,now-arrival.began,now-arrival.progressed,static_cast<unsigned>(leg.arrivalUnreachable),zone.obstacle.x,zone.obstacle.z,zone.obstacleRadius);
+        };
         if(!arrival.settling) {
             if(distanceXZ(player,arrival.seen)>.1) {arrival.seen=player;arrival.still=now;last=player;}
             double pan=0,front=0;
-            const bool done=(distanceXZ(player,center)<=(leg.arrivalSerial?.25:ArrivalCloseUnits) &&
-                (!leg.arrivalSerial || inInteractionZone(target.zone,player))) || distanceXZ(player,arrival.origin)>=ArrivalHomeUnits ||
-                (!leg.arrivalSerial && (now-arrival.still>=ArrivalBlockedMs || now-arrival.since>=ArrivalHomeMs)) ||
-                (leg.arrivalSerial && (now-arrival.began>=InteractionHomeMs || !canHome())) || !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front);
-            if(!done) {
+            const double distance=distanceXZ(player,center);
+            if(arrival.best<0 || distanceXZ(center,arrival.goal)>.01 || distance<arrival.best-.1) {
+                arrival.best=distance;arrival.goal=center;arrival.progressed=now;
+            }
+            const char* ended=nullptr;
+            if(leg.arrivalSerial) {
+                if(inInteractionZone(target.zone,player)) ended="inside interaction zone";
+                else if(!canHome()) ended=leg.arrivalUnreachable?"zone unreachable":"pedestal blocks correction";
+                else if(now-arrival.began>=InteractionHomeDeadlineMs) ended="whole homing deadline";
+                else if(now-arrival.progressed>=InteractionHomeMs) ended="no progress deadline";
+            } else {
+                if(distance<=ArrivalCloseUnits) ended="legacy target proximity";
+                else if(distanceXZ(player,arrival.origin)>=ArrivalHomeUnits) ended="legacy distance limit";
+                else if(now-arrival.still>=ArrivalBlockedMs) ended="legacy blocked";
+                else if(now-arrival.since>=ArrivalHomeMs) ended="legacy homing deadline";
+            }
+            if(!ended && !relativeBearing({center.x-player.x,0,center.z-player.z},pan,front)) ended="camera unavailable";
+            if(!ended) {
                 const auto degrees=std::atan2(pan,front)*180/3.14159265358979323846;
                 const auto bits=octMasks[(static_cast<int>(std::round(degrees/45))+8)&7];
                 mask=leg.arrivalSerial?precisionInput(bits,leg,player,true):bits;stamp=now;return;
             }
-            recordLog("auto walk homed %.2f units toward the target",distanceXZ(player,arrival.origin));
+            arrival.ended=ended;arrival.homingMs+=now-arrival.since;
+            recordLog("auto walk homed %.2f units toward the target: %s, homing-ms %llu total-ms %llu",distanceXZ(player,arrival.origin),ended,arrival.homingMs,now-arrival.began);
             arrival.settling=true;arrival.frames=0;arrival.since=now;
         }
         mask=0;stamp=now;
@@ -392,17 +420,18 @@ void updateAutoWalk() {
         if(now-arrival.since<ArrivalSettleMs || (leg.arrivalSerial && arrival.frames<PedestalDrainFrames)) return;
         if(leg.arrivalSerial) {
             const bool inside=inInteractionZone(target.zone,player);
-            if(!inside && canHome() && now-arrival.began<InteractionHomeMs) {
+            if(!inside && canHome() && now-arrival.began<InteractionHomeDeadlineMs && now-arrival.progressed<InteractionHomeMs &&
+                std::strcmp(arrival.ended,"camera unavailable")) {
                 arrival.settling=false;arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;return;
             }
-            if(!inside) {stop("arrived outside the interaction zone",L"not in interaction range",true);return;}
+            if(!inside) {logOutside();stop("arrived outside the interaction zone",L"not in interaction range",true);return;}
             // Exact coincidence needs no turn; any other position must face
             // successfully on this settled frame, rather than latch an old pose.
             if(!faced && distanceXZ(player,target.zone.center)>=.001) {stop("could not face destination",L"could not face destination",true);return;}
             navArrivalConfirmation.store(leg.arrivalSerial,std::memory_order_release);
             refreshNavCollision();stop("arrived");return;
         }
-        if(!arrival.faced && !target.pushControl) {stop("arrived outside the interaction zone",L"not in interaction range");return;}
+        if(!arrival.faced && !target.pushControl) {logOutside();stop("arrived outside the interaction zone",L"not in interaction range");return;}
         stop("arrived");return;
     }
     if(leg.target.swimDepth) {
