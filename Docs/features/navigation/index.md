@@ -1,5 +1,124 @@
 # Navigation, route validity, audio and movement
 
+## Kilika detour diagnostics and automatic push speech — November16
+
+Scope: detached `b3d6d9d`, with the user's 19:38–19:40 Kilika session on
+`4245b9d`. The supplied game-directory log was preserved in ignored
+`.local/kilika-detour-session.log`. No game control, probe, deployment, commit,
+installer or Tester Logs access occurred.
+
+The first step-16 request listed the lower recess two steps north but produced
+the long southwest/northwest/north route. Its old homing then moved 5.41 units
+and failed interaction membership. A second request at 19:40:47 produced one
+northeast leg and succeeded after 7.60 units of homing. Neither request recorded
+its exact starting pose, route points, collision remaps or floor geometry.
+Retained `klyt1000` event data supplies target positions and interaction facts;
+it does not supply the collision mesh used by this session. Existing fixtures
+use an explicitly synthetic lower-floor pocket. They verify retirement of an
+inactive pedestal's copied keep-out, including the completed actor at
+(50.010990,20.009766,205.152710) and lower recess at
+(59.965549,9.990234,209.560730). Ordinary targets obtain their obstacle only from
+an active contact pedestal; the reset tile does not independently create one.
+This rules out that specific synthetic stale-obstacle regression, not every
+possible live state or floor obstruction. The real detour cause remains unknown.
+No speculative collision or endpoint-selection change was made. The separate
+`b3d6d9d` homing repair remains present and still needs gameplay confirmation.
+
+Each requested route now emits one bounded worker-side diagnostic when its X/Z
+length exceeds twice the direct distance to the listed destination, or exceeds
+that distance plus six world units. Equality does not trigger either threshold.
+The record includes request/epoch/collision serial, observation age, start,
+destination, chosen endpoint and membership, route waypoints with floor and
+component IDs, the incoming and effective obstacle, live/inactive pedestal and
+reset-tile source rows, target-zone polygons and competing interaction zones.
+Straight-line probes to both the destination and chosen endpoint report the
+production clipper's first uncovered floor/height interval, directed-event
+rejection, and pedestal clearance at the normal and wider margins. These are
+diagnostics only; they never grant movement. Caps are 128 waypoints, 64 target
+polygons, 32 competitors and 16 source rows, with explicit truncation notices
+and a separately retained final endpoint. Ordinary short routes return before
+floor scans or formatting. Background pose refreshes do not repeat the dump.
+
+Speech had two independent help producers: navigation arrival appended the
+entire pedestal plan at each staging point, and each native leg transition
+requested the full instructions again. The transition request is removed.
+The route worker now latches silence only for a matching, captured, armed and
+held automatic Besaid/Kilika session; it suppresses arrival prose and camera-cut
+route prose through that route's late completion. Manual and unarmed pedestal
+routes retain their help. The native session emits one bounded directional
+announcement per leg using the existing camera-relative compass convention,
+followed by its existing single completion. An additional regression exposed
+duplicate speech when a short interrupted push rebased segment 1 to segment 0;
+the announcement state now survives that renumbering. Manual guide queries,
+input, collision checks and native push mechanics remain unchanged.
+
+The requested no-deploy build and full native suite both exit 0: 90 PASS groups
+plus proxy forwarding, with three existing missing-evidence SKIPs: readers
+(`hudTextureClipBody.bin`), reachability (`collisionReplayBody.bin`) and utilities
+(`maps_v3.json`). The existing C4244 build warning and C4244/C4456/D9026 suite
+warnings remain. Final logs are `.local/detour-build-final.log` and
+`.local/detour-tests-final.log`; `.local/detour-verification.json` records source
+hashes, commands and limits. The inherited 384 arrival-ramp cases and 96
+pedestal-ramp cases pass. Regression fixtures cover both strict diagnostic thresholds, active and
+inactive sources with a stale copied reset-position obstacle, the exact first
+floor gap, manual/unarmed/automatic speech ownership, late completion, and the
+three-leg north/east/north/completion sequence with an interrupted second leg.
+Old code fails the turn-help, automatic camera-speech and interrupted-leg tests.
+These are owned-data/component tests, not audible or gameplay confirmation.
+
+The optimized scratch diagnostic benchmark ran ten consecutive requests each
+on 32- and 32,767-triangle synthetic meshes while build/suite work was active.
+Small-floor cold/warm maximum costs were 0.311/0.151 ms; maximum-floor costs were
+42.773/47.445 ms. Short routes took at most 0.001 ms and emitted nothing.
+The maximum-floor record retained 74 rows. This measures diagnostic computation
+and formatting only, excluding scene collection, queue delay, log writing and
+first audible output. It is evidence for a roughly 50 ms diagnostic component
+budget on this host, not a hard runtime deadline or end-to-end latency proof.
+Receipt: `.local/detour-benchmark.log`; its renamed fixture-main helper produces
+a C4715 scratch-harness warning, separate from the production build.
+
+Changed source locations:
+
+- `src/native/nav_zones.cpp:324`: distance trigger, bounded diagnostic rows,
+  obstacle provenance and straight-line probes.
+- `src/native/nav_geometry.cpp:296` and `src/native/navigation.hpp:67`: expose
+  the existing visibility proof and first uncovered interval to diagnostics.
+- `src/native/navigation.cpp:218`: emit one diagnostic for a requested detour.
+- `src/native/nav_cues.cpp:116`: match the owned automatic push and silence its
+  arrival/camera prose while preserving manual help.
+- `src/native/pedestal_input.cpp:92`: directional per-leg speech; line 562 keeps
+  its announcement state across an interrupted-plan rebase.
+- `src/native/tests/navigation_zone_followups.inc:146`: diagnostic fixtures.
+- `src/native/tests/nav_cues_fixture.cpp:384`: manual/unarmed/automatic ownership.
+- `src/native/tests/pedestal_fixture.cpp:803`: three-leg sequence and retry.
+- `src/native/tests/pedestal_walk_fixture.cpp:42`: directional announcement
+  counting in the existing 96-case ramp/trace fixture.
+- `CODEX_MEMORY.md:3` and this section: current result, limitations and procedure.
+
+Delegation: Luna performed one read-only retained-data/code locator task. Sol
+checked its cited synthetic fixture and retained-data boundary, retained all
+diagnosis, implementation, review and verification, and made no delegated edits.
+
+Prioritized nonvisual procedure after a separately authorized deployment:
+
+1. At Kilika step 15 with the loaded pedestal reset, select Pedestal and start
+   Auto walk. Expect only one “Pushing pedestal north”, then “Pushing pedestal
+   east”, then “Pushing pedestal north”, and one “Pedestal push complete” during
+   the automatic push. Full side/plan/key instructions between legs, repeated
+   direction on a retry, or extra arrival/camera prose are failures. Before
+   starting, manual guide/help requests must still respond normally.
+2. After completion exposes the lower recess, request its step-16 route. If it
+   detours again, the diagnostic is automatic; no additional probe key is
+   required. Expected arrival must permit the ordinary native sphere prompt.
+   A detour alone is not proof of an invalid route; use its recorded blockers,
+   floor components, endpoint and obstacle sources to decide. “Arrived outside
+   the interaction zone” remains a failure; retain the new homing evidence too.
+3. Continue normal guide progression to step 19 and repeat the same recess
+   check when available. Step 19 depends on the intervening sphere actions;
+   do not bypass progression. Report any repeated help, route failure or delayed
+   response. Offline fixtures cannot prove this session's live floor, geometry
+   age, end-to-end response time, native movement or audible output.
+
 ## Kilika arrival homing follow-up — November16
 
 Scope: detached `4245b9d`, following the user's 18:59 Entry door recess and

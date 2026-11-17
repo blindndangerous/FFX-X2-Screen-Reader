@@ -94,7 +94,7 @@ public:
         // levels for the native 32767-triangle transport). Storage is O(floor).
         if(!rows.empty()) {nodes.reserve(rows.size());build(0,static_cast<unsigned>(rows.size()));}
     }
-    template<class Clip> bool covered(Point a,Point b,const Clip& clip,std::vector<Work>& work) const {
+    template<class Clip> bool covered(Point a,Point b,const Clip& clip,std::vector<Work>& work,double* coveredUntil=nullptr) const {
         work.clear();
         constexpr unsigned Interval=std::numeric_limits<unsigned>::max();
         const auto later=[](const Work& x,const Work& y) {return x.begin>y.begin;};
@@ -108,7 +108,7 @@ public:
             for(const auto& row:rows) consume(row);
         } else if(!nodes.empty()) pushNode(0);
         for(const auto& row:unbounded) consume(row);
-        double reached=0;
+        double reached=0;if(coveredUntil) *coveredUntil=0;
         while(!work.empty()) {
             nav::checkComputation();
             // Node entry is a conservative lower bound on every interval it
@@ -117,7 +117,7 @@ public:
             if(work.front().begin>reached+.000001) return false;
             std::pop_heap(work.begin(),work.end(),later);const auto item=work.back();work.pop_back();
             if(item.node==Interval) {
-                reached=std::max(reached,item.end);if(reached>=1-.000001) return true;
+                reached=std::max(reached,item.end);if(coveredUntil) *coveredUntil=reached;if(reached>=1-.000001) return true;
             } else {
                 const auto& node=nodes[item.node];
                 if(node.left) {pushNode(node.left);pushNode(node.right);}
@@ -129,7 +129,7 @@ public:
         return false;
     }
 };
-bool lineOfSight(const Mesh& mesh,const VisibilityIndex& index,Point a,Point b,std::vector<VisibilityIndex::Work>& work) {
+bool lineOfSight(const Mesh& mesh,const VisibilityIndex& index,Point a,Point b,std::vector<VisibilityIndex::Work>& work,double* coveredUntil=nullptr) {
     if(!routeSegmentAllowed(mesh,a,b)) return false;
     // Cover the complete segment with clipped triangle intervals. Sampling
     // every five units can skip a narrow wall or gap between two sample points.
@@ -155,7 +155,7 @@ bool lineOfSight(const Mesh& mesh,const VisibilityIndex& index,Point a,Point b,s
             clip(8-startHeight,8-endHeight); clip(8+startHeight,8+endHeight);
         }
         return low<=high && high>=0 && low<=1;
-    },work);
+    },work,coveredUntil);
 }
 }
 double distanceXZ(Point a, Point b) { return std::hypot(a.x - b.x, a.z - b.z); }
@@ -292,6 +292,12 @@ std::vector<int> path(const Mesh& mesh, int start, int end,bool requirePortal,co
         }
     }
     return {};
+}
+bool routeLineClear(const Mesh& mesh,Point from,Point to,double& coveredUntil) {
+    coveredUntil=0;if(!mesh.events.ready || !routeSegmentAllowed(mesh,from,to)) return false;
+    if(mesh.openPlane) {coveredUntil=1;return true;}
+    const VisibilityIndex index(mesh);std::vector<VisibilityIndex::Work> scratch;
+    return lineOfSight(mesh,index,from,to,scratch,&coveredUntil);
 }
 std::vector<Point> smooth(const Mesh& mesh, const std::vector<Point>& points) {
     if(!mesh.events.ready) return {};

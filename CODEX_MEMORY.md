@@ -1,5 +1,28 @@
 # FFX current memory — November4
 
+November16 Kilika detour/speech follow-up on detached `b3d6d9d`, using the user's
+19:38–19:40 live log from `4245b9d`: the long step-16 route remains unexplained.
+Retained event data lacks the actual collision floor; the synthetic inactive-
+pedestal/reset-obstacle retirement fixtures pass. No speculative route change.
+Requested routes now emit bounded owned-worker diagnostics when length exceeds
+twice direct distance or direct distance plus six units: request/data age,
+start/destination/waypoints, floor components, effective/copied obstacle and
+live/inactive/reset sources, endpoint eligibility and straight-line blockers.
+Automatic push arrival and turn-help producers caused redundant speech. Matching
+owned automatic sessions now suppress arrival/camera prose, speak direction
+once per leg and retain the existing completion. Interrupted-plan renumbering
+also preserves the spoken-leg state; manual help remains. Final no-deploy build
+and full native suite exit 0: 90 PASS groups plus proxy forwarding, three existing
+missing-evidence SKIPs (readers, reachability, utilities). All 384 arrival-ramp
+and 96 pedestal-ramp cases pass. Existing C4244/C4456/D9026 warnings remain.
+Diagnostic-only maximum measured cost: 47.445 ms on a synthetic 32,767-triangle
+floor; short-route maximum 0.001 ms. Full live latency/audio remain unverified.
+Receipts: `.local/detour-verification.json`, `.local/detour-build-final.log`,
+`.local/detour-tests-final.log`, `.local/detour-benchmark.log`. Luna supplied one
+read-only retained-data locator; Sol owns all edits/review/verification.
+No deployment, commit, game control/probe or Tester Logs access. See the
+[cause, changed locations, limits and prioritized nonvisual procedure](Docs/features/navigation/index.md#kilika-detour-diagnostics-and-automatic-push-speech--november16).
+
 November16 late-run arrival follow-up on detached `4245b9d`: the user's supplied
 Entry door/Fire chamber log confirms failure after the 300–333ms settling phase;
 it does not reveal the preceding homing duration or exit branch. The original

@@ -39,7 +39,7 @@ unsigned tick() {
     pad::State input;autoWalkController(input);
     return (input.ly>0?1:0)|(input.ly<0?4:0)|(input.lx>0?8:0)|(input.lx<0?2:0);
 }
-unsigned pushes() {unsigned count=0;for(const auto& text:spoken) if(text==L"Pushing pedestal") ++count;return count;}
+unsigned pushes() {unsigned count=0;for(const auto& text:spoken) if(text.find(L"Pushing pedestal ")==0) ++count;return count;}
 void inputTraceChecks() {
     beginTrace({5,-10.008,133.4});inputDiagnostics.clear();
     const auto camera=base+0x1700000;write<uintptr_t>(address(0x1f11430),camera);

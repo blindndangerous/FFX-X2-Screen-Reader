@@ -381,6 +381,26 @@ int main(int argc,char**) {
     check(arrivals==depthArrivals && navLeg(leg) && !leg.arrived,"depth equality and matching X/Z cannot claim arrival");
     player.y=250.01; pump();
     check(arrivals==depthArrivals+1 && navLeg(leg) && leg.arrived,"depth crossing owns arrival speech/audio");
+    // Automatic pedestal approaches are internal push legs, not manual help
+    // requests. Their arrival and camera-cut producers must stay silent.
+    for(unsigned pushMode=0;pushMode<3;++pushMode) {
+        const bool pushing=pushMode==2;
+        resetNavAudio();autoWalk=pushMode!=0;player={5,0,5};
+        target={};target.name=L"Pedestal";target.pushControl=2;target.worker=6;
+        sceneFacts.pedestal={};sceneFacts.pedestal.armed=sceneFacts.pedestal.held=pushing;
+        sceneFacts.pedestal.epoch=epoch;sceneFacts.pedestal.worker=6;sceneFacts.pedestal.control=2;
+        target.position={45,0,5};fixtureRouteNavAudio({player,target.position},target);
+        const auto beforePushCut=said.size();
+        cameraForward={1,0,0};nativeOwner=true;captureNavCamera();
+        cameraForward={0,0,1};captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
+        if(pushing) check(said.size()==beforePushCut,"auto push camera cut cannot interrupt its per-leg speech");
+        sceneFacts.pedestal.armed=sceneFacts.pedestal.held=false;
+        const auto beforeArrival=said.size();player=target.position;pump();pump();
+        check(pushing?said.size()==beforeArrival:
+            said.size()==beforeArrival+1 && said.back()==L"Pedestal: route destination reached. Fixture push action",
+            "auto push arrival is silent; manual route keeps full pedestal help exactly once");
+    }
+    autoWalk=false;sceneFacts.pedestal={};
     concurrentLegFixture();
     // Actual production navLeg copy: long UTF16 label and complete competitors.
     Entity copiedTarget;copiedTarget.name=std::wstring(600,L'x');copiedTarget.actor=3;copiedTarget.worker=7;copiedTarget.id=0x5678;

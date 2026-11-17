@@ -143,6 +143,12 @@ void zoneFixtures() {
     const auto has=[&](const char* text) {return std::any_of(failure.begin(),failure.end(),[&](const std::string& row) {return row.find(text)!=std::string::npos;});};
     check(has("player-floor=0 component=0") && has("zone-polygon=2 component=1") && has("active-obstacles=0"),
         "failed-zone diagnostics distinguish the player component from disconnected target polygons and show obstacles");
+    const auto detour=interactionRouteDiagnostics(counter,player,target,{},
+        {player,{1,0,-20},{12,0,-20},target.position});
+    const auto detourHas=[&](const char* text) {return std::any_of(detour.begin(),detour.end(),[&](const std::string& row) {return row.find(text)!=std::string::npos;});};
+    check(detourHas("interaction-route-detour") && detourHas("route-waypoint=3") &&
+        detourHas("blocker=floor-or-height-gap") && detourHas("gap=8.000,0.000,5.000") && detourHas("floor=2 component=1"),
+        "detour dump retains every waypoint, floor components and exact first uncovered straight-line interval");
     zone.range=5; zone.center.y=100; check(interactionRoute(counter,player,zone).empty(),"talk height excludes a separate floor");
     zone.center.y=0; zone.height=-1;
     check(!inInteractionZone(zone,{12,6,5}),"negative circular height uses native three-dimensional range");
@@ -233,6 +239,31 @@ void zoneFixtures() {
     zone.center.y=0; check(interactionRoute(water,{1,-50,1},zone).empty(),"free swimming cannot route to ship-deck interactions at another height");
     zone.valid=false; check(interactionRoute(counter,player,zone).empty(),"unresolved geometry never manufactures an interaction destination");
     contactPedestalFixtures(room);
+    {
+        Entity diagnosticTarget;diagnosticTarget.position=diagnosticTarget.zone.center={20,0,10};
+        diagnosticTarget.zone.valid=true;diagnosticTarget.zone.shape=1;diagnosticTarget.zone.range=2;diagnosticTarget.zone.height=5;
+        const Point start{10,0,10};
+        check(interactionRouteDiagnostics(room,start,diagnosticTarget,{}, {start,{7,0,10},diagnosticTarget.position}).empty(),
+            "detour threshold is strict at straight plus six units");
+        check(!interactionRouteDiagnostics(room,start,diagnosticTarget,{}, {start,{6.99,0,10},diagnosticTarget.position}).empty(),
+            "additive detour threshold fires below twice the straight distance");
+        diagnosticTarget.position=diagnosticTarget.zone.center={12,0,10};
+        check(interactionRouteDiagnostics(room,start,diagnosticTarget,{}, {start,{9,0,10},diagnosticTarget.position}).empty(),
+            "detour threshold is strict at twice the straight distance");
+        Entity obstacle;obstacle.pushControl=2;obstacle.worker=6;obstacle.zone.valid=true;
+        obstacle.zone.center=obstacle.position={11,0,10};obstacle.zone.contactRadius=7;
+        Entity reset;reset.name=L"Pedestal reset tile";reset.worker=34;reset.zone.center={1,0,1};
+        for(bool inactive:{false,true}) {
+            obstacle.inactive=inactive;diagnosticTarget.zone.obstacle={1,0,1};diagnosticTarget.zone.obstacleRadius=7;
+            const auto rows=interactionRouteDiagnostics(room,start,diagnosticTarget,{obstacle,reset}, {start,{8.99,0,10},diagnosticTarget.position});
+            const auto contains=[&](const char* s) {return std::any_of(rows.begin(),rows.end(),[&](const std::string& row) {return row.find(s)!=std::string::npos;});};
+            check(contains(inactive?"source=inactive active=0":"source=live-pedestal active=1") &&
+                contains("source=reset-spot active=0") && contains("copied-obstacle=1.000,0.000,1.000") &&
+                contains(inactive?"active-obstacles=0":"active-obstacles=1"),
+                "ratio threshold records active/inactive pedestal, nonblocking reset spot and retired copied keepout");
+            if(!inactive) check(contains("+pedestal-keepout"),"straight-line diagnostic identifies active pedestal blockage");
+        }
+    }
     // Synthetic connected slope/pocket; target and completed-actor positions
     // come from retained klyt1000, not a captured live floor or player pose.
     Mesh lower;

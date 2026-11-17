@@ -215,6 +215,11 @@ void pathfind(const Pending& event,bool assist=false) {
         if(target.zone.valid) for(const auto& row:interactionRouteDiagnostics(s.mesh,player,target,s.entities)) recordLog("%s",row.c_str());
         resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;
     }
+    const auto diagnostic=interactionRouteDiagnostics(s.mesh,player,target,s.entities,points);
+    if(!diagnostic.empty()) {
+        recordLog("route-detour request=%u epoch=%u collision=%u data-age-ms=%llu",event.query.serial,s.observation.epoch,s.observation.collisionSerial,GetTickCount64()-s.observation.capturedAt);
+        for(const auto& row:diagnostic) recordLog("%s",row.c_str());
+    }
     routeNavAudio(points,target,setting(Setting::AutoWalk) && !target.inactive);
     if(!assist && target.inactive && setting(Setting::AutoWalk)) {
         recordLog("auto walk refused: destination inactive worker=%d id=%u",target.worker,target.id);

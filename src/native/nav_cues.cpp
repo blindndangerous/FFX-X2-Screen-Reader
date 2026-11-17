@@ -62,12 +62,13 @@ struct State {
     Point player;
     unsigned epoch=0,revision=0,routeEpoch=0,audioContext=0,collisionSerial=0,routeCollisionSerial=0;
     nav::CollisionSnapshot copiedCollision,routeCollision;
-    bool arrived=false,allowed=false,ready=false;
+    bool arrived=false,allowed=false,ready=false,automaticPush=false;
     // Consecutive observations without the route's destination, and when the
     // first of them was captured.
     unsigned missing=0,arrivalSerial=0;ULONGLONG missingSince=0;
     speechq::Header header{};
     nav::CopiedCamera camera;
+    PedestalNavigationState push;
 } ;
 ProcessStorage<State> state;
 State& owned() {return state.get();}
@@ -112,11 +113,17 @@ bool sameTarget(const Entity& a,const Entity& b) {
     return equal && a.swimReady==b.swimReady && std::abs(a.swimClearance-b.swimClearance)<.1 && a.swimApproach==b.swimApproach &&
         a.inactive==b.inactive && distanceXZ(a.position,b.position)<.1 && std::abs(a.position.y-b.position.y)<.1;
 }
+bool ownsAutomaticPush(const Entity& target) {
+    const auto& push=owned().push;
+    return push.armed && push.held && push.epoch==owned().epoch && push.control>=1 && push.control<=2 &&
+        push.control==target.pushControl && push.worker==target.worker && push.id==target.id && push.local==target.pushLocal;
+}
 void setRoute(const std::vector<Point>& points,const Entity& target,bool newRoute=false,bool assisted=false) {
     reconcile();auto& s=owned();s.epoch=generation();s.legs=points;s.nextLeg=1;s.routeEpoch=s.epoch;s.arrived=false;s.missing=0;
     s.arrivalRoute.clear();s.arrivalNext=1;s.arrivalRouted=false;
     s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;
     s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();
+    if(newRoute) s.automaticPush=assisted && ownsAutomaticPush(target);
     const bool confirm=(newRoute?assisted:s.arrivalSerial!=0) && target.zone.valid && target.zone.talk && !target.zone.crossing && !target.pushControl && !target.butterfly && !target.swimDepth && !target.swimApproach;
     s.arrivalSerial=confirm?(++nextArrivalSerial?nextArrivalSerial:++nextArrivalSerial):0;
     publishLeg();
@@ -173,7 +180,7 @@ void advance() {
     if(!current()) return;
     publishLeg();publishNavAudio(audio);
     if(s.arrived && s.routeEpoch && (!s.arrivalSerial || navArrivalConfirmation.load(std::memory_order_acquire)==s.arrivalSerial)) {
-        emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
+        if(!s.automaticPush) emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
         if(setting(Setting::Beacon) && setting(Setting::Arrival)) navAudioArrival();s.routeEpoch=0;
     }
 }
@@ -200,7 +207,7 @@ void process(const speechq::Header& header,const std::wstring& bytes) {
             s.routeEpoch!=s.epoch || s.arrived || s.nextLeg>=s.legs.size()) return;
         s.camera=cut.camera;s.header=header;
         const auto goal=s.legs[s.nextLeg];const Point delta{goal.x-s.player.x,0,goal.z-s.player.z};
-        if(distanceXZ(s.player,goal)>.1) emit(L"Route to "+s.destination+L": "+routeSegmentText(distanceXZ(s.player,goal)/11.13,
+        if(!s.automaticPush && distanceXZ(s.player,goal)>.1) emit(L"Route to "+s.destination+L": "+routeSegmentText(distanceXZ(s.player,goal)/11.13,
             cameraDirectionLabel(delta,s.camera.forward,s.camera.valid),setting(Setting::PartialSteps)!=0),"navigation-camera-cut");
         return;
     }
@@ -290,6 +297,10 @@ void updateOwnedNavAudio(const nav::Scene& observation,const Mesh& mesh,const st
     if(observation.collisionSerial!=navCollisionSerial()) {nav::requestNavigationScene();return;}
     if(nativeGameThread()) return;preparationOwner.store(GetCurrentThreadId(),std::memory_order_release);reconcile();auto& s=owned();s.epoch=observation.epoch;s.revision=clearRevision.load(std::memory_order_acquire);s.player=observation.player;s.audioContext=observation.audioContext;s.allowed=observation.allowed;s.ready=true;s.header=header;s.pedestal=pedestal;
     s.collisionSerial=observation.collisionSerial;s.copiedCollision=observation.geometry.collision;
+    s.push=observation.pedestal;
+    // Keep silence through the final native completion/late arrival snapshot.
+    // A newly requested route resets the latch, including manual socket routes.
+    if(s.routeEpoch==s.epoch && ownsAutomaticPush(s.target)) s.automaticPush=true;
     s.collision=mesh;s.live=targets;s.camera={observation.forward,observation.right,observation.cameraValid};nav::CameraScope camera(observation.forward,observation.right,observation.cameraValid);
     finishConfirmedArrival();
     if(s.routeEpoch==s.epoch) {

@@ -6,6 +6,7 @@
 #include "auto_walk.hpp"
 #include "nav_audio.hpp"
 #include "movement_keys.hpp"
+#include "camera_direction.hpp"
 #include "settings.hpp"
 #include "mod_menu.hpp"
 #include "utilities.hpp"
@@ -90,7 +91,12 @@ void inject(unsigned bits) {
 }
 void announcePush() {
     if(active.announcedSegment==active.segment) return;
-    active.announcedSegment=active.segment;output(L"Pushing pedestal",false,"pedestal-push");
+    active.announcedSegment=active.segment;
+    const auto goal=active.plan.moves[active.segment].goal;
+    Point forward,right;const bool cameraValid=cameraBasis(forward,right);
+    const auto bearing=cameraDirectionLabel({goal.x-active.target.position.x,0,goal.z-active.target.position.z},forward,cameraValid);
+    wchar_t text[64]{};swprintf_s(text,L"Pushing pedestal %s",bearing);
+    output(text,false,"pedestal-push");
 }
 void stop(const char* reason,bool announce=false) {
     if(published) suppress(published);
@@ -517,7 +523,6 @@ void updatePedestalInput() {
             freshTarget(snapshot.position);
             active.target.zone.valid=false;
             active.waitingShape=true;
-            requestNavigationAssistInstruction();
         }
         if(active.owned) {
             const auto worker=utilityWorker(active.script,active.plan.producer);
@@ -551,7 +556,13 @@ void updatePedestalInput() {
                     if(next.held && pedestalLogicalInput(bits)!=next.held) valid=false;
                     directions[index++]=bits;
                 }
-                if(valid) {active.plan=live;active.segment=0;active.directions=directions;}
+                if(valid) {
+                    // Rebasing the unfinished plan renumbers the current leg;
+                    // it does not start a new spoken leg after a short push.
+                    const bool announced=active.announcedSegment==active.segment;
+                    active.plan=live;active.segment=0;active.directions=directions;
+                    active.announcedSegment=announced?0:~0u;
+                }
             }
             // Walk back to the push side and in again: the original script
             // starts a push only on a fresh contact.

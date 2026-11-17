@@ -157,7 +157,8 @@ bool requestNavigationAssistRoute() {
 #endif
     return true;
 }
-void requestNavigationAssistInstruction() {}
+unsigned automaticHelpRequests=0;
+void requestNavigationAssistInstruction() {++automaticHelpRequests;}
 unsigned pathQueries=0;
 namespace nav {void requestNavigationScene() {}
 bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {if(query==Query::Path || query==Query::SilentPath) ++pathQueries;return true;}}
@@ -441,7 +442,7 @@ void kilikaWalkFixtures() {
         refreshTargetZone(centre,worker(6),1);
         check(centre.zone.approach.z==-1 && !inInteractionZone(centre.zone,{48.12,-10,166.5}),
             "Kilika third-leg live contact refresh keeps the south centre line");
-        const auto countPush=[] {unsigned count=0;for(const auto& text:spoken) if(text==L"Pushing pedestal") ++count;return count;};
+        const auto countPush=[] {unsigned count=0;for(const auto& text:spoken) if(text==L"Pushing pedestal north") ++count;return count;};
         const auto said=countPush();position(playerActor(),{56,-10,170});disable(6,4,0x274b);restore();
         refreshTargetZone(centre,worker(6),1);OwnedNavTarget copied{};captureOwnedNavTarget(centre,copied);updatePedestalOwnedTarget(copied.native);
         position(playerActor(),{50,-10,165.75});frame(0);
@@ -787,7 +788,8 @@ int main() {
     // ending consent or doing pathfinding itself. The shape is admitted later.
     target=setup(1,7,{-30,40,-65.6});values[0x5c0000cc]=1;ready(target);
     position(read<uintptr_t>(worker(7)+0x9c),{-14.411718,40,-65.6});
-    const auto requestsBefore=routeRequests;delayRoute=true;frame();
+    const auto requestsBefore=routeRequests,helpBefore=automaticHelpRequests;delayRoute=true;frame();
+    check(automaticHelpRequests==helpBefore,"automatic turn never requests the full manual pedestal instructions");
     check(pedestalActivePlan(target,heldPlan) && heldPlan.moves.size()==1 && !walking && routeRequests==requestsBefore,"turn withholds assistance while a fresh copied shape is pending");
     frame();check(pedestalActivePlan(target,heldPlan),"pending geometry does not retire an otherwise owned held session");
     refreshTargetZone(target,worker(7),1);OwnedNavTarget nextTarget{};check(captureOwnedNavTarget(target,nextTarget),"fixture copied turn target");
@@ -798,6 +800,30 @@ int main() {
     nativeOwner=false;cancelPedestal();nativeOwner=true;
     check(!pedestalActivePlan(target,heldPlan),"foreign cancellation immediately retires consent without touching Native fields");frame(0);
     axialResetRouteFixture();liveResetContactFixture();boundedApproachFixtures();kilikaWalkFixtures();
+    // Drive the real session through the three observed native leg completions.
+    // This checks speech ownership, not simulated collision or push physics.
+    target=setup(2,6,{.2215,-10,144.1042});values[0x0c00005a]=2;fixtureForward={0,0,1};
+    refreshTargetZone(target,worker(6),1);armPedestal(target,true);
+    const auto helpAtStart=automaticHelpRequests;
+    for(unsigned leg=0;leg<3;++leg) {
+        refreshTargetZone(target,worker(6),1);
+        OwnedNavTarget copied;check(captureOwnedNavTarget(target,copied),"speech leg target copies");updatePedestalOwnedTarget(copied.native);
+        position(playerActor(),{target.position.x+target.zone.approach.x*(target.zone.contactRadius+.25),target.position.y,
+            target.position.z+target.zone.approach.z*(target.zone.contactRadius+.25)});
+        walking=false;frame(0);frame(0);
+        if(leg==1) {
+            disable(6,4,0x274b);restore();frame(0);
+            refreshTargetZone(target,worker(6),1);captureOwnedNavTarget(target,copied);updatePedestalOwnedTarget(copied.native);
+            walking=false;frame(0);frame(0);
+        }
+        PedestalPlan remaining;check(pedestalActivePlan(target,remaining) && !remaining.moves.empty(),"speech leg remains owned");
+        target.position=remaining.moves.front().goal;position(read<uintptr_t>(worker(6)+0x9c),target.position);
+        if(leg==2) values[0x0c000064]=1;
+        frame(0);
+    }
+    frame(0);
+    check(spoken==std::vector<std::wstring>{L"Pushing pedestal north",L"Pushing pedestal east",L"Pushing pedestal north",L"Pedestal push complete"} &&
+        automaticHelpRequests==helpAtStart,"three-leg auto push speaks only direction once per leg and one completion");
     std::puts("PASS: all-trial pedestal sides, Space push/native contact lifecycle, remaps and cancellation");
     return 0;
 }

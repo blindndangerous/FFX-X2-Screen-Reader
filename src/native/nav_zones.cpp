@@ -321,7 +321,10 @@ void avoidContactPedestals(Entity& e,const std::vector<Entity>& entities) {
 }
 bool inInteractionZone(const InteractionZone& zone,Point p) { return interactionEndpoint(zone,p,false); }
 bool inInteractionZone(const NativeInteractionZone& zone,Point p) { return zone.competing.count<=zone.competing.rows.size() && interactionEndpoint(zone,p,false); }
-std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point player,const Entity& target,const std::vector<Entity>& entities) {
+std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point player,const Entity& target,const std::vector<Entity>& entities,const std::vector<Point>& route) {
+    const double straight=distanceXZ(player,target.position);double length=0;
+    for(size_t i=1;i<route.size();++i) {nav::checkComputation();length+=distanceXZ(route[i-1],route[i]);}
+    if(!route.empty() && !(length>2*straight || length>straight+6)) return {};
     auto current=target;avoidContactPedestals(current,entities);const auto& zone=current.zone;
     std::vector<int> components(mesh.triangles.size(),-1),pending;
     int component=0;
@@ -342,7 +345,35 @@ std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point play
     const auto floor=findTriangle(mesh,player);
     const auto id=[&](int polygon) {return polygon>=0 && static_cast<size_t>(polygon)<components.size()?components[polygon]:-1;};
     std::vector<std::string> rows;char line[512];
-    std::snprintf(line,sizeof(line),"interaction-route-failure worker=%d player-floor=%d component=%d native-floor=%d player=%.3f,%.3f,%.3f floors=%zu components=%d events-ready=%u directed-events=%u",
+    if(!route.empty()) {
+        std::snprintf(line,sizeof(line),"interaction-route-detour worker=%d straight=%.3f route=%.3f destination=%.3f,%.3f,%.3f waypoints=%zu",
+            target.worker,straight,length,target.position.x,target.position.y,target.position.z,route.size());rows.emplace_back(line);
+        for(size_t i=0;i<route.size() && i<128;++i) {
+            nav::checkComputation();const auto p=route[i];const int polygon=findTriangle(mesh,p);
+            std::snprintf(line,sizeof(line),"route-waypoint=%zu point=%.3f,%.3f,%.3f floor=%d component=%d",i,p.x,p.y,p.z,polygon,id(polygon));rows.emplace_back(line);
+        }
+        if(route.size()>128) rows.emplace_back("route-waypoints truncated after 128; endpoint follows");
+        const auto endpoint=route.back();
+        std::snprintf(line,sizeof(line),"route-endpoint=%.3f,%.3f,%.3f inside-zone=%u copied-obstacle=%.3f,%.3f,%.3f copied-radius=%.3f",
+            endpoint.x,endpoint.y,endpoint.z,inInteractionZone(zone,endpoint)?1u:0u,target.zone.obstacle.x,target.zone.obstacle.y,target.zone.obstacle.z,target.zone.obstacleRadius);rows.emplace_back(line);
+        // Probe both the listed destination and the chosen interaction point.
+        // The production visibility clipper reports the first uncovered floor
+        // interval, rather than sampling across a narrow gap.
+        for(unsigned probe=0;probe<2;++probe) {
+            const auto goal=probe?endpoint:target.position;double covered=0;
+            const bool floorClear=routeLineClear(mesh,player,goal,covered),eventClear=routeSegmentAllowed(mesh,player,goal);
+            const Point gap{player.x+(goal.x-player.x)*covered,player.y+(goal.y-player.y)*covered,player.z+(goal.z-player.z)*covered};
+            const double radius=std::max(zone.contactRadius,zone.obstacleRadius);
+            auto obstacle=zone;if(!(zone.contactRadius>0)) {obstacle.center=zone.obstacle;obstacle.contactRadius=radius;}
+            const double separation=distanceXZ(onSegment(player,goal,obstacle.center),obstacle.center);
+            const bool keepClear=radius<=0 || clearsPedestal({player,goal},obstacle,radius+1.4);
+            const bool wideClear=radius<=0 || clearsPedestal({player,goal},obstacle,radius+3.4);
+            std::snprintf(line,sizeof(line),"straight-line to=%s blocker=%s%s floor-clear=%u event-clear=%u keepout-clear=%u wide-keepout-clear=%u closest-radius=%.3f gap=%.3f,%.3f,%.3f covered=%.6f goal-eligible=%u",
+                probe?"endpoint":"destination",!eventClear?"directed-event":!floorClear?"floor-or-height-gap":"none",
+                wideClear?"":"+pedestal-keepout",floorClear?1u:0u,eventClear?1u:0u,keepClear?1u:0u,wideClear?1u:0u,separation,gap.x,gap.y,gap.z,covered,inInteractionZone(zone,goal)?1u:0u);rows.emplace_back(line);
+        }
+    }
+    std::snprintf(line,sizeof(line),"interaction-route-context worker=%d player-floor=%d component=%d native-floor=%d player=%.3f,%.3f,%.3f floors=%zu components=%d events-ready=%u directed-events=%u",
         target.worker,floor,id(floor),mesh.playerTriangle,player.x,player.y,player.z,mesh.triangles.size(),component,mesh.events.ready,mesh.events.count);rows.emplace_back(line);
     std::snprintf(line,sizeof(line),"interaction-zone shape=%u center=%.3f,%.3f,%.3f range=%.3f height=%.3f width=%.3f depth=%.3f angle=%.3f competitors=%zu active-obstacles=%u obstacle=%.3f,%.3f,%.3f radius=%.3f",
         zone.shape,zone.center.x,zone.center.y,zone.center.z,zone.range,zone.height,zone.width,zone.depth,zone.angle,zone.competing.size(),zone.obstacleRadius>0?1u:0u,zone.obstacle.x,zone.obstacle.y,zone.obstacle.z,zone.obstacleRadius);rows.emplace_back(line);
@@ -360,12 +391,21 @@ std::vector<std::string> interactionRouteDiagnostics(const Mesh& mesh,Point play
             i,components[i],triangle.collision,triangle.collisionGroup,eligible?1u:0u,id(floor)>=0 && components[i]==id(floor)?1u:0u);rows.emplace_back(line);
     }
     std::snprintf(line,sizeof(line),"zone-polygons=%u shown=%u",goals,std::min(goals,64u));rows.emplace_back(line);
+    for(size_t i=0;i<zone.competing.size() && i<32;++i) {
+        nav::checkComputation();const auto& other=zone.competing[i];
+        std::snprintf(line,sizeof(line),"competing-zone worker=%d shape=%u center=%.3f,%.3f,%.3f range=%.3f width=%.3f depth=%.3f height=%.3f",
+            other.worker,other.shape,other.center.x,other.center.y,other.center.z,other.range,other.width,other.depth,other.height);rows.emplace_back(line);
+    }
+    if(zone.competing.size()>32) rows.emplace_back("competing-zones truncated after 32 rows");
     unsigned sources=0;
     for(const auto& pedestal:entities) {
-        nav::checkComputation();if(pedestal.pushControl<1 || pedestal.pushControl>2 || !pedestal.zone.valid || !(pedestal.zone.contactRadius>0)) continue;
+        nav::checkComputation();const bool reset=pedestal.name==L"Pedestal reset tile";
+        if(!reset && (pedestal.pushControl<1 || pedestal.pushControl>2)) continue;
         if(sources++>=16) continue;
-        std::snprintf(line,sizeof(line),"contact-pedestal worker=%d inactive=%u center=%.3f,%.3f,%.3f radius=%.3f min-y=%.3f max-y=%.3f",
-            pedestal.worker,pedestal.inactive?1u:0u,pedestal.zone.center.x,pedestal.zone.center.y,pedestal.zone.center.z,pedestal.zone.contactRadius,pedestal.zone.contactMinY,pedestal.zone.contactMaxY);rows.emplace_back(line);
+        const bool active=!reset && !pedestal.inactive && pedestal.zone.valid && pedestal.zone.contactRadius>0;
+        std::snprintf(line,sizeof(line),"contact-pedestal worker=%d source=%s active=%u inactive=%u valid=%u center=%.3f,%.3f,%.3f radius=%.3f keepout-radius=%.3f min-y=%.3f max-y=%.3f",
+            pedestal.worker,reset?"reset-spot":pedestal.inactive?"inactive":"live-pedestal",active?1u:0u,pedestal.inactive?1u:0u,pedestal.zone.valid?1u:0u,
+            pedestal.zone.center.x,pedestal.zone.center.y,pedestal.zone.center.z,pedestal.zone.contactRadius,pedestal.zone.obstacleRadius,pedestal.zone.contactMinY,pedestal.zone.contactMaxY);rows.emplace_back(line);
     }
     if(sources>16) rows.emplace_back("contact-pedestals truncated after 16 rows");
     return rows;
