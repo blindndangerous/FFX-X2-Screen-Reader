@@ -1,5 +1,9 @@
 # FFX current memory — November17
 
+November 21: FFX-2 work sits on master behind `FFX2_SUPPORT` (default 0;
+`build_dinput8.bat --ffx2` or `--ffx2-experimental`). Without it FFX-2.exe
+gets no game hook. See [the gate note](Docs/gameArchitecture.md).
+
 [FFX-2 main-story offline work](Docs/ffx2-addresses.md) in `feat/ffx2-menus`
 keeps game launch, debugger attachment, deployment, Steam writes, push and PRs
 prohibited for this task. F8/F11 and the existing top-menu hook remain the live

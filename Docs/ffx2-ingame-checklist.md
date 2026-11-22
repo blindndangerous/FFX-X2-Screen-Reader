@@ -136,8 +136,8 @@ Do not infer a pass from a log or a normal game sound.
 ## Experimental Config build (`FFX2_EXPERIMENTAL_CONFIG=1`)
 
 Run these only with a test build compiled with that flag; the ordinary build
-must keep item 23 (no Config speech). Build it by adding
-`/DFFX2_EXPERIMENTAL_CONFIG=1` to the DLL compile line. Use the main story, English text, and
+must keep item 23 (no Config speech). Build it with
+`src\proxy\build_dinput8.bat --ffx2-experimental`. Use the main story, English text, and
 restore every setting you change before leaving Config. Speech interrupts the
 previous menu line. Entering Config speaks nothing until the first move; that
 is a known gap, not a failure.

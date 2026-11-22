@@ -4,12 +4,17 @@ set "PROXY_DIR=%~dp0"
 set "REPO_ROOT=%~dp0..\.."
 set "DEV_DEFINE=/DFFX_DEV_UTILITIES"
 set "DO_DEPLOY="
+set "FFX2_DEFINE="
 :arguments
 if "%~1"=="" goto configured
 if /I "%~1"=="--deploy" set "DO_DEPLOY=1"
 rem --no-deploy is accepted and ignored: deploying is opt-in.
 if /I "%~1"=="--release" set "DEV_DEFINE="
 if /I "%~1"=="--test-build" set "DEV_DEFINE="
+rem FFX-2 support is off by default. --ffx2 enables the FFX-2.exe path;
+rem --ffx2-experimental also enables the unverified field text and Config readers.
+if /I "%~1"=="--ffx2" set "FFX2_DEFINE=/DFFX2_SUPPORT=1"
+if /I "%~1"=="--ffx2-experimental" set "FFX2_DEFINE=/DFFX2_SUPPORT=1 /DFFX2_EXPERIMENTAL_FIELD_TEXT=1 /DFFX2_EXPERIMENTAL_CONFIG=1"
 shift /1
 goto arguments
 :configured
@@ -35,7 +40,7 @@ if not "%BUILD_RC%"=="0" exit /b %BUILD_RC%
 rc /nologo /fo "%REPO_ROOT%\install\native\version.res" "%PROXY_DIR%version.rc"
 if errorlevel 1 exit /b 1
 pushd "%REPO_ROOT%\install\native"
-cl /nologo /W4 /O2 /std:c++17 /EHa /MT /LD %DEV_DEFINE% /I"%HOOK_ROOT%\include" /I"%SDL3_SOURCE%\include" /Fe:dinput8.dll "%PROXY_DIR%dinput8_proxy.cpp" "%PROXY_DIR%..\native\*.cpp" audio_assets.res version.res /link /MAP:dinput8.map /DEF:"%PROXY_DIR%dinput8.def" "%HOOK_ROOT%\bin\MinHook.x86.lib" user32.lib gdi32.lib dxguid.lib advapi32.lib
+cl /nologo /W4 /O2 /std:c++17 /EHa /MT /LD %DEV_DEFINE% %FFX2_DEFINE% /I"%HOOK_ROOT%\include" /I"%SDL3_SOURCE%\include" /Fe:dinput8.dll "%PROXY_DIR%dinput8_proxy.cpp" "%PROXY_DIR%..\native\*.cpp" audio_assets.res version.res /link /MAP:dinput8.map /DEF:"%PROXY_DIR%dinput8.def" "%HOOK_ROOT%\bin\MinHook.x86.lib" user32.lib gdi32.lib dxguid.lib advapi32.lib
 set "BUILD_RC=%ERRORLEVEL%"
 popd
 if not "%BUILD_RC%"=="0" exit /b %BUILD_RC%

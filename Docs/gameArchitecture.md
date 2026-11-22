@@ -1,5 +1,11 @@
 ## FFX-2 main-story checkpoint
 
+November 21. FFX-2 support is off by default. The ordinary build treats
+FFX-2.exe as an unverified executable and installs no game hook, so FFX and
+FFX-2 behave as before. `src\proxy\build_dinput8.bat --ffx2` defines
+`FFX2_SUPPORT=1` and enables the FFX-2 path below. `--ffx2-experimental` also
+defines `FFX2_EXPERIMENTAL_FIELD_TEXT=1` and `FFX2_EXPERIMENTAL_CONFIG=1`.
+
 November 15. The existing FFX-2 input/top-menu scope captures the 310-byte English charset
 and terminated help bytes on the native owner. The speech preparation worker
 owns charset parsing, decoding, formatting and logging; capture refusal drops

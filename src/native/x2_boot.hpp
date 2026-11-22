@@ -1,6 +1,12 @@
 #pragma once
 #include "ffx2_menu_snapshot.hpp"
 #include <cstdint>
+// FFX-2 support is off by default. Without FFX2_SUPPORT=1 the DLL treats
+// FFX-2.exe like any other unverified executable and installs no game hook.
+// build_dinput8.bat --ffx2 sets it.
+#ifndef FFX2_SUPPORT
+#define FFX2_SUPPORT 0
+#endif
 namespace ffx {
 // FFX-2 boot: the hash matched Steam FFX-2.exe. Logs and queues one startup
 // line on the bootstrap worker. Installs no hook and reads no game memory.
