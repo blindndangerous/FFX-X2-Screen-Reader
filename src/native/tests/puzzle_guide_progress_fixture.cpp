@@ -145,6 +145,8 @@ int main() {
         check(std::wstring(puzzleGuideWaitText(true)).find(L"Press Enter to close the message")!=std::wstring::npos &&
             std::wstring(puzzleGuideWaitText(false)).find(L"Wait for the current scene")!=std::wstring::npos,
             "guide distinguishes an open message from native scene ownership");
+        check(puzzleGuideWaitText(true,L"South face")==L"Press South face to close the message, then ask again.",
+            "controller guide names the game's Confirm binding for an open message");
     }
     PuzzleProgress p;
     check(expected(p)==0,"fresh trial expects the first step");

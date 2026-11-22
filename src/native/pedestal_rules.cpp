@@ -1,6 +1,7 @@
 // Original trial script rules. This module neither changes state nor requests scripts.
 #include "pedestal.hpp"
 #include "nav_format.hpp"
+#include "hotkey_names.hpp"
 #include <cmath>
 namespace ffx {
 namespace {
@@ -97,8 +98,8 @@ PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot
         if(!plan.complete) move(plan,{p.x+(local<46?-1:1),p.y,p.z},0,PushMode::Single);
         break;
     case 7:
-        if(p.z<0) {
-            plan.producer=39; plan.entry=6;
+        if(bevelleEntrance(control,p)) {
+            plan.producer=39; plan.entry=6; plan.walkConsent=true;
             move(plan,{p.x,p.y,p.z+23},0x1000,PushMode::Crossing);
         } else {
             plan.phase=1; plan.producer=38; plan.entry=15;
@@ -106,6 +107,9 @@ PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot
             if(plan.complete) break;
             if(s.get(0x0c000029)!=1 || (s.get(0x0c00001f)!=1 && s.get(0x0c000020)!=1) || s.get(0x0c000024))
                 plan.blocked=L"Power the optional upper-platform recess and finish the current rail ride first.";
+            // W38 E14 at stop 14 (x 90.1) is empty: the pedestal cannot be
+            // boarded there. W53 calls it to stop 15 (x -18.7), boarded with Left (E15).
+            else if(p.x>40) plan.blocked=L"This pedestal cannot be pushed from here. Walk into the Rail pedestal call point to call it to the upper platform stop, then board it there.";
             else move(plan,{p.x,p.y,203.59248},0x8000,PushMode::Scripted);
         }
         break;
@@ -128,14 +132,20 @@ std::wstring describePedestalPlan(const PedestalPlan& plan,Point position,const 
     }
     if(parts.empty()) return L"The pedestal is in position.";
     const bool single=plan.moves.front().mode==PushMode::Single;
+    const auto route=modKeyName(ModKey::Route);
     // A single push is one Confirm press; the original script then plays a
     // fixed animation. Name the button first, then where the pedestal goes.
+    if(plan.moves.front().mode==PushMode::Crossing)
+        return L"Push "+join(parts,L", then ")+L". With Auto walk on, select the Rail pedestal and press "+route+L" to launch the entrance push.";
     if(plan.walkConsent) return L"Push "+join(parts,L", then ")+L". Walk into the pedestal from the push side and keep moving in the push direction. "
-        L"Do not press "+action+L" at the pedestal: that opens its sphere prompt. With Auto walk on, select the Pedestal and press backslash: "
+        L"Do not press "+action+L" at the pedestal: that opens its sphere prompt. With Auto walk on, select the Pedestal and press "+route+L": "
         L"the walk goes to the push side and pushes. Any movement key stops it.";
-    if(single) return L"Press "+action+L" once. The pedestal then moves "+join(parts,L", then ")+L". With Auto walk on, hold "+action+L" to push into position.";
-    return L"Push "+join(parts,L", then ")+L". "+(single?L"Press "+action+L" once. ":L"Hold "+action+L" and move in the announced direction. ")+
-        L"With Auto walk on, hold "+action+L" to push into position.";
+    if(single) return L"Press "+action+L" once. The pedestal then moves "+join(parts,L", then ")+L".";
+    // In game (Macalania, 2026-11-19): after Auto walk reaches the push side,
+    // the mod adds the direction while the key is held, and a direction key
+    // cancels that assistance.
+    return L"Push "+join(parts,L", then ")+L". With Auto walk on, select the Pedestal, press "+route+L", then hold "+action+
+        L" only: the mod adds the direction. Without Auto walk, hold "+action+L" and the announced direction together.";
 }
 std::wstring pedestalStepText(const PedestalPlan& plan,bool stepDone,bool gapStep) {
     if(stepDone) return {};

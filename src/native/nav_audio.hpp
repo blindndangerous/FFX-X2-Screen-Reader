@@ -19,10 +19,15 @@ inline bool claimNavRouteStopSpeech() noexcept {return !navRouteStopReported.exc
 // Native publishes only the settled ordinary-interaction route token. The
 // preparation owner checks it before emitting arrival speech and audio.
 inline std::atomic<unsigned> navArrivalConfirmation{0};
+// Native pedestal push sets this after it speaks a push direction and clears it
+// when the push stops; while set, the push re-speaks its own direction on a
+// camera cut and the general field camera cue stays quiet.
+inline std::atomic<bool> pedestalPushOwnsCamera{false};
 struct NavAudioState {unsigned contextSerial=navAudioContextSerial(); float pan=0,front=1,steps=0; unsigned walls=0; bool beacon=false,active=false; };
 struct NavLeg { Point start,goal,final; NativeRouteTarget target; unsigned epoch=0; bool arrived=false;
     unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false;unsigned arrivalSerial=0;
-    Point arrivalInside;bool arrivalUnreachable=false; };
+    Point arrivalInside;bool arrivalUnreachable=false;
+    unsigned panelRevision=0,panelSample=0;ULONGLONG panelCapturedAt=0;double panelCorridor=0; };
 bool navLeg(NavLeg&);
 void publishNavAudio(const NavAudioState&);
 void pauseNavAudio();
@@ -48,6 +53,9 @@ void resetNavAudio();
 void clearNavRoute();
 void loseNavRoute(const wchar_t* reason);
 void captureNavCamera();
+// Preparation owner only: the target whose direction was just spoken, so a
+// later field camera cut can say where it now is.
+void noteNavCameraTarget(const Entity&);
 void refreshNavCollision();
 bool navRouteKnown();
 void refreshSelectedBeacon();

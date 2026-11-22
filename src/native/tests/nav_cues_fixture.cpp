@@ -1,5 +1,6 @@
 #include "fixture_runtime.hpp"
 #include "../nav_audio.hpp"
+#include "../floor_panels.hpp"
 #include "../navigation_scene.hpp"
 #include "../navigation_observations.hpp"
 #include "../settings.hpp"
@@ -181,6 +182,47 @@ void feedbackFixtures() {
     const auto noRoutePreviews=previewStops;loseNavRoute(L"destination gone");
     check(previewStops==noRoutePreviews+1 && said.empty(),"already retired route still performs cleanup without another announcement");
 }
+// Field camera cuts without a route: a short cue, plus the last spoken target's
+// new camera-relative direction. Gated like the route hint.
+void cutWithoutRoute() {
+    nativeOwner=true;cameraForward={0,0,1};captureNavCamera();cameraForward={1,0,0};captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
+}
+void cameraCueFixtures() {
+    resetNavAudio();++epoch;player={0,0,0};
+    Entity chest;chest.name=L"Chest";chest.worker=9;chest.id=4;chest.position={0,0,20};fixtureTarget=chest;pump();said.clear();
+    cutWithoutRoute();
+    check(said==std::vector<std::wstring>{L"Camera changed."},"cut without a route or spoken target says only Camera changed");
+    nativeOwner=true;captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
+    check(said.size()==1,"unchanged camera outside a route stays quiet");
+    for(unsigned i=1;i<=12;++i) {
+        const auto angle=i*10*3.14159265358979323846/180;cameraForward={std::cos(angle),0,std::sin(angle)};
+        nativeOwner=true;captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
+    }
+    check(said.size()==1,"slow pan outside a route never counts as a cut");
+    noteNavCameraTarget(chest);said.clear();cutWithoutRoute();
+    check(said==std::vector<std::wstring>{L"Camera changed. Chest now west."},"cut names the last spoken target from the new camera");
+    chest.position={20,0,0};fixtureTarget=chest;pump();said.clear();cutWithoutRoute();
+    check(said==std::vector<std::wstring>{L"Camera changed. Chest now north."},"cut uses the target's current observed position");
+    player=chest.position;said.clear();cutWithoutRoute();player={0,0,0};
+    check(said==std::vector<std::wstring>{L"Camera changed."},"a target at the player position adds no direction");
+    said.clear();
+    for(unsigned gate=0;gate<5;++gate) {
+        if(gate==0) battle=true;if(gate==1) menu=true;if(gate==2) dialogue=1;if(gate==3) focused=false;
+        if(gate==4) pedestalPushOwnsCamera=true;
+        cutWithoutRoute();
+        battle=menu=false;dialogue=0;focused=true;pedestalPushOwnsCamera=false;
+        nativeOwner=true;captureNavCamera();nativeOwner=false;drainSpeechDomainsForTest();
+    }
+    check(said.empty(),"battle, menus, dialogue, focus loss and a running pedestal push keep the field camera cue quiet");
+    Entity goal;goal.name=L"Camera goal";goal.worker=3;goal.id=21;goal.position={45,0,5};
+    fixtureRouteNavAudio({player,goal.position},goal);said.clear();cutWithoutRoute();
+    check(said.size()==1 && said.back().find(L"Route to Camera goal: ")==0,"an active route keeps its own hint instead of the short cue");
+    resetNavAudio();pump();said.clear();cutWithoutRoute();
+    check(said==std::vector<std::wstring>{L"Camera changed. Camera goal now north."},"a cleared route falls back to the cue with its last target");
+    ++epoch;pump();said.clear();cutWithoutRoute();
+    check(said==std::vector<std::wstring>{L"Camera changed."},"a room change forgets the spoken target");
+    resetNavAudio();
+}
 void dynamicGateFixtures() {
     // Connected two-row floor: the middle lower cell is a native mutable gate.
     // Closing it leaves a real detour through the upper row, with a fixed goal.
@@ -253,7 +295,20 @@ int main(int argc,char**) {
     // Match installNavigation's bootstrap ownership setup. Retired containers
     // remain held by the fixture's prepared pools; no native-side destruction.
     prepareNavRetirement();
-    if(argc==1) dynamicGateFixtures();
+    if(argc==1) {
+        fixtureFloor.openPlane=true;player={0,0,0};
+        auto& panels=fixtureFloor.panels;
+        panels.required=panels.ready=true;panels.chunk=1;panels.serial=1;panels.epoch=epoch;
+        panels.revision=floorPanelRevision.load();panels.capturedAt=GetTickCount64();panels.radius=2;
+        Entity destination;destination.name=L"Floor panel";destination.position={20,0,0};
+        fixtureRouteNavAudio({player,destination.position},destination);
+        NavLeg leg;check(navLeg(leg),"initial clear panel leg");
+        panels.rows[0]={{10,0,0},1,0,2,2,12};panels.active=1;
+        pump();
+        check(!navLeg(leg) && !said.empty() && said.back().find(L"panel")!=std::wstring::npos,
+            "activation retires steering and speaks before the newly forbidden crossing");
+        fixtureFloor={};fixtureTarget={};clearNavRoute();dynamicGateFixtures();
+    }
     Triangle a; a.valid=true; a.points[0]={0,0,0}; a.points[1]={100,0,0}; a.points[2]={0,0,100};
     a.vertices[0]=0; a.vertices[1]=1; a.vertices[2]=2; for(auto& n:a.neighbours)n=-1;
     fixtureFloor.triangles={a}; player={5,0,5}; pump();
@@ -460,5 +515,6 @@ int main(int argc,char**) {
     navArrivalConfirmation.store(goneSerial);pump();
     check(said.size()==beforeUnconfirmedGone+1 && said.back()==L"Route lost: destination gone",
         "an unconfirmed disappearance reports one failure and rejects a later native confirmation");
+    cameraCueFixtures();
     puts("PASS: event-driven route legs, strict endpoints, moving targets, butterfly hazard deltas, depth transitions, route loss, focus and teardown.");
 }

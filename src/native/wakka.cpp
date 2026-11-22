@@ -6,6 +6,7 @@
 #include "nav_audio.hpp"
 #include "utilities.hpp"
 #include "controller.hpp"
+#include "input_device.hpp"
 #include "native_image.hpp"
 #include "ready_game_text.hpp"
 #include <atomic>
@@ -333,7 +334,8 @@ void wakkaMenuKey(unsigned vk) {
         if(!applyMatch(selectedWindow,symbols[row])) { dismissed=true; releaseMenu(true); return; }
         releaseMenu(true);commitTextPlan(p);return;
     } else if(vk=='I' || vk=='N' || vk=='O') {
-        output(L"Up and Down choose a match. Enter or Space applies it. On a controller, use A. Escape or B returns to manual reels.",true,WakkaChoiceProducer); return;
+        output(nativeInputUsesController()?L"D-pad up and down choose a match. South face applies it. East face returns to manual reels.":
+            L"Up and Down choose a match. Enter or Space applies it. On a controller, use A. Escape or B returns to manual reels.",true,WakkaChoiceProducer); return;
     } else return;
     announce();
 }

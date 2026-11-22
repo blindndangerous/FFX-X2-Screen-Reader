@@ -1,6 +1,7 @@
 #pragma once
 #include "puzzle_guide.hpp"
 #include <cstdint>
+#include <string>
 #include <cmath>
 namespace ffx {
 // Reset PC 2FB2 and the verified three-leg corridor identify worker 6 after
@@ -11,8 +12,10 @@ inline bool kilikaResetReached(Point pedestal) {
         (std::abs(pedestal.z-170)<1 && pedestal.x>=-.7784799933 && pedestal.x<=51.0109901428) ||
         (std::abs(pedestal.x-50.0109901428)<1 && pedestal.z>=169 && pedestal.z<=199.2762908936);
 }
-inline const wchar_t* puzzleGuideWaitText(bool message) {
-    return message?L"Press Enter to close the message, then ask again.":L"Wait for the current scene or push to finish, then ask again.";
+// confirm names the game's Confirm binding on a controller; the keyboard text
+// keeps Enter.
+inline std::wstring puzzleGuideWaitText(bool message,const std::wstring& confirm=L"Enter") {
+    return message?L"Press "+confirm+L" to close the message, then ask again.":L"Wait for the current scene or push to finish, then ask again.";
 }
 // A checked step whose done binding no other checked step shares records one
 // placement (a glyph touched, a sphere put in a recess or pedestal). Steps

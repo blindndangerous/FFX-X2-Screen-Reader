@@ -5,6 +5,7 @@
 #include "../events.hpp"
 #include "test_copied_controls.hpp"
 #include "../controller.hpp"
+#include "../hotkey_names.hpp"
 #include "../settings.hpp"
 #include "../speech_backends.hpp"
 #include "../mod_menu.hpp"
@@ -203,6 +204,27 @@ int main() {
     fixtureEsc=true;check(contextHelpForTest().find(L"Menu keys: I")==0,"Shift+Slash lists Escape menu keys");fixtureEsc=false;
     scene=6;check(contextHelpForTest().find(L"Menu keys: I")==0,"Shift+Slash lists native menu keys");scene=0;
     fixtureBattle=true;check(contextHelpForTest().find(L"Battle keys: T")==0,"Shift+Slash lists battle keys");fixtureBattle=false;
+    // A controller as the last used device switches mod key names to the saved bindings.
+    inputDeviceMark.store(1);
+    check(contextHelpForTest()==L"Field controls: D-pad left previous destination, D-pad right next destination, D-pad up previous category, "
+        L"D-pad down next category, Right trigger routes, Left stick click beacon, Right stick click unreachable filter, View, then West face gil, "
+        L"View, then North face map name, View, then Menu or Start mod menu.","controller Shift+Slash names the field bindings");
+    trialPresent=true;check(contextHelpForTest()==L"Trial controls: View, then South face previous step, View, then East face next step, "
+        L"Right trigger route, View, then Menu or Start Cloister submenu.","controller Shift+Slash names the trial bindings");trialPresent=false;
+    fixtureBattle=true;check(contextHelpForTest().find(L"Battle keys: T")==0,"battle help keeps its key list on a controller");fixtureBattle=false;
+    check(modKeyName(ModKey::Route)==L"Right trigger" && modKeyName(ModKey::PuzzleStep)==L"View, then South face" &&
+        modKeyName(ModKey::PuzzlePath)==L"View, then East face" && modKeyName(ModKey::ModMenu)==L"View, then Menu or Start","controller mod key names");
+    check(deviceKeyText(L"Then press F10. Shift F10 and F100 stay. Backslash walks; F9 goes back.")==
+        L"Then press View, then East face. Shift F10 and F100 stay. Right trigger walks; View, then South face goes back.","controller key text swaps whole-word keys only");
+    {
+        std::array<int,pad::CountCommands> unbound{};std::copy(std::begin(pad::defaults),std::end(pad::defaults),unbound.begin());unbound[pad::Route]=-1;publishSpokenControllerBindings(unbound);
+        check(modKeyName(ModKey::Route)==L"backslash on the keyboard","unassigned controller command falls back to the keyboard key");
+        publishSpokenControllerBindings(pad::defaults);
+    }
+    inputDeviceMark.store(0);
+    check(modKeyName(ModKey::Route)==L"backslash" && modKeyName(ModKey::PuzzlePath)==L"F10" &&
+        deviceKeyText(L"Then press F10.")==L"Then press F10.","keyboard mod key names stay unchanged");
+    check(contextHelpForTest().find(L"Field keys: backtick rescans")==0,"keyboard Shift+Slash returns after the controller");
     {
         auto listsL=[](const wchar_t* phrase){ return contextHelpForTest().find(phrase)!=std::wstring::npos; };
         bool all=listsL(L"L repeats last speech");
@@ -234,13 +256,13 @@ int main() {
     menuKeyForTest(VK_ESCAPE);
     setSetting(Setting::SpeakPunctuationNames,previousPunctuationOption);
     selectRow(L"Miscellaneous, submenu"); menuKeyForTest(VK_RIGHT);
-    check(said.back()==L"Miscellaneous. Autodetail: Off, 1 of 17","Miscellaneous groups other settings and omits trial controls outside a trial");
+    check(said.back()==L"Miscellaneous. Autodetail: Off, 1 of 15","Miscellaneous groups other settings and omits trial controls outside a trial");
     menuKeyForTest(VK_DOWN);
-    check(said.back()==L"Automatically read extra info: Off, 2 of 17" && !setting(Setting::AutoExtraInfo),"extra-info setting is default Off directly below Autodetail");
+    check(said.back()==L"Automatically read extra info: Off, 2 of 15" && !setting(Setting::AutoExtraInfo),"extra-info setting is default Off directly below Autodetail");
     menuKeyForTest(VK_RIGHT);drainSettingsForTest();loadSettings();
     check(setting(Setting::AutoExtraInfo)==1 && !setting(Setting::AutoDetail),"extra info persists independently of Autodetail");
     menuKeyForTest(VK_LEFT);drainSettingsForTest();
-    selectRow(L"Unavailable cue:");check(said.back()==L"Unavailable cue: On, 6 of 17" && settingInfo(Setting::UnavailableCue).initial==1,"unavailable cue defaults On after Menu indexing");
+    selectRow(L"Unavailable cue:");check(said.back()==L"Unavailable cue: On, 6 of 15" && settingInfo(Setting::UnavailableCue).initial==1,"unavailable cue defaults On after Menu indexing");
     menuKeyForTest(VK_LEFT);drainSettingsForTest();loadSettings();check(!setting(Setting::UnavailableCue),"unavailable cue can be turned Off and persists");
     menuKeyForTest(VK_RIGHT);drainSettingsForTest();check(setting(Setting::UnavailableCue)==1,"unavailable cue can be restored");
     selectRow(L"Jecht Shot auto-success:");check(settingInfo(Setting::JechtAssist).initial==0,"Jecht automation defaults Off");
@@ -265,16 +287,6 @@ int main() {
     setSetting(Setting::LightningAutoDodge,0); menuKeyForTest(VK_RIGHT); drainSettingsForTest();loadSettings();
     check(setting(Setting::LightningAutoDodge)==1,"Miscellaneous exposes and saves lightning auto-dodge independently");
     menuKeyForTest(VK_LEFT); check(!setting(Setting::LightningAutoDodge),"lightning auto-dodge can be disabled");
-    selectRow(L"Show maximum HP:");
-    check(settingInfo(Setting::ShowMaximumHp).initial==0,"battle HP defaults to bar percentage");
-    setSetting(Setting::ShowMaximumHp,0); menuKeyForTest(VK_RIGHT); drainSettingsForTest();loadSettings();
-    check(setting(Setting::ShowMaximumHp)==1,"Miscellaneous saves the numeric maximum HP toggle");
-    menuKeyForTest(VK_LEFT); check(!setting(Setting::ShowMaximumHp),"bar percentage can be restored");
-    selectRow(L"Speak maximum MP:");
-    check(settingInfo(Setting::ShowMaximumMp).initial==0,"H defaults to displayed current MP");
-    setSetting(Setting::ShowMaximumMp,0); menuKeyForTest(VK_RIGHT); drainSettingsForTest();loadSettings();
-    check(setting(Setting::ShowMaximumMp)==1 && !setting(Setting::ShowMaximumHp),"Miscellaneous persists independent maximum MP");
-    menuKeyForTest(VK_LEFT); check(!setting(Setting::ShowMaximumMp),"current MP can be restored");
     selectRow(L"Overdrive cues:"); setSetting(Setting::OverdriveCues,1); menuKeyForTest(VK_LEFT); drainSettingsForTest();loadSettings();
     check(!setting(Setting::OverdriveCues),"Miscellaneous persists manual overdrive audio independently");
     menuKeyForTest(VK_RIGHT); check(setting(Setting::OverdriveCues)==1,"manual overdrive audio can be restored");
@@ -391,6 +403,7 @@ int main() {
     check(learningControllerBinding(),"bindings menu starts learn");
     captureControllerBinding(pad::bit(pad::West));
     check(controllerBinding(pad::PreviousTarget)==pad::West && controllerBinding(pad::Gil)==pad::Left,"binding collision swaps assignments");
+    check(spokenControllerBinding(pad::PreviousTarget)==pad::West && spokenControllerBinding(pad::Gil)==pad::Left,"rebinding updates spoken controller names");
     drainSettingsForTest();
     check(GetPrivateProfileIntW(L"Controller",L"command_1",999,settingsPath().c_str())==pad::West,"rebinding persists");
     menuKeyForTest(VK_RETURN); captureControllerBinding(pad::bit(pad::View));
@@ -430,7 +443,7 @@ int main() {
     pressForTest(VK_F11,true); check(puzzleAction==L"expected","Shift F11 reads expected trial state without changing selection");
     ModMenuState noGagazetMenu{};noGagazetMenu.status=L"Fixture context";noGagazetMenu.epoch=epoch;
     openMenuForTest(noGagazetMenu);selectRow(L"Miscellaneous, submenu");menuKeyForTest(VK_RETURN);menuKeyForTest(VK_END);
-    check(said.back()==L"Back, 17 of 17","Gagazet cave puzzles are absent from Miscellaneous outside their context");
+    check(said.back()==L"Back, 15 of 15","Gagazet cave puzzles are absent from Miscellaneous outside their context");
     menuKeyForTest(VK_ESCAPE);menuKeyForTest(VK_ESCAPE);
     fixtureGagazet=true;
     check(puzzleGuidanceAvailable(),"controller guidance includes Gagazet's actual guide");
@@ -439,7 +452,7 @@ int main() {
     fixtureGagazet=false;
     ModMenuState noSinMenu{};noSinMenu.status=L"Fixture context";noSinMenu.epoch=epoch;
     openMenuForTest(noSinMenu);selectRow(L"Miscellaneous, submenu");menuKeyForTest(VK_RETURN);menuKeyForTest(VK_END);
-    check(said.back()==L"Back, 17 of 17","Sin collection submenu is absent outside its captured context");
+    check(said.back()==L"Back, 15 of 15","Sin collection submenu is absent outside its captured context");
     menuKeyForTest(VK_ESCAPE);menuKeyForTest(VK_ESCAPE);
     constexpr Setting minigameAssistSettings[]={Setting::ChocoboAssist,Setting::RemiemAssist,Setting::ButterflyAssist,Setting::BlitzAssist};
     const auto priorMenuIndex=setting(Setting::MenuIndex);
@@ -460,13 +473,13 @@ int main() {
     ModMenuState minigameMenu{};minigameMenu.status=L"Fixture context";minigameMenu.epoch=epoch;
     openMenuForTest(minigameMenu);selectRow(L"Miscellaneous, submenu");menuKeyForTest(VK_RETURN);
     check(availableMinigameRows(16)==0,"all four minigame assistance rows are individually hidden outside preparation contexts");
-    menuKeyForTest(VK_END);check(said.back()==L"Back, 17 of 17","Miscellaneous keeps its updated row count outside preparation contexts");
+    menuKeyForTest(VK_END);check(said.back()==L"Back, 15 of 15","Miscellaneous keeps its updated row count outside preparation contexts");
     menuKeyForTest(VK_ESCAPE);menuKeyForTest(VK_ESCAPE);
     for(unsigned i=0;i<_countof(minigameAssistSettings);++i) {
         minigameAssistMask=1u<<i;
         check(minigameAssistAvailable(minigameAssistSettings[i]),"fixture exposes only the selected minigame preparation context");
         openMenuForTest(minigameMenu);selectRow(L"Miscellaneous, submenu");menuKeyForTest(VK_RETURN);
-        check(said.back()==L"Miscellaneous. Autodetail: Off, 1 of 18","one available minigame setting adds exactly one Miscellaneous row");
+        check(said.back()==L"Miscellaneous. Autodetail: Off, 1 of 16","one available minigame setting adds exactly one Miscellaneous row");
         const std::wstring label=settingInfo(minigameAssistSettings[i]).name;
         check(availableMinigameRows(17)==(1u<<i),"each minigame preparation flag exposes only its matching setting row");
         selectRow(label+L":");
@@ -501,6 +514,9 @@ int main() {
     check(said.back().find(L"Cloister of Trials. Solve current trial automatically:")==0,"supported trial submenu announces its own title");
     selectRow(L"Read path to current step"); menuKeyForTest(VK_RETURN);
     check(puzzleAction==L"path","trial actions remain reachable after menu reorganization");
+    check(!modMenuActive(),"Read path closes the menu so its walk can start");
+    pressForTest(VK_F8,false); selectRow(L"Miscellaneous, submenu"); menuKeyForTest(VK_RETURN);
+    selectRow(L"Cloister of Trials, submenu"); menuKeyForTest(VK_RETURN);
     menuKeyForTest(VK_END); menuKeyForTest(VK_RETURN);
     check(said.back().find(L"Miscellaneous. Cloister of Trials, submenu")==0,"trial Back restores its nested parent row");
     menuKeyForTest(VK_ESCAPE);

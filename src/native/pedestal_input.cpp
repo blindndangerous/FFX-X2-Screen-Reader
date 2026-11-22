@@ -44,9 +44,11 @@ struct Session {
     unsigned walkInput=0,walkFailure=0; // Auto walk input revision after our own last stop.
     double touch=0; // Farthest off-side touch (in-game F27), as a radius.
     Point last,lastPlayer,pushFrom;
+    nav::CopiedCamera pushCamera; // Camera when the current leg direction was spoken.
 
 } active;
 std::atomic<bool> armed{false},manual{false};
+std::atomic<unsigned> crossingEpoch{0};
 unsigned drain=0,injected=0,published=0;
 std::atomic<unsigned> cancelRevision{1};
 unsigned observedCancel=1;
@@ -89,13 +91,28 @@ void inject(unsigned bits) {
     write<uint16_t>(address(pedestal_rva::Pressed),static_cast<uint16_t>(read<uint16_t>(address(pedestal_rva::Pressed))|(bits&~injected)));
     injected=bits;
 }
+// Push direction relative to the camera, copying the camera basis used.
+const wchar_t* pushBearing(nav::CopiedCamera& camera) {
+    const auto goal=active.plan.moves[active.segment].goal;
+    camera.valid=cameraBasis(camera.forward,camera.right);
+    return cameraDirectionLabel({goal.x-active.target.position.x,0,goal.z-active.target.position.z},camera.forward,camera.valid);
+}
 void announcePush() {
     if(active.announcedSegment==active.segment) return;
     active.announcedSegment=active.segment;
-    const auto goal=active.plan.moves[active.segment].goal;
-    Point forward,right;const bool cameraValid=cameraBasis(forward,right);
-    const auto bearing=cameraDirectionLabel({goal.x-active.target.position.x,0,goal.z-active.target.position.z},forward,cameraValid);
+    const auto bearing=pushBearing(active.pushCamera);
     wchar_t text[64]{};swprintf_s(text,L"Pushing pedestal %s",bearing);
+    output(text,false,"pedestal-push");
+    pedestalPushOwnsCamera.store(true,std::memory_order_release);
+}
+// After a leg's direction was spoken, a camera cut (same rule as the field
+// cue) re-speaks it from the new camera. A slow pan never counts.
+void watchPushCamera() {
+    if(active.announcedSegment!=active.segment || active.segment>=active.plan.moves.size()) return;
+    nav::CopiedCamera camera;const auto bearing=pushBearing(camera);
+    const bool cut=nav::cameraCut(active.pushCamera,camera);active.pushCamera=camera;
+    if(!cut) return;
+    wchar_t text[80]{};swprintf_s(text,L"Camera changed. Pushing pedestal %s.",bearing);
     output(text,false,"pedestal-push");
 }
 void stop(const char* reason,bool announce=false) {
@@ -105,7 +122,8 @@ void stop(const char* reason,bool announce=false) {
         haltAutoWalk(); recordLog("pedestal assistance stopped: %s",reason);
         if(announce) output(L"Pedestal assistance stopped",false,"pedestal-push");
     }
-    armed=false;manual=false;active={};injected=published=0;publishPedestalConsent(0);
+    armed=false;crossingEpoch=0;manual=false;active={};injected=published=0;publishPedestalConsent(0);
+    pedestalPushOwnsCamera.store(false,std::memory_order_release);
     // Only the fixed target/plan and qualified eight-character script carrier
     // remain. Resetting this Native-owned session needs no container retirement.
 }
@@ -259,7 +277,13 @@ void collected(Event&) { published=0; }
 void requestStarted(Event& e) {
     if(!armed || active.epoch!=generation() || read<uintptr_t>(e.args[0]+4)!=active.script.chunk) return;
     const auto local=read<uint16_t>(e.args[0]+0x2e,0xffff),entry=read<uint16_t>(e.args[1]+8,0xffff);
-    if(active.target.pushControl==7 && active.plan.phase==0 && local==39 && entry==6) stop("entrance rail push launched");
+    if(active.target.pushControl==7 && active.plan.phase==0 && local==39 && entry==6) {
+        // The native ride has taken over. Its elevated path is not a walking
+        // route back to the entrance pedestal; retire that route at handoff.
+        // An approach walk can launch it before Crossing mode spoke its cue.
+        if(!active.crossing) output(L"Rail pedestal: crossing now.",true,"pedestal-push");
+        clearNavRoute();stop("entrance rail push launched");
+    }
     else if(active.held && (active.target.pushControl==5 || active.target.pushControl==6) &&
         local==active.plan.producer && entry==active.plan.entry) active.started=true;
 }
@@ -289,6 +313,18 @@ bool approach() {
     const auto player=playerPosition();
     if(!active.target.zone.crossing && inInteractionZone(active.target.zone,player)) {
         haltAutoWalk(); active.approaching=active.walked=false; active.requests=0; faceNavigationTarget(active.target); return true;
+    }
+    // Macalania stand sits 8.2-9.4 from the pedestal; native contact starts
+    // near 7.4. Pushing walks the player out of the stand's front edge, so
+    // keep pushing while between the stand and the pedestal. In game
+    // 2026-11-20 rerouting back to the stand looped and never pushed.
+    if(active.target.pushControl==4 && !active.target.zone.crossing && active.target.zone.valid) {
+        const auto& zone=active.target.zone;
+        const double ax=active.target.position.x-zone.center.x,az=active.target.position.z-zone.center.z,axis=std::hypot(ax,az);
+        const double x=player.x-zone.center.x,z=player.z-zone.center.z;
+        const double along=axis>1e-8?(x*ax+z*az)/axis:-1,lateral=axis>1e-8?std::abs(x*az-z*ax)/axis:1e30;
+        const double side=std::abs(ax)>std::abs(az)?zone.depth:zone.width;
+        if(along>0 && along<axis && lateral<=side) {haltAutoWalk(); active.approaching=active.walked=false; active.requests=0; return true;}
     }
     if(autoWalkActive()) {active.approaching=active.walked=true; return false;}
     // The player stopped the walk (Backslash again, or any movement or
@@ -409,6 +445,9 @@ bool pedestalActiveCrossing(const Entity& target) {
     return armed && active.epoch==generation() && active.crossing && target.pushControl==7 &&
         target.pushLocal==active.target.pushLocal && target.worker==active.target.worker && target.id==active.target.id;
 }
+bool pedestalEntranceCrossing() {
+    return armed && crossingEpoch.load(std::memory_order_acquire)==generation();
+}
 bool pedestalActiveContact(const Entity& target) {
     return armed && active.epoch==generation() && active.contact && target.pushControl==active.target.pushControl &&
         target.pushLocal==active.target.pushLocal && target.worker==active.target.worker && target.id==active.target.id;
@@ -418,14 +457,14 @@ bool pedestalActivePlan(const Entity& target,PedestalPlan& plan) {
         target.pushLocal!=active.target.pushLocal || target.worker!=active.target.worker || target.id!=active.target.id) return false;
     plan=active.plan; plan.moves.erase(plan.moves.begin(),plan.moves.begin()+active.segment); return true;
 }
-void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& script,const PedestalPlan& plan,bool walk) {
-    if(!nativeGameThread()) return;
+bool armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& script,const PedestalPlan& plan,bool walk) {
+    if(!nativeGameThread()) return false;
     stop("new target");
     observedCancel=cancelRevision.load(std::memory_order_acquire);
-    if(!target.pushControl || !setting(Setting::AutoWalk)) return;
+    if(!target.pushControl || !setting(Setting::AutoWalk)) return false;
     try {
         const auto consent=plan.moves.empty()?0:plan.moves.front().mode==PushMode::Single?pedestalConfirmMask():0x40;
-        if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return;
+        if(plan.complete || !plan.blocked.empty() || plan.moves.empty() || !target.zone.valid || target.inactive || !consent) return false;
         active.target=target;active.script=script;active.plan=plan; active.epoch=generation(); active.consent=consent; active.walkInput=autoWalkInputRevision();
         active.walkFailure=autoWalkRouteFailureRevision();
         if(remembered.epoch==active.epoch && remembered.chunk==script.chunk && remembered.worker==target.worker) active.touch=remembered.radius;
@@ -433,16 +472,20 @@ void armPedestalOwned(const NativeRouteTarget& target,const UtilityScript& scrip
         active.walk=active.held=walk && plan.walkConsent;
         unsigned index=0;for(const auto& move:plan.moves) {
             const auto bits=pedestalInputMask(move.held);
-            if(move.held && pedestalLogicalInput(bits)!=move.held) {stop("invalid inverse input mapping");return;}
+            if(move.held && pedestalLogicalInput(bits)!=move.held) {stop("invalid inverse input mapping");return false;}
             active.directions[index++]=bits;
         }
         active.pawn=read<uintptr_t>(address(0xf00740));
-        if(!active.pawn || active.pawn!=playerActor() || !read<uint16_t>(active.pawn+2)) {stop("controlled actor unavailable");return;}
-        if(!publishPedestalConsent(consent)) {stop("consent bindings unavailable");recordLog("pedestal consent bindings unavailable");return;}
+        if(!active.pawn || active.pawn!=playerActor() || !read<uint16_t>(active.pawn+2)) {stop("controlled actor unavailable");return false;}
+        if(!publishPedestalConsent(consent)) {stop("consent bindings unavailable");recordLog("pedestal consent bindings unavailable");return false;}
         active.last=target.position; active.lastPlayer=playerPosition(); active.progress=nowMs();
+        if(active.walk && plan.moves.front().mode==PushMode::Crossing && !inInteractionZone(target.zone,active.lastPlayer) &&
+            !output(L"Walking to the Rail pedestal.",false,"pedestal-push")) {
+            stop("approach cue unavailable");return false;
+        }
         if(active.held) active.approachAt=active.contactProgress=active.progress;
-        armed=true;
-    }catch(...) {stop("unavailable verified state");}
+        armed=true;return true;
+    }catch(...) {stop("unavailable verified state");return false;}
 }
 void armPedestal(const Entity& target,bool walk) {
     UtilityScript script;if(!pedestalScript(target.pushControl,script)) {stop("new target");return;}
@@ -451,7 +494,8 @@ void armPedestal(const Entity& target,bool walk) {
 void updatePedestalOwnedTarget(const NativeRouteTarget& target) {
     if(!nativeGameThread() || !armed || active.epoch!=generation() || target.worker!=active.target.worker || target.id!=active.target.id || target.pushControl!=active.target.pushControl || target.pushLocal!=active.target.pushLocal) return;
     // A worker may return a shape captured before the Native owner changed phase.
-    if(target.pushControl<=2 && target.zone.valid && active.contact!=(target.zone.contactRadius==0)) {
+    if(target.zone.valid && ((target.pushControl<=2 && active.contact!=(target.zone.contactRadius==0)) ||
+        (target.pushControl==7 && active.crossing!=target.zone.crossing))) {
         nav::requestNavigationScene();return;
     }
     active.target=target; learnedTouch(active.target);
@@ -484,13 +528,15 @@ void updatePedestalInput() {
     const auto logical=pedestalLogicalInput(raw&~active.consent);
     if(logical&0x0fff) { stop("manual native action"); return; }
     if(active.epoch!=generation() || !context() || manual.exchange(false)) { stop("context or manual input"); return; }
+    const bool awaitingCrossingCue=active.walk && !active.crossing && active.plan.moves[active.segment].mode==PushMode::Crossing;
     const auto now=nowMs();
-    if(active.previous && now-active.previous>600) { stop("input interrupted"); return; }
+    if(active.previous && now-active.previous>600) { stop("input interrupted",awaitingCrossingCue); return; }
     active.previous=now;
+    watchPushCamera();
     try {
         UtilityScript current;
-        if(!pedestalScript(active.target.pushControl,current) || current.chunk!=active.script.chunk) { stop("map changed"); return; }
-        PedestalSnapshot snapshot;if(!capturePedestalSnapshot(active.script,active.target,snapshot)) {stop("unavailable native push facts");return;}
+        if(!pedestalScript(active.target.pushControl,current) || current.chunk!=active.script.chunk) { stop("map changed",awaitingCrossingCue); return; }
+        PedestalSnapshot snapshot;if(!capturePedestalSnapshot(active.script,active.target,snapshot)) {stop("unavailable native push facts",awaitingCrossingCue);return;}
         const auto live=pedestalPlan(active.target.pushControl,active.target.pushLocal,snapshot);
         if(distanceXZ(snapshot.position,active.last)>.1) { active.last=snapshot.position; active.progress=now; }
         const auto player=playerPosition();
@@ -532,7 +578,7 @@ void updatePedestalInput() {
             if(!active.stopping && needsHeldInput()) inject(active.directions[active.segment]);
             return;
         }
-        if(!fieldControl()) { stop("player control unavailable"); return; }
+        if(!fieldControl()) { stop("player control unavailable",awaitingCrossingCue); return; }
         if(active.ended) {
             active.ended=false;
             const double moved=distanceXZ(snapshot.position,active.pushFrom);
@@ -588,6 +634,8 @@ void updatePedestalInput() {
         }
         if(next.mode==PushMode::Crossing) {
             if(!active.crossing) {
+                crossingEpoch=active.epoch;
+                if(!output(L"Rail pedestal: crossing now.",true,"pedestal-push")) recordLog("pedestal crossing cue unavailable; pushing on");
                 nav::requestNavigationScene();active.target.zone.valid=false;active.waitingShape=true;
                 active.crossing=true; approach();
             }

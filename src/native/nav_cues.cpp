@@ -27,7 +27,7 @@ constexpr unsigned MissingObservations=2;constexpr ULONGLONG MissingMs=500;
 struct RouteCapture {OwnedNavTarget target;std::array<Point,PointLimit> points;unsigned count=0,epoch=0,revision=0,collisionSerial=0;bool assisted=false;};
 enum : unsigned {RoutePacket,TargetPacket,CameraPacket};
 struct Packet {unsigned kind=RoutePacket,slot=0,ticket=0;};
-struct CameraCapture {unsigned kind=CameraPacket;nav::CopiedCamera camera;unsigned revision=0,serial=0,audioContext=0,collisionSerial=0,epoch=0;};
+struct CameraCapture {unsigned kind=CameraPacket;nav::CopiedCamera camera;unsigned revision=0,serial=0,audioContext=0,collisionSerial=0,epoch=0;Point player;};
 std::atomic<unsigned> cameraSerial{0};
 async::AtomicSnapshot<CameraCapture> latestCamera;
 ProcessStorage<std::array<RouteCapture,Slots>> captures;
@@ -69,6 +69,8 @@ struct State {
     speechq::Header header{};
     nav::CopiedCamera camera;
     PedestalNavigationState push;
+    // Target whose direction was last spoken; a field camera cut names its new direction.
+    Entity spokenTarget;std::wstring spokenTargetName;unsigned spokenTargetEpoch=0;ULONGLONG spokenTargetAt=0;
 } ;
 ProcessStorage<State> state;
 State& owned() {return state.get();}
@@ -123,8 +125,9 @@ void setRoute(const std::vector<Point>& points,const Entity& target,bool newRout
     s.arrivalRoute.clear();s.arrivalNext=1;s.arrivalRouted=false;
     s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;
     s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();
-    if(newRoute) s.automaticPush=assisted && ownsAutomaticPush(target);
-    const bool confirm=(newRoute?assisted:s.arrivalSerial!=0) && target.zone.valid && target.zone.talk && !target.zone.crossing && !target.pushControl && !target.butterfly && !target.swimDepth && !target.swimApproach;
+    if(newRoute) s.automaticPush=assisted && (ownsAutomaticPush(target) || repeatsPushArrival(target));
+    if(newRoute && known) noteSpokenTarget(target);
+    const bool confirm=!s.collision.panels.required && (newRoute?assisted:s.arrivalSerial!=0) && target.zone.valid && target.zone.talk && !target.zone.crossing && (!target.pushControl || pedestalSocketTarget(target)) && !target.butterfly && !target.swimDepth && !target.swimApproach;
     s.arrivalSerial=confirm?(++nextArrivalSerial?nextArrivalSerial:++nextArrivalSerial):0;
     publishLeg();
     if(newRoute) navRouteStopReported=false;
@@ -213,13 +216,27 @@ void process(const speechq::Header& header,const std::wstring& bytes) {
         cut.camera=latest.camera;
         auto& s=owned();
         if(header.generation!=generation() || cut.revision!=clearRevision.load(std::memory_order_acquire) ||
-            cut.serial!=cameraSerial.load(std::memory_order_acquire) || cut.audioContext!=navAudioContextSerial() || cut.collisionSerial!=navCollisionSerial() ||
-            !s.ready || !s.allowed || s.collisionSerial!=cut.collisionSerial || s.audioContext!=cut.audioContext ||
-            s.routeEpoch!=s.epoch || s.arrived || s.nextLeg>=s.legs.size()) return;
+            cut.serial!=cameraSerial.load(std::memory_order_acquire) || cut.audioContext!=navAudioContextSerial() || cut.collisionSerial!=navCollisionSerial()) return;
+        const bool route=s.ready && s.allowed && s.collisionSerial==cut.collisionSerial && s.audioContext==cut.audioContext &&
+            s.routeEpoch==s.epoch && !s.arrived && s.nextLeg<s.legs.size();
         s.camera=cut.camera;s.header=header;
-        const auto goal=s.legs[s.nextLeg];const Point delta{goal.x-s.player.x,0,goal.z-s.player.z};
-        if(!s.automaticPush && distanceXZ(s.player,goal)>.1) emit(L"Route to "+s.destination+L": "+routeSegmentText(distanceXZ(s.player,goal)/11.13,
-            cameraDirectionLabel(delta,s.camera.forward,s.camera.valid),setting(Setting::PartialSteps)!=0),"navigation-camera-cut");
+        if(route) {
+            const auto goal=s.legs[s.nextLeg];const Point delta{goal.x-s.player.x,0,goal.z-s.player.z};
+            if(s.automaticPush) return;
+            if(distanceXZ(s.player,goal)>.1) {emit(L"Route to "+s.destination+L": "+routeSegmentText(distanceXZ(s.player,goal)/11.13,
+                cameraDirectionLabel(delta,s.camera.forward,s.camera.valid),setting(Setting::PartialSteps)!=0),"navigation-camera-cut");return;}
+        }
+        // No route hint for this cut: a short cue, plus where the last spoken
+        // target now lies from the new camera.
+        std::wstring text=L"Camera changed.";
+        if(s.spokenTargetAt && s.spokenTargetEpoch==header.generation && GetTickCount64()-s.spokenTargetAt<=60000 && !s.spokenTargetName.empty()) {
+            auto position=s.spokenTarget.position;
+            if(s.epoch==header.generation) for(const auto& e:s.live)
+                if(e.actor==s.spokenTarget.actor && e.worker==s.spokenTarget.worker && e.id==s.spokenTarget.id) {position=e.position;break;}
+            const auto direction=cameraDirectionLabel({position.x-cut.player.x,0,position.z-cut.player.z},cut.camera.forward,cut.camera.valid);
+            if(std::wcscmp(direction,L"here") && std::wcscmp(direction,L"unknown")) text+=L" "+s.spokenTargetName+L" now "+direction+L".";
+        }
+        emit(std::move(text),"navigation-camera-cut");
         return;
     }
     if(kind>TargetPacket || bytes.size()*sizeof(wchar_t)!=sizeof(Packet)) return;Packet packet;std::memcpy(&packet,bytes.data(),sizeof(packet));
@@ -249,6 +266,7 @@ bool captureRoute(unsigned kind,const std::vector<Point>& points,const Entity& t
 }
 }
 bool navRouteKnown() {return known.load(std::memory_order_acquire);}
+void noteNavCameraTarget(const Entity& target) {if(onOwner() && state.ready() && !(target.name.empty() && target.category.empty())) noteSpokenTarget(target);}
 bool navLeg(NavLeg& leg) {
     // tryRead writes its result only on success, so a failed native read leaves the held leg intact.
     const bool native=nativeGameThread();LegSnapshot local;const char* reason=nullptr;
@@ -281,9 +299,11 @@ void captureNavCamera() {
     if(!camera.valid) cameraSerial.fetch_add(1,std::memory_order_acq_rel);
     const bool cut=previousRevision==revision && previousEpoch==epoch && nav::cameraCut(previous,camera);
     if(cut) cameraSerial.fetch_add(1,std::memory_order_acq_rel);
-    const CameraCapture sample{CameraPacket,camera,revision,cameraSerial.load(std::memory_order_acquire),navAudioContextSerial(),navCollisionSerial(),epoch};
+    CameraCapture sample{CameraPacket,camera,revision,cameraSerial.load(std::memory_order_acquire),navAudioContextSerial(),navCollisionSerial(),epoch};
+    if(cut) sample.player=playerPosition();
     latestCamera.publish(sample);
-    if(cut) speechq::captureDomain(Domain,sample,epoch);
+    // A running pedestal push re-speaks its own direction on a cut.
+    if(cut && !pedestalPushOwnsCamera.load(std::memory_order_acquire)) speechq::captureDomain(Domain,sample,epoch);
     previous=camera;previousRevision=revision;previousEpoch=epoch;
 }
 void resetNavAudio() {pauseNavAudio();clearNavRoute();publishPositionalCue(0,0,false,generation());}

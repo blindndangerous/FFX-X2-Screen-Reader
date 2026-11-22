@@ -1,6 +1,7 @@
 #include "controller.hpp"
 #include "settings.hpp"
 #include "nonblocking_snapshots.hpp"
+#include "hotkey_names.hpp"
 #include <algorithm>
 #include <stdexcept>
 namespace ffx {
@@ -50,12 +51,12 @@ bool persistOwned(const std::wstring& path) {
     return success;
 }
 void persist() {
-    BindingSnapshot snapshot{bindings,++publishedRevision};writes.publish(snapshot);wakeSettingsWriter();
+    BindingSnapshot snapshot{bindings,++publishedRevision};writes.publish(snapshot);publishSpokenControllerBindings(bindings);wakeSettingsWriter();
 }
 }
 void initializeControllerBindings() {
     loadBindings(settingsPath());
-    BindingSnapshot initial{bindings,publishedRevision};writes.publish(initial);
+    BindingSnapshot initial{bindings,publishedRevision};writes.publish(initial);publishSpokenControllerBindings(bindings);
     if(!registerSettingsWriterExtension(0,persistOwned)) throw std::runtime_error("Controller settings writer unavailable");
 }
 int controllerBinding(int command) {
@@ -65,8 +66,7 @@ int controllerBinding(int command) {
 void setControllerWriteSinkForTest(bool(*sink)(const std::wstring&,const int*,size_t)) {testWrite=sink;}
 #endif
 const wchar_t* controllerControlNameLiteral(int control) {
-    static const wchar_t* names[]={L"South face",L"East face",L"West face",L"North face",L"View or Select",L"Guide",L"Menu or Start",L"Left stick click",L"Right stick click",L"Left shoulder",L"Right shoulder",L"D-pad up",L"D-pad down",L"D-pad left",L"D-pad right",L"Miscellaneous one",L"Right paddle one",L"Left paddle one",L"Right paddle two",L"Left paddle two",L"Touchpad",L"Miscellaneous two",L"Miscellaneous three",L"Miscellaneous four",L"Miscellaneous five",L"Miscellaneous six",L"Left trigger",L"Right trigger",L"Right stick up",L"Right stick down",L"Right stick left",L"Right stick right",L"Left stick up",L"Left stick down",L"Left stick left",L"Left stick right"};
-    return control>=0 && control<pad::Count?names[control]:L"Unassigned";
+    return control>=0 && control<pad::Count?pad::controlNames[control]:L"Unassigned";
 }
 std::wstring controllerControlName(int control) {return controllerControlNameLiteral(control);}
 void learnControllerBinding(int command) {

@@ -25,6 +25,7 @@
 #include "esc_details.hpp"
 #include "game_bindings.hpp"
 #include "navigation_observations.hpp"
+#include "hotkey_names.hpp"
 #include <atomic>
 #include <stdexcept>
 #include <cstring>
@@ -193,7 +194,7 @@ void description() {
             const auto* description=settingInfo(static_cast<Setting>(item)).description;
             if(item==option(Setting::LightningWarning)) { TextPlan p;prepareTextPlan(p,"mod-menu");const auto name=planPrimaryDodgeName(p);const auto named=planSuffix(p,planPrefix(p,planLiteral(p,L"Dodge: "),name,L""),planLiteral(p,L". Press once when the beep begins."),L"");
                 const auto controls=planPair(p,TextPlanOp::Or,named,planLiteral(p,L"Press the game's configured dodge action once when the beep begins."));p.headline=planConcat(p,planConcat(p,planLiteral(p,description),planLiteral(p,L" ")),controls);commitTextPlan(p); }
-            else emitReady(description);
+            else emitReady(deviceKeyText(description).c_str());
         }
         else if(item==SpeechBackendMenu) emitReady(L"Choose Automatic or an available Prism speech backend. Voice and speed remain controlled by that backend.");
         else if(item==SpeechOptionsMenu) emitReady(L"Open speech settings for naming glyphs.");
@@ -201,11 +202,15 @@ void description() {
         else if(item==NavigationMenu) emitReady(L"Open Auto walk, path announcements, the unreachable destination filter, Partial steps and Clock directions.");
         else if(item==MiscMenu) emitReady(L"Open speech detail, voiced dialogue, menu indexing, translation text, timing assistance, Chocobo and Remiem races, butterfly hunts and Blitzball when available, controller bindings, trial controls, Gagazet cave puzzles and Sin object collection when available.");
         else if(item==Back) emitReady(L"Return to the parent menu and its selected submenu entry. Settings remain open.");
+        else if(nativeInputUsesController()) emitReady(L"D-pad up and down select. D-pad left and right change a value. D-pad right or South face opens a submenu. South face activates. West face reads the description. East face returns. Left and Right shoulder go to the first and last row.");
         else emitReady(L"Up and Down select. Left and Right change a value. Right or Enter opens a submenu. Enter activates. I reads the description. Escape returns. Home and End go to the first and last row.");
     }
 }
 void puzzleAction() {
     const wchar_t* commands[]={L"",L"step",L"path",L"next",L"previous",L"status"};
+    // A route request queues an auto walk, and navigation intents are refused
+    // while this menu is open. Close it first so the path can start.
+    if(row==2) close();
     try {
         if(context.via) { const auto text=viaCommand(row==0?(viaCollecting()?L"off":L"on"):commands[row]);emitUtilityText(text,"mod-menu"); }
         else if(row==0) { const auto text=puzzleCommand(puzzleArmed()?L"off":L"on");emitUtilityText(text,"mod-menu"); }
@@ -333,15 +338,34 @@ bool ordinaryFieldGuideFallbackAvailable() {
 }
 // Shift+Slash: one short key list for the current context. Keep these lists in
 // step with Docs/controls.md. Context checks only read already-published state.
-const wchar_t* contextHelpText() {
+// Controller lists name the saved bindings; mod-layer commands start with View.
+std::wstring controllerHelpText(bool trial) {
+    std::wstring text=trial?L"Trial controls: ":L"Field controls: ";bool first=true;
+    auto add=[&](int command,bool mod,const wchar_t* what) {
+        const int control=spokenControllerBinding(command);if(control<0 || control>=pad::Count) return;
+        text+=std::wstring(first?L"":L", ")+(mod?L"View, then ":L"")+pad::controlNames[control]+L" "+what;first=false;
+    };
+    if(trial) {add(pad::PuzzleStep,true,L"previous step");add(pad::PuzzlePath,true,L"next step");add(pad::Route,false,L"route");}
+    else {
+        add(pad::PreviousTarget,false,L"previous destination");add(pad::NextTarget,false,L"next destination");
+        add(pad::PreviousCategory,false,L"previous category");add(pad::NextCategory,false,L"next category");
+        add(pad::Route,false,L"routes");add(pad::Beacon,false,L"beacon");add(pad::Filter,false,L"unreachable filter");
+        add(pad::Gil,true,L"gil");add(pad::Map,true,L"map name");
+    }
+    return text+(first?L"":L", ")+L"View, then Menu or Start "+(trial?L"Cloister submenu.":L"mod menu.");
+}
+std::wstring contextHelpText() {
+    const bool onPad=nativeInputUsesController();
+    if(active && onPad) return L"Mod menu controls: D-pad up and down select, D-pad left and right change, South face activates, West face describes, Left and Right shoulder jump to first and last, East face goes back.";
     if(active) return L"Mod menu keys: Up and Down select, Left and Right change, Enter activates, I describes, Home and End jump to first and last, Escape goes back, F8 closes.";
     if(inBattle()) return L"Battle keys: T turn, H HP and status, O Overdrive, Shift T turn order, Shift H party HP, Shift O Overdrive meters, I details, Control arrows Sensor info, F11 repeat, L last speech.";
     if(sphereGridOpen()) return L"Sphere Grid keys: F2 path planner, Shift F2 clear plans, F3 ability planner, F4 and F5 guidance from character, Backslash and Shift Backslash guidance from cursor, O orientation, S Sphere Levels, F6 node number, I description, F7 Autodetail, L last speech.";
     if(scene || escMenuActive()) return L"Menu keys: I details, Shift I footer controls, U extra info, comma and period review lines, F7 Autodetail, F11 repeat, L last speech, F8 mod menu.";
+    if(onPad) return controllerHelpText(guideKeysAvailable());
     if(guideKeysAvailable()) return L"Trial keys: F9 and F10 previous and next step, Shift F10 selected step, F11 current step, Shift F11 inferred step, Backslash route, L last speech, F8 Cloister submenu.";
     return L"Field keys: backtick rescans, right and left bracket next and previous destination, Shift brackets change category, P repeats destination, Backslash routes, U unreachable filter, G gil, M map name, T repeats dialogue, L repeats last speech, F6 beacon, F7 Autodetail, F8 mod menu.";
 }
-void contextHelpKey(bool) { emitReady(contextHelpText(),"mod-context-help"); }
+void contextHelpKey(bool) { emitReady(contextHelpText().c_str(),"mod-context-help"); }
 void readPuzzleKey(bool shift) {
     if(readEnteredName()) return;
     if(gagazetActive()) { guideKey(shift?L"expected":L"step"); return; }

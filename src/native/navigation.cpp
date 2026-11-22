@@ -10,6 +10,7 @@
 #include "intent_cancel_text.hpp"
 #include "route_text_cap.hpp"
 #include "camera_direction.hpp"
+#include "hotkey_names.hpp"
 #include "process_storage.hpp"
 #include "reachability.hpp"
 #include "reachability_shared.hpp"
@@ -162,6 +163,7 @@ void announce(const Pending& event,bool interrupt=true,bool index=true) {
     // Totals wait until the room's destination set and reachability verdicts have settled.
     if(index && s.list.totals(GetTickCount64(),setting(Setting::HideUnreachable)!=0,ownedReachabilityChecking()))
         text+=menuIndex(s.selected,static_cast<unsigned>(rows.size()));
+    noteNavCameraTarget(target);
     emit(event,std::move(text),"navigation-selection",interrupt);
 }
 void intent(const Pending& event,const Entity& target,nav::Intent kind) {

@@ -75,6 +75,8 @@ bool copy(uintptr_t p,void* out,size_t size) {
 unsigned generation() { return epoch; }
 bool delayRoute=false;
 unsigned routeRequests=0;
+unsigned requestsAtCrossingCue=0;
+bool approachCueInterrupt=true;
 bool nativeOwner=true;
 bool nativeGameThread() {return nativeOwner;}
 bool nativeAtelSpan(uintptr_t,AtelSpan&) {return false;} // This semantic host mocks utilities, not physical resource receipts.
@@ -82,7 +84,11 @@ bool readyAtelIdentity(uintptr_t,AtelIdentity&) {return false;}
 bool readyAtelWorkerHeader(uintptr_t,unsigned,unsigned&) {return false;}
 bool hook(unsigned rva,Handler before,Handler after) { hooks[rva].push_back({before,after}); return true; }
 void log(const char*,...) {}
-bool output(const std::wstring& text,bool,const char*) { spoken.push_back(text); return true; }
+bool output(const std::wstring& text,bool interrupt,const char*) {
+    if(text==L"Walking to the Rail pedestal.") approachCueInterrupt=interrupt;
+    if(text==L"Rail pedestal: crossing now.") requestsAtCrossingCue=routeRequests;
+    spoken.push_back(text);return true;
+}
 bool gameFocused() { return focused; }
 bool inBattle() { return battle; }
 bool modMenuActive() { return menu; }
@@ -114,6 +120,8 @@ bool autoWalkActive() { return walking; }
 bool autoWalkSteeringGoal(Point& goal) {if(!walking || route.empty()) return false;goal=route.back();return true;}
 #endif
 unsigned walkStops=0;
+unsigned routeClears=0;
+void clearNavRoute() {++routeClears;}
 bool legValid=false,legArrived=false;
 unsigned inputRevision=1;
 unsigned routeFailuresFixture=0;
@@ -625,7 +633,7 @@ int main() {
     check(pedestalConsentKey(0x39) && pedestalConsentKey(0x2c) && !pedestalConsentKey(0x1c) && pedestalConsentButtons()==pad::bit(pad::East),"configured Space/alternate push and physical B publish consent separately from Confirm");
     check(pedestalInstruction(target).find(L"Do not press Space or Z at the pedestal")!=std::wstring::npos,"walk-push instructions name the configured keys that open the sphere prompt");
     { PedestalPlan held; held.moves.push_back({{0,0,50},0,PushMode::Slide});
-      check(describePedestalPlan(held,{0,0,0},L"Space or Z").find(L"Hold Space or Z")!=std::wstring::npos,"held-push instructions announce actual configured push keys"); }
+      check(describePedestalPlan(held,{0,0,0},L"Space or Z").find(L"hold Space or Z only")!=std::wstring::npos,"held-push instructions announce actual configured push keys"); }
     padOwned=true;inputDeviceMark.store(0);observeInputDevice(true);
     check(pedestalInstruction(target).find(L"Do not press B at the pedestal")!=std::wstring::npos,"controller instructions announce actual configured push button");
     padOwned=false;inputDeviceMark.store(0);observeInputDevice(false);
@@ -728,10 +736,19 @@ int main() {
     check(pedestalConsentKey(0x2c) && !pedestalConsentKey(0x39) && pedestalConsentButtons()==pad::bit(pad::South),"actual remapped push keyboard and physical controller bindings supply consent");
     frame(); disable(7,4,0x12ab); check(frame()==0x8000 && pedestalLogicalInput(0x8000)==0x1000,"inverse native direction mapping supplies the original logical push direction");
     target=setup(4,1,{34,39,12}); values[0x0c0000c6]=4; values[0x0c000096]=4; values[0x0c000097]=4; ready(target);
+    const auto entrancePlan=pedestalPlan(7,13,snapshot({-20,-460,-36},{}));
+    const auto entranceHint=describePedestalPlan(entrancePlan,{-20,-460,-36},L"X");
+    check(entranceHint.find(L"even with Auto walk on")==std::wstring::npos &&
+        entranceHint.find(L"Auto walk")!=std::wstring::npos && entranceHint.find(L"backslash")!=std::wstring::npos,
+        "Bevelle entrance explains automatic crossing without requiring a held push key");
+    const auto manualHint=pedestalInstruction(target);
+    check(manualHint.find(L"and the announced direction together")!=std::wstring::npos && manualHint.find(L"only: the mod adds the direction")!=std::wstring::npos,"Macalania hint says hold the push key only after Auto walk, key and direction without it");
     position(playerActor(),target.zone.center); check(frame()==0x2000,"Macalania starts correct native direction at side rectangle");
     disable(29,1,0xe2ad); signal(29,1,0xe2d5); check(frame()==0,"Macalania releases direction after scripted launch");
     values[0x0c0000a3]=1; complete(1,10); check(frame()==0,"Macalania completion drains held Confirm instead of launching next puzzle stage");
     target=setup(7,13,{-18.7,-453.2,263.1}); values[0x0c000029]=values[0x0c00001f]=1; ready(target); position(playerActor(),target.zone.center);
+    armPedestal(target,true);
+    check(frame(0)==0 && !capturePedestalNavigationState().held,"Bevelle optional rail push still requires the configured push key after backslash");
     request(38,15);
     for(unsigned i=0;i<21;++i) { check(frame()==0x8000,"Bevelle optional push keeps consent across repeated native probes"); disable(38,15,0x1c3d3); restore(); complete(38,15); }
     frame(); disable(38,15,0x1c407); check(frame()==0,"Bevelle releases input when original optional push commits");
@@ -764,15 +781,50 @@ int main() {
     write<uint8_t>(read<uintptr_t>(worker(39)),2);
     position(worker(39)+0x54c,{-30.253,-459.998,-44.302});
     position(worker(39)+0x57c,{-9.742,-459.998,-44.302});
-    ready(target);
+    refreshTargetZone(target,worker(13),1);
     check(target.zone.valid && !target.zone.crossing && target.zone.center.z< -48,"Bevelle entrance stages safely before native crossing edge");
-    position(playerActor(),target.zone.center); check(frame(0)==0 && !walking,"Bevelle staging does not push without held Confirm");
-    check(frame()==0 && walking && !route.empty(),"held Confirm starts ordinary walking through Bevelle entrance trigger");
+    OwnedNavTarget entranceStage{};check(captureOwnedNavTarget(target,entranceStage),"fixture copies the original entrance staging zone");
+    position(playerActor(),{target.zone.center.x,target.zone.center.y,target.zone.center.z-5});
+    armPedestal(target,true);
+    check(!walking && !spoken.empty() && spoken.back()==L"Walking to the Rail pedestal.","approach cue precedes walking to staging");
+    check(!approachCueInterrupt,"approach cue queues without interrupting route directions");
+    check(frame(0)==0 && walking,"backslash walks to the Bevelle entrance staging point with zero held input");
+    position(playerActor(),target.zone.center);check(frame(0)==0 && walking && !route.empty(),"Backslash starts the Bevelle entrance crossing at staging with zero held input");
     const auto crossingStarts=starts;
-    check(frame()==0 && walking && starts==crossingStarts,"Bevelle crossing remains active on subsequent held frames");
+    check(frame(0)==0 && walking && starts==crossingStarts,"Bevelle entrance crossing remains active with zero held input");
     refreshTargetZone(target,worker(13),1);
     check(target.zone.crossing && target.zone.shape==2,"live target refresh preserves the consented entrance crossing");
-    request(39,6); check(frame()==0 && !walking,"native Bevelle entrance ride ends injected walking and drains consent");
+    updatePedestalOwnedTarget(entranceStage.native);
+    NativeRouteTarget crossingTarget{};
+    check(pedestalTargetForTest(crossingTarget) && crossingTarget.zone.crossing,"late staging snapshot cannot replace the Bevelle crossing shape");
+    const auto clearsBeforeRail=routeClears;
+    request(39,5); check(frame(0)==0 && walking && routeClears==clearsBeforeRail,"unrelated native entry preserves the entrance crossing");
+    request(39,6); check(frame(0)==0 && !walking && !capturePedestalNavigationState().armed,"W39:6 retires backslash crossing with zero held input");
+    check(routeClears==clearsBeforeRail+1,"native rail handoff retires the walking route before off-floor rider movement");
+    refreshTargetZone(target,worker(13),1);position(playerActor(),target.zone.center);
+    armPedestal(target,true);
+    spoken.clear();pedestalPlayerInput(VK_LEFT);
+    check(frame(0x8000)==0x8000 && !capturePedestalNavigationState().armed && !walking && spoken.empty(),
+        "physical movement before the entrance crossing cue cancels silently");
+    armPedestal(target,true);
+    check(capturePedestalNavigationState().armed,"staging walk is armed before control loss");
+    spoken.clear();control(false);
+    frame(0);
+    check(!capturePedestalNavigationState().armed && !walking && spoken==std::vector<std::wstring>{L"Pedestal assistance stopped"},
+        "control loss announces a stop before the entrance crossing cue");
+    control(true);
+    armPedestal(target,true); // Explicit backslash, already inside the staging zone.
+    spoken.clear();
+    const auto requestsAtStaging=routeRequests;
+    check(frame(0)==0 && walking && capturePedestalNavigationState().crossing,"backslash already at Bevelle staging crosses with zero held input");
+    check(pedestalEntranceCrossing() && requestsAtCrossingCue==requestsAtStaging && spoken.size()==1 && spoken.front()==L"Rail pedestal: crossing now.",
+        "staging ArmAndFace announces the entrance crossing");
+    pedestalPlayerInput(VK_LEFT);
+    check(frame(0x8000)==0x8000 && !walking && !pedestalEntranceCrossing() && !capturePedestalNavigationState().armed,"physical movement cancels the entrance crossing without consuming direction");
+    refreshTargetZone(target,worker(13),1);armPedestal(target,false);
+    check(frame(0)==0 && !walking,"arming the entrance without a walk request keeps the player still");
+    enabled=false;armPedestal(target,true);
+    check(frame(0)==0 && !walking && !capturePedestalNavigationState().armed,"backslash respects disabled Auto walk at staging");
     target=setup(1,7,{-14.4117,40,-65.6}); values[0x5c0000cc]=1;
     write<unsigned>(base+0x1600000+0x60+5*4,29); ready(target);
     check(!pedestalConsentKey(0xc8),"movement-overlapping push never disables manual movement priority");
@@ -812,6 +864,8 @@ int main() {
         position(playerActor(),{target.position.x+target.zone.approach.x*(target.zone.contactRadius+.25),target.position.y,
             target.position.z+target.zone.approach.z*(target.zone.contactRadius+.25)});
         walking=false;frame(0);frame(0);
+        // A camera cut during a spoken leg re-speaks its direction from the new camera.
+        if(leg==0) {fixtureForward={1,0,0};frame(0);frame(0);fixtureForward={0,0,1};frame(0);}
         if(leg==1) {
             disable(6,4,0x274b);restore();frame(0);
             refreshTargetZone(target,worker(6),1);captureOwnedNavTarget(target,copied);updatePedestalOwnedTarget(copied.native);
@@ -823,8 +877,10 @@ int main() {
         frame(0);
     }
     frame(0);
-    check(spoken==std::vector<std::wstring>{L"Pushing pedestal north",L"Pushing pedestal east",L"Pushing pedestal north",L"Pedestal push complete"} &&
-        automaticHelpRequests==helpAtStart,"three-leg auto push speaks only direction once per leg and one completion");
+    check(spoken==std::vector<std::wstring>{L"Pushing pedestal north",L"Camera changed. Pushing pedestal west.",L"Camera changed. Pushing pedestal north.",
+        L"Pushing pedestal east",L"Pushing pedestal north",L"Pedestal push complete"} &&
+        automaticHelpRequests==helpAtStart,"three-leg auto push speaks direction once per leg, again only on a camera cut, and one completion");
+    check(!pedestalPushOwnsCamera.load(),"a finished push hands camera cuts back to the field cue");
     std::puts("PASS: all-trial pedestal sides, Space push/native contact lifecycle, remaps and cancellation");
     return 0;
 }

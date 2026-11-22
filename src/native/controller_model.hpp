@@ -57,6 +57,8 @@ inline constexpr int defaults[]={-1,Left,Right,Up,Down,-1,RT,L3,-1,-1,RSUp,-1,-1
 inline constexpr const wchar_t* names[]={L"Scan navigation targets",L"Previous target",L"Next target",L"Previous category",L"Next category",
     L"Target distance",L"Read route",L"Toggle beacon",L"Whose turn",L"Active character HP, MP and status",L"Native description",
     L"Previous status detail",L"Next status detail",L"Sphere levels",L"Previous puzzle step",L"Next puzzle step",L"Repeat speech",L"Send game Select or Back",L"Gil / active battle character",L"Current map name",L"Toggle unreachable filter"};
+// Spoken control names, indexed by Control.
+inline constexpr const wchar_t* controlNames[Count]={L"South face",L"East face",L"West face",L"North face",L"View or Select",L"Guide",L"Menu or Start",L"Left stick click",L"Right stick click",L"Left shoulder",L"Right shoulder",L"D-pad up",L"D-pad down",L"D-pad left",L"D-pad right",L"Miscellaneous one",L"Right paddle one",L"Left paddle one",L"Right paddle two",L"Left paddle two",L"Touchpad",L"Miscellaneous two",L"Miscellaneous three",L"Miscellaneous four",L"Miscellaneous five",L"Miscellaneous six",L"Left trigger",L"Right trigger",L"Right stick up",L"Right stick down",L"Right stick left",L"Right stick right",L"Left stick up",L"Left stick down",L"Left stick left",L"Left stick right"};
 inline constexpr int bindingCommands[]={PreviousTarget,NextTarget,PreviousCategory,NextCategory,Route,Beacon,Filter,Gil,Map,PuzzleStep,PuzzlePath,Description};
 inline constexpr unsigned BindingCount=sizeof(bindingCommands)/sizeof(bindingCommands[0]);
 inline bool context(int command,bool mod,bool battle,bool menu) {
