@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import json
 from build_utilities import ROOT, EVIDENCE, DESIGNS, action, binding, cpp_action, cpp_binding, literal
 from atel_model import instructions
+from header_output import BANNER, HeaderOutput
 
 # Besaid first-visit tail retains its original 164 write. The later tail
 # contains no story write. Zanarkand opens the gate at 2775 before its lift;
@@ -27,6 +28,7 @@ RECIPES = {
 }
 
 def main():
+    headers = HeaderOutput()
     maps=json.loads((EVIDENCE/'maps_v3.json').read_text(encoding='utf8'))
     rows,records=[],[]
     for name,(first,later,exit_,threshold,seeds) in RECIPES.items():
@@ -56,9 +58,9 @@ def main():
         records.append(dict(script=flow['script'],sha256=flow['sha256'],actions=actions,
                             storyThreshold=threshold,firstMinimum=1545 if name=='macalania' else 0,preparation=prep))
         if name=='bevelle': records[-1].update(bonus=bonus,bonusCollected=done)
-    (ROOT/'src/native/puzzle_completion_data.hpp').write_text(
-        '// Generated original ATEL completion/gate contracts.\n#pragma once\nnamespace ffx {\n'
-        'inline const PuzzleCompletion puzzleCompletions[] = {\n'+'\n'.join(rows)+'\n};\n}\n',encoding='utf8')
+    headers.write('puzzle_completion_data.hpp',
+        BANNER+'// Generated original ATEL completion/gate contracts.\n#pragma once\nnamespace ffx {\n'
+        'inline const PuzzleCompletion puzzleCompletions[] = {\n'+'\n'.join(rows)+'\n};\n}\n')
     target=EVIDENCE/('puzzle_completions_'+datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'.json')
     target.write_text(json.dumps(dict(trials=records,policy='Native completion shortcuts; gameplay validation pending.'),indent=2)+'\n',encoding='utf8')
     print('Compiled six original completion handoffs. '+target.name)

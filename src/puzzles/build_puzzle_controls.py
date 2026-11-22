@@ -14,6 +14,7 @@ from puzzle_routes import ROUTES
 from compile_trials import enrich
 from build_utilities import TextEvidence
 from tile_paths import compile_tiles
+from header_output import BANNER, HeaderOutput
 sys.path.insert(0, str(ROOT / "src/navigation"))
 from finish_targets import TRIAL_LABELS
 
@@ -46,6 +47,7 @@ def position(flow, local):
     return [0,0,0]
 
 def main():
+    headers = HeaderOutput()
     maps=json.loads((EVIDENCE/'maps_v3.json').read_text(encoding='utf8'))
     rows, route_rows, records = [],[],[]
     for name,(locals_, destruction) in INTERACTIONS.items():
@@ -115,9 +117,8 @@ def main():
         route_rows.append('    {%s, {\n%s\n    }, %d},' % (literal(flow['script']),'\n'.join(steps),11 if name=='zanarkand' else 0))
         records.append(dict(script=flow['script'],sha256=flow['sha256'],interactions=interactions,
             destructionId=sphere,storedSphereBindings=[dict(worker=a[0],bindings=sphere_bindings(a)) for a in interactions],steps=evidence))
-    native=ROOT/'src/native'
-    (native/'puzzle_solver_data.hpp').write_text('// Generated from hashed original ATEL.\n#pragma once\nnamespace ffx {\ninline const PuzzleContract puzzleContracts[] = {\n'+'\n'.join(rows)+'\n};\n}\n',encoding='utf8')
-    (native/'puzzle_guide_data.hpp').write_text('// Verified targets; paths use current native collision geometry.\n#pragma once\nnamespace ffx {\ninline const PuzzleRoute puzzleRoutes[] = {\n'+'\n'.join(route_rows)+'\n};\n}\n',encoding='utf8')
+    headers.write('puzzle_solver_data.hpp', BANNER+'// Generated from hashed original ATEL.\n#pragma once\nnamespace ffx {\ninline const PuzzleContract puzzleContracts[] = {\n'+'\n'.join(rows)+'\n};\n}\n')
+    headers.write('puzzle_guide_data.hpp', BANNER+'// Verified targets; paths use current native collision geometry.\n#pragma once\nnamespace ffx {\ninline const PuzzleRoute puzzleRoutes[] = {\n'+'\n'.join(route_rows)+'\n};\n}\n')
     floor_event=enrich(next(e for e in maps['events'] if e['script']=='dome0700'),EVIDENCE,TextEvidence(EVIDENCE/'text'))
     floors=compile_tiles(floor_event); floor_flow=json.loads((DESIGNS/'zanarkand_flow.json').read_text(encoding='utf8'))
     tile_rows=[]
@@ -127,9 +128,16 @@ def main():
             for key,element,value in tile['trace']['writes']:
                 if value==1 and key in ('L6:map:00f6c7:T0','L6:map:00f6c9:T0','L6:map:00f6cb:T0'):
                     blocks.append(cpp_binding(binding(floor_flow,key,1,element)))
+                    # The first successful branch writes slot one. Stages 2/4
+                    # accept a second distinct member of c9; stage 4 also cb.
+                    # Only both occupied slots block another group member.
+                    second = ('L6:map:00f6ca:T0' if key == 'L6:map:00f6c9:T0' and group['stage'] in (2, 4)
+                              else 'L6:map:00f6cc:T0' if key == 'L6:map:00f6cb:T0' and group['stage'] == 4 else None)
+                    if second:
+                        blocks.append(cpp_binding(binding(floor_flow,second,1,element)))
             tile_rows.append('    {%d, %d, {%s}, {%s}},'%(group['stage'],tile['worker'],
               ', '.join(repr(v) for v in position(floor_flow,tile['worker'])),', '.join(blocks)))
-    (native/'puzzle_tiles_data.hpp').write_text('// Permitted original branches, including native duplicate-shape guards.\n#pragma once\nnamespace ffx {\ninline const PuzzleTile puzzleTiles[] = {\n'+'\n'.join(tile_rows)+'\n};\n}\n',encoding='utf8')
+    headers.write('puzzle_tiles_data.hpp', BANNER+'// Permitted original branches, including native duplicate-shape guards.\n#pragma once\nnamespace ffx {\ninline const PuzzleTile puzzleTiles[] = {\n'+'\n'.join(tile_rows)+'\n};\n}\n')
     stamp=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     report=EVIDENCE/('puzzle_controls_'+stamp+'.json')
     report.write_text(json.dumps(dict(trials=records,floorPatterns=floors,policy='Player opt-in only. Action order/path/interaction behavior requires live validation.'),indent=2)+'\n',encoding='utf8')
