@@ -1,4 +1,5 @@
 #include "navigation.hpp"
+#include "floor_panels.hpp"
 #include "navigation_cancel.hpp"
 #include <algorithm>
 #include <cmath>
@@ -292,6 +293,109 @@ std::vector<int> path(const Mesh& mesh, int start, int end,bool requirePortal,co
         }
     }
     return {};
+}
+static Point panelCoordinates(const FloorPanel& panel,Point p) {
+    const double x=p.x-panel.center.x,z=p.z-panel.center.z;
+    return {x*panel.cosine-z*panel.sine,0,x*panel.sine+z*panel.cosine};
+}
+bool insidePanel(const FloorPanel& panel,Point p) {
+    const auto local=panelCoordinates(panel,p);
+    return std::abs(local.x)<panel.width && std::abs(local.z)<panel.depth;
+}
+// Clip the complete segment in the native rectangle's local coordinates.
+bool touchesPanel(const FloorPanel& panel,Point a,Point b,double margin) {
+    a=panelCoordinates(panel,a);b=panelCoordinates(panel,b);
+    double low=0,high=1;
+    const auto clip=[&](double start,double finish,double extent) {
+        const double delta=finish-start;
+        if(delta==0) return std::abs(start)<=extent;
+        auto enter=(-extent-start)/delta,leave=(extent-start)/delta;
+        if(enter>leave) std::swap(enter,leave);
+        low=std::max(low,enter);high=std::min(high,leave);return low<=high;
+    };
+    return clip(a.x,b.x,panel.width+margin) && clip(a.z,b.z,panel.depth+margin);
+}
+
+// A capsule of this radius around the published segment stays outside every
+// forbidden native rectangle. Compute on the preparation owner.
+double panelLegCorridor(const FloorPanels& panels,unsigned exempt,Point a,Point b) {
+    double clearance=64;
+    for(unsigned i=0;i<panels.rows.size();++i) {
+        if(!(panels.active&(1u<<i)) || exempt==i+57) continue;
+        const auto& row=panels.rows[i];
+        if(!touchesPanel(row,a,b,clearance)) continue;
+        if(touchesPanel(row,a,b,0)) return 0;
+        double low=0,high=clearance;
+        for(unsigned j=0;j<12;++j) {
+            const double mid=(low+high)*.5;
+            if(touchesPanel(row,a,b,mid)) high=mid;else low=mid;
+        }
+        clearance=low;
+    }
+    return clearance;
+}
+std::vector<Point> panelSafeRoute(const Mesh& mesh,const Entity& target,const std::vector<Point>& base) {
+    const auto& panels=mesh.panels;
+    if(!panels.required || !panels.ready || !panelFactsFresh(panels.revision,panels.capturedAt,GetTickCount64()) ||
+        base.size()<2 || !mesh.events.ready) return {};
+    unsigned forbidden=panels.active;
+    if(target.panelLocal) {
+        if(target.panelLocal<57 || target.panelLocal>83) return {};
+        const unsigned i=target.panelLocal-57;
+        const auto& targetPanel=panels.rows[i];
+        if(!(forbidden&(1u<<i)) || target.worker!=targetPanel.worker ||
+            !touchesPanel(targetPanel,base.back(),base.back(),-.25)) return {};
+        forbidden&=~(1u<<i);
+    }
+    const auto clear=[&](Point a,Point b) {
+        if(!std::isfinite(a.x) || !std::isfinite(a.z) || !std::isfinite(b.x) || !std::isfinite(b.z)) return false;
+        for(unsigned i=0;i<panels.rows.size();++i)
+            if((forbidden&(1u<<i)) && touchesPanel(panels.rows[i],a,b,panels.radius)) return false;
+        return true;
+    };
+    bool direct=true;
+    for(size_t i=1;i<base.size();++i) if(!clear(base[i-1],base[i])) {direct=false;break;}
+    if(direct) return base;
+    if(!clear(base.front(),base.front()) || !clear(base.back(),base.back())) return {};
+
+    // Retain the base path's floor connectivity. New visibility edges must
+    // pass both the panel test and the collision mesh's full segment test.
+    // Do not replace a pedestal keep-out or scripted approach with a shortcut.
+    if(target.zone.obstacleRadius>0 || target.zone.contactRadius>0) return {};
+    const VisibilityIndex floor(mesh);std::vector<VisibilityIndex::Work> scratch;
+    std::vector<Point> nodes=base;
+    for(unsigned i=0;i<panels.rows.size();++i) if(forbidden&(1u<<i)) {
+        const auto& r=panels.rows[i];
+        // The walker accepts intermediate points within one unit.
+        for(int x:{-1,1}) for(int z:{-1,1}) {
+            const double u=x*(r.width+2*panels.radius+1),v=z*(r.depth+2*panels.radius+1);
+            Point p{r.center.x+u*r.cosine+v*r.sine,r.center.y,r.center.z-u*r.sine+v*r.cosine};
+            if(clear(p,p)) nodes.push_back(p);
+        }
+    }
+    const auto goal=base.size()-1;
+    std::vector<size_t> previous(nodes.size(),nodes.size());
+    std::vector<double> costs(nodes.size(),std::numeric_limits<double>::infinity());
+    std::vector<bool> visited(nodes.size());
+    costs[0]=0;
+    for(;;) {
+        nav::checkComputation();
+        size_t at=nodes.size();double best=std::numeric_limits<double>::infinity();
+        for(size_t i=0;i<nodes.size();++i) if(!visited[i] && costs[i]<best) {best=costs[i];at=i;}
+        if(at==nodes.size()) return {};
+        if(at==goal) break;
+        visited[at]=true;
+        for(size_t i=1;i<nodes.size();++i) {
+            const auto cost=best+distanceXZ(nodes[at],nodes[i]);
+            if(visited[i] || cost>=costs[i] || !clear(nodes[at],nodes[i])) continue;
+            if(!mesh.openPlane && !lineOfSight(mesh,floor,nodes[at],nodes[i],scratch)) continue;
+            if(mesh.openPlane && !routeSegmentAllowed(mesh,nodes[at],nodes[i])) continue;
+            costs[i]=cost;previous[i]=at;
+        }
+    }
+    std::vector<Point> result;
+    for(auto i=goal;i!=0;i=previous[i]) result.push_back(nodes[i]);
+    result.push_back(base.front());std::reverse(result.begin(),result.end());return result;
 }
 bool routeLineClear(const Mesh& mesh,Point from,Point to,double& coveredUntil) {
     coveredUntil=0;if(!mesh.events.ready || !routeSegmentAllowed(mesh,from,to)) return false;

@@ -7,16 +7,22 @@
 #include "navigation_scene_fixture.cpp"
 #undef main
 #include "../navigation_intents.hpp"
+#include "../owned_nav_target.hpp"
 #include "../puzzle_guide_owned.hpp"
 #include "../puzzle_guide_targets.hpp"
 #include "../nav_audio.hpp"
 #include "../sphere_grid.hpp"
 #include "../auto_walk.hpp"
+#include "../floor_panels.hpp"
+#include "../log_capture.hpp"
 #include "../reachability.hpp"
 #include "../text_plan.hpp"
 #include "../mod_state.hpp"
+#include "../input_device.hpp"
 namespace {
 unsigned starts=0,faces=0,arms=0,actions=0,refusals=0;
+bool entranceCrossing=false,armedWithWalk=false;
+bool (*resumeWalk)(const ffx::NativeRouteTarget&)=nullptr;
 std::array<uint8_t,0x668> cameraBytes{};
 }
 namespace ffx {
@@ -43,12 +49,13 @@ void suspendAutoWalk() {stopAutoWalk();}
 void releaseAutoWalk() {stopAutoWalk();}
 bool autoWalkResumePending() {return false;}
 bool toggleAutoWalkOff(void(*)()) {return false;}
-void setAutoWalkResume(bool(*)(const NativeRouteTarget&)) {}
+void setAutoWalkResume(bool(*resume)(const NativeRouteTarget&)) {resumeWalk=resume;}
 bool utilityBusy() {return false;}
 std::wstring nativeButtonMaskName(uint16_t) {return L"Confirm";}
 void startAutoWalk(bool) {check(nativeOwner,"approved start stays Native");++starts;}
 void cancelPedestal() {}
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {check(nativeOwner,"arming stays Native");++arms;}
+bool pedestalEntranceCrossing() {return entranceCrossing;}
+bool armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool walk) {check(nativeOwner,"arming stays Native");++arms;armedWithWalk=walk;return true;}
 void updatePedestalOwnedTarget(const NativeRouteTarget&) {check(nativeOwner,"POD assistance handback stays Native");}
 bool faceNavigationTarget(const NativeRouteTarget&) {check(nativeOwner,"facing stays Native");++faces;return true;}
 bool sphereGridOpen() {return false;}void spherePathKey(bool) {}
@@ -74,6 +81,40 @@ int main() {try {
     check(ffx::address(0x46c840)!=0x46c840,"message-mode getter must resolve to a fixture callback, never raw game RVA");
     std::setvbuf(stdout,nullptr,_IONBF,0);
     using namespace ffx;check(startAtelResources(),"pipeline resource bootstrap");installAtelResources();installNavigation();
+    {
+        std::array<uint8_t,0x30> worker{};
+        floorPanelChunk=1;put(worker.data()+4,uintptr_t(1));
+        Event opcode{};opcode.args[0]=reinterpret_cast<uintptr_t>(worker.data());
+        constexpr uint16_t locals[]={38,69,69,75,84};
+        const auto bump=[&](uint16_t local) {
+            put(worker.data()+0x2e,local);
+            for(const auto& listener:navigationListeners.at(0x464180)) if(listener.before) listener.before(opcode);
+        };
+        for(auto local:locals) bump(local);
+        static unsigned reports=0;
+        static char line[512]{};
+        logCaptureHandler.store([](const LogCapture& packet) noexcept {
+            if(std::strstr(packet.format.data(),"floor panel opcode bumps")) {
+                packet.formatter(packet,line,sizeof(line));++reports;
+                check(!nativeOwner,"panel bump reporting stays on the worker");
+            }
+        });
+        work();work();
+        check(reports==1 && std::strstr(line,"sample 0:") && std::strstr(line,"W38=1 ") &&
+            std::strstr(line,"W69=2 ") && std::strstr(line,"W75=1 ") && std::strstr(line,"W83=0"),
+            "worker log counts each fenced panel opcode");
+        Sleep(5000);work();
+        check(reports==1,"idle panel bump report stays quiet past the five-second limit");
+        bump(69);work();
+        check(reports==2 && std::strstr(line,"sample 0:") && std::strstr(line,"W69=3 "),
+            "a counter change alone emits a panel bump report");
+        ++floorPanelSample;work();
+        check(reports==2,"a changed sample still respects the five-second limit");
+        Sleep(5000);work();
+        check(reports==3 && std::strstr(line,"sample 1:") && std::strstr(line,"W69=3 "),
+            "a sample change alone emits a panel bump report");
+        floorPanelChunk=0;logCaptureHandler.store(nullptr);
+    }
     // Native encoded title getter: all requested IDs share a controlled ready
     // game-format string; exact getter bounds, copying and decoder are real.
     areaBytes[0]=0x50;areaBytes[1]=0x82;areaBytes[2]=0x74;areaBytes[3]=0x70;areaBytes[4]=0;
@@ -85,6 +126,13 @@ int main() {try {
             "scene capture calls the owned message-mode adapter without touching fixture code pages");
     }
     messageMode=0;
+    entranceCrossing=true;
+    const auto beforeRepeat=manualInputRevision;
+    key(VK_OEM_5);
+    check(!navigationSaid.empty() && navigationSaid.back()==L"Rail pedestal: crossing in progress." &&
+        manualInputRevision==beforeRepeat && !navigationPendingForTest(),
+        "repeat backslash announces the crossing without canceling or requesting another route");
+    entranceCrossing=false;
     put(actorBodies[0].bytes.data()+0x4fc,300.f);
     const auto begin=std::chrono::steady_clock::now();key(VK_OEM_3);fresh();
     check(!navigationPendingForTest() && !navigationSaid.empty() && areaGetterCalls>0,"cold scan resolves names in one batched Native getter handback");
@@ -191,6 +239,46 @@ int main() {try {
     check(readyAtelIdentity(chunk,resumedIdentity) && std::strcmp(resumedIdentity.name,"cdsp0000")==0,"field loaded while Off has its own current allocation on enable");
     key(VK_OEM_6);fresh();check(!navigationPendingForTest(),"field loaded while Off serves navigation without another load");
     check(!foreignReads,"toggle and waiting recovery use no Worker engine reads");
+    prepare("bvyt1100");setScene();resetNavigation();resetOwnedPuzzleGuide();scalar=0;
+    put(actorBodies[14].bytes.data()+0x14,-36.f); // W13 rail pedestal at the entrance.
+    key(VK_OEM_3);fresh();target=selected();
+    for(unsigned i=0;i<128 && target.pushControl!=7;++i) {key(VK_OEM_6);fresh(1);target=selected();}
+    check(target.pushControl==7 && target.zone.valid && !target.inactive,"Bevelle entrance has a ready staging zone");
+    auto* pawn=actorBodies[0].bytes.data();
+    put(pawn+0xc,static_cast<float>(target.zone.center.x));put(pawn+0x10,static_cast<float>(target.zone.center.y));
+    put(pawn+0x14,static_cast<float>(target.zone.center.z));
+    const auto beforeStaging=arms,beforeFacing=faces;
+    check(nav::submitNavigationQuery(nav::Query::GuidePath,false,ownedPuzzleGuideRevision()),"guide entrance Path admitted");
+    fresh();
+    check(arms==beforeStaging && navigationSaid.back().find(L"backslash")!=std::wstring::npos,
+        "guide Path at staging explains backslash and leaves the crossing idle");
+    const auto beforeStartSpeech=navigationSaid.size();
+    key(VK_OEM_5);fresh();
+    check(arms==beforeStaging+1 && armedWithWalk && faces==beforeFacing+1 && navigationSaid.size()==beforeStartSpeech,
+        "staging backslash delivers ArmAndFace with walk consent and leaves speech to the native crossing");
+    const auto afterStaging=arms,afterFacing=faces,afterStarts=starts;
+    check(nav::submitNavigationQuery(nav::Query::SilentPath),"silent entrance Path admitted");
+    fresh();
+    check(arms==afterStaging && faces==afterFacing && starts==afterStarts && navigationSaid.size()==beforeStartSpeech,
+        "SilentPath keeps the entrance silent and idle");
+    OwnedNavTarget entrance;
+    check(captureOwnedNavTarget(target,entrance) && resumeWalk && resumeWalk(entrance.native),"entrance Resume admitted");
+    fresh();
+    check(arms==afterStaging && faces==afterFacing && starts==afterStarts && navigationSaid.size()==beforeStartSpeech+1 &&
+        navigationSaid.back()==L"Auto walk not resumed: Rail pedestal. Press backslash.",
+        "Resume speaks the entrance refusal without starting a walk");
+    inputDeviceMark.store(1);
+    check(resumeWalk(entrance.native),"controller entrance Resume admitted");fresh();inputDeviceMark.store(0);
+    check(arms==afterStaging && starts==afterStarts && navigationSaid.size()==beforeStartSpeech+2 &&
+        navigationSaid.back()==L"Auto walk not resumed: Rail pedestal. Press Right trigger.",
+        "controller Resume names the Read route binding instead of backslash");
+    for(unsigned i=0;i<128;++i) check(nav::submitNavigationQuery(nav::Query::Refresh),"admit waiting refresh to fill navigation backlog");
+    work();check(navigationPendingForTest()==128,"pending navigation queue is full before environmental completion");
+    check(claimOwnedGuideRefresh() && nav::submitNavigationQuery(nav::Query::GuideCompleted,false,ownedPuzzleGuideRevision()),
+        "transport accepts a claimed guide refresh before the worker checks backlog");
+    work();
+    check(navigationPendingForTest()==128 && claimOwnedGuideRefresh(),"dropping a guide refresh from a full backlog releases its claim");
+    releaseOwnedGuideRefresh();
     std::puts("PASS: current-area toggle navigation/guide recovery, per-command waiting feedback and one ready announcement.");
     std::printf("METRIC warm current-area toggle through first navigation output %.3fms; controlled owner/worker scheduling.\n",resumeMs);
     std::printf("PASS: owned direct guide target lease, fixed Native start, manual cancellation and abandoned-marker recovery; semantic endpoints only.\n");

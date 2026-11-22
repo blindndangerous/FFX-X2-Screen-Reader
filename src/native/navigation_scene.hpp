@@ -24,9 +24,10 @@ struct WorkerFact {
 };
 struct SceneValue {unsigned binding=0;int value=0;unsigned high=1,element=0;};
 struct SceneBindings {std::array<SceneValue,32> rows{};unsigned count=0;};
-struct PartFact {AtelSpan span;SceneBindings bindings;bool bindingsReady=false,butterflyExiting=false,guideReady=false,bindingsExpected=false,identityReady=false;};
+struct PartFact {bool panelMap=false;AtelSpan span;SceneBindings bindings;bool bindingsReady=false,butterflyExiting=false,guideReady=false,bindingsExpected=false,identityReady=false;};
 struct Scene {
     ULONGLONG capturedAt=0;
+    unsigned panelRevision=0,panelSample=0;
     unsigned epoch=0,revision=0,count=0,actorCount=0,partCount=0,room=0,area=0;
     int playerIndex=-1;
     uintptr_t controller=0,primary=0;
@@ -36,6 +37,7 @@ struct Scene {
     bool surfaceReady=false;
     bool allowed=false,cameraValid=false,control=false,controlled=false,swimming=false,dive=false,geometryValid=false,message=false;
     bool visibleMessage=false; // Open TK window with a nonempty text source, captured on the native owner.
+    unsigned bevelleRailPromptWorker=0; // Verified source of the sole visible rail prompt, or 0.
     int window=0;
     // Exact Baaj request-time diagnostic facts, captured with its existing
     // native scene event. No polling or game pointer crosses into preparation.

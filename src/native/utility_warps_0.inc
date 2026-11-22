@@ -1,3 +1,4 @@
+// Hand-maintained; original generator inputs are not retained.
     {0, 1, "event00", L"None"},
     {1, 1, "startmap0", L"None"},
     {2, 1, "camtest0", L"None"},

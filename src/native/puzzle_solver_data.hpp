@@ -1,3 +1,4 @@
+// Hand-maintained; original generator inputs are not retained.
 // Generated from hashed original ATEL.
 #pragma once
 namespace ffx {

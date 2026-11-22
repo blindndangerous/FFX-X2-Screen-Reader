@@ -3,16 +3,20 @@
 namespace ffx {
 // Native owner only. TK window phases 1/2 are open (as in dialogue review);
 // message mode alone can remain set throughout a script with no text window.
-inline bool nativeVisibleMessageText() {
+inline bool nativeVisibleMessageText(unsigned* visibleSlots=nullptr) {
+    if(visibleSlots) *visibleSlots=0;
     for(unsigned slot=0;slot<8;++slot) {
         const auto window=read<uintptr_t>(address(0x14676b0)+slot*4);
         if(!window) continue;
         const auto state=read<uint16_t>(window+0x2c);
         if(state==0 || state>=3) continue;
         const auto text=read<uintptr_t>(window+0x94);
-        if(text && read<uint8_t>(text)>2) return true;
+        if(text && read<uint8_t>(text)>2) {
+            if(!visibleSlots) return true;
+            *visibleSlots|=1u<<slot;
+        }
     }
-    return false;
+    return visibleSlots && *visibleSlots!=0;
 }
 // Native owner only: the same dialogue and controlled-actor facts guard field assistance.
 inline const wchar_t* nativeFieldControlReason() {

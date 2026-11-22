@@ -1,4 +1,5 @@
 #include "utility_scripts.hpp"
+#include "utility_trials.hpp"
 #include "utilities.hpp"
 #include "events.hpp"
 #include "puzzle_solver.hpp"
@@ -16,9 +17,16 @@ struct Continuation {
     int choice = -1;
     bool waiting = false;
     unsigned returnPc = 0;
+    uintptr_t controller = 0;
+    bool restoreControl = false;
+    bool bevelleReward = false;
 } active;
+struct {uintptr_t chunk=0;unsigned epoch=0,serial=0;} collectedBevelle;
 unsigned nextReservation=0;
 struct Initialization {uintptr_t worker=0,signal=0;unsigned epoch=0;} initialization;
+bool fieldControlEnabled(uintptr_t controller) {
+    return controller && (read<uint8_t>(controller)&2)!=0;
+}
 void failContinuation(const wchar_t* message) {
     const auto worker=active.worker,signal=active.signal; active={};
     puzzleCompleted(worker,signal,false,true); viaScriptCompleted(false,true); utilityReply(message);
@@ -38,6 +46,21 @@ void finishing(Event& e) {
         e.before[3]=level<=((type==5 || type==6)?1u:8u) &&
             read<uintptr_t>(worker+0x12c+level*0x4c+0x18)==
                 active.chunk+read<unsigned>(active.chunk+0x30)+active.returnPc;
+        AtelSpan span;
+        if(e.before[3] && (active.restoreControl || active.bevelleReward) && !active.waiting && nativeGameThread() &&
+            read<uintptr_t>(address(0xf26ae8))==active.controller &&
+            read<uintptr_t>(worker+4)==active.chunk && read<uint16_t>(active.signal+8)==active.entry &&
+            nativeAtelSpan(active.chunk,span) && span.serial==active.allocationSerial) {
+            if(active.bevelleReward) collectedBevelle={active.chunk,active.epoch,span.serial};
+            if(!active.restoreControl) return;
+            // Bevelle W16:8 is a child of W54:6. Its caller normally executes
+            // Common005D at 1CE0A after the reward; a direct utility has no
+            // caller to do that. Use the same native restore, without replaying
+            // the caller's rail movement, exit flag or camera changes.
+            // Restore before 469170 dispatches a new scene that may own control.
+            active.restoreControl=false;
+            reinterpret_cast<void(__cdecl*)()>(address(0x471a50))();
+        }
     }
 }
 void finished(Event& e) {
@@ -51,11 +74,51 @@ void finished(Event& e) {
     puzzleGuideCompleted();
 }
 
+void skipCollectedBevelleReward(uintptr_t worker,uintptr_t signal) {
+    if(!worker || !signal || !nativeGameThread() || !collectedBevelle.chunk || collectedBevelle.epoch!=generation() ||
+        read<uint16_t>(worker+0x2e,0xffff)!=16 || read<uint16_t>(signal+8,0xffff)!=8 ||
+        read<uintptr_t>(worker+0x90)!=signal) return;
+    UtilityScript script;
+    if(!captureUtilityScript(script) || script.chunk!=collectedBevelle.chunk || script.allocationSerial!=collectedBevelle.serial ||
+        script.name!="bvyt1100" || read<uintptr_t>(worker+4)!=script.chunk) return;
+    const auto* trial=captureCurrentTrial(script);
+    if(!trial) return;
+    // The verified W54:6 body has one W16:8 request (REQEW at 1CDE2).
+    // Its signal stores the source's global index, which can differ from W54.
+    const auto source=read<uint16_t>(signal+10,0xffff);
+    if(source>=read<uint16_t>(script.controller+0xc)) return;
+    using Worker=uintptr_t(__cdecl*)(int);
+    const auto caller=reinterpret_cast<Worker>(address(0x46a7c0))(source);
+    if(!caller || read<uintptr_t>(caller+4)!=script.chunk || read<uint16_t>(caller+0x2e,0xffff)!=54) return;
+    const auto callerSignal=read<uintptr_t>(caller+0x90);
+    if(!callerSignal || read<uint16_t>(callerSignal+8,0xffff)!=6) return;
+    const auto& chest=trial->collect;
+    const auto level=read<uint8_t>(signal+14,0xff)&15u;
+    if(level>8 || chest.returnPc>=script.length || script.length<=0x1cde2) return;
+    const auto code=script.chunk+script.codeOffset;
+    const unsigned callerLevel=read<uint8_t>(caller+0x32,0xff);
+    if(callerLevel>8 || callerLevel!=(read<uint8_t>(callerSignal+14,0xff)&15u) ||
+        read<uintptr_t>(caller+0x12c+callerLevel*0x4c+0x18)!=code+0x1cde2) return;
+    const auto pc=worker+0x12c+level*0x4c+0x18;
+    if(read<uintptr_t>(pc)!=code+chest.entryPc || read<uint8_t>(code+chest.returnPc)!=0x3c ||
+        read<uint8_t>(code+0x1cde2)!=0x38) return;
+    int treasure=0;
+    if(!captureUtilityValue(script,0x01000a70,1,0,treasure) || !(static_cast<unsigned>(treasure)&trial->mask)) return;
+    // The original child RET acknowledges W54 through the native scheduler.
+    // W54 still owns the exit marker, camera, rail movement and control restore.
+    write<uintptr_t>(pc,code+chest.returnPc);
+}
+
 void initialized(Event& e) {
     initialization={};
     if (!active.waiting || active.epoch != generation() ||
-        e.args[0] != active.worker || e.args[1] != active.signal) return;
+        e.args[0] != active.worker || e.args[1] != active.signal) {
+        skipCollectedBevelleReward(e.args[0],e.args[1]);
+        return;
+    }
     active.waiting = false;
+    // A queued chest can initialize after another script takes field control.
+    active.restoreControl=active.restoreControl && fieldControlEnabled(active.controller);
     if (read<uintptr_t>(active.worker + 4) != active.chunk ||
         read<uint16_t>(active.signal + 8) != active.entry) {
         failContinuation(L"The requested script changed before it could start."); return;
@@ -123,17 +186,21 @@ void checkUtilityScript(const UtilityScript& script, const ScriptAction& action)
 }
 void runUtilityScript(const UtilityScript& script, const ScriptAction& action) {
     checkUtilityScript(script, action);
+    if(action.restoreControl && !fieldControlEnabled(script.controller))
+        throw std::runtime_error("Wait until the game returns field control before collecting the treasure");
     const auto worker = utilityWorker(script, action.worker);
     const auto signal = read<uintptr_t>(worker + 0x88);
     const unsigned reservation=++nextReservation;
-    active = {worker, signal, script.chunk, generation(), action.entry, action.pc, reservation, script.allocationSerial, action.regY, action.choice, true, action.returnPc};
+    active = {worker, signal, script.chunk, generation(), action.entry, action.pc, reservation, script.allocationSerial, action.regY, action.choice, true, action.returnPc, script.controller, action.restoreControl};
+    active.bevelleReward=action.restoreControl && script.name=="bvyt1100" && action.worker==16 && action.entry==8;
     try { utilityRequest(script, action.worker, action.entry,[reservation](bool success) {
         if(success || active.reservation!=reservation || active.epoch!=generation()) return;
         const auto worker=active.worker,signal=active.signal; active={};
         puzzleCompleted(worker,signal,false,true); viaScriptCompleted(false,true);
     },[reservation] {
         return active.waiting && active.reservation==reservation && active.epoch==generation() &&
-            read<uintptr_t>(active.worker+4)==active.chunk && read<uintptr_t>(active.worker+0x88)==active.signal;
+            read<uintptr_t>(active.worker+4)==active.chunk && read<uintptr_t>(active.worker+0x88)==active.signal &&
+            (!active.restoreControl || fieldControlEnabled(active.controller));
     },true,action.activateWorker); }
     catch (...) { active = {}; throw; }
 }

@@ -2,7 +2,12 @@
 #include "navigation_scene.hpp"
 #include "speech_domains.hpp"
 namespace ffx {
-enum class OwnedGuideAction : unsigned {Step,Next,Previous,Expected,Path,Completed,TileCompleted};
+enum class OwnedGuideAction : unsigned {Step,Next,Previous,Expected,Path,Completed,TileCompleted
+#ifdef FFX_DEV_UTILITIES
+    // Development puzzle jump: select step `local` (1-based) after its writes.
+    ,Seek
+#endif
+};
 void resetOwnedPuzzleGuide();
 bool ownedPuzzleGuideActive();
 unsigned ownedPuzzleGuideRevision();

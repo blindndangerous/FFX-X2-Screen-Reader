@@ -9,11 +9,13 @@ namespace ffx {
 // Normalize the copied player-entry region into the existing rectangle route
 // representation. Route strictly inside it, rather than stopping in its near
 // envelope or offering a Confirm action. See the Baaj feature/native record.
-inline InteractionZone playerEntryRegion(const std::array<uint8_t,0x4c>& bytes,unsigned channels) {
+// A non-negative reference names a worker (resolved by 86A830). The caller
+// passes playerWorker=true only when that worker drives the player's actor.
+inline InteractionZone playerEntryRegion(const std::array<uint8_t,0x4c>& bytes,unsigned channels,bool playerWorker=false) {
     InteractionZone zone;
     const auto scalar=[&](unsigned at) {float value;std::memcpy(&value,bytes.data()+at,sizeof(value));return value;};
     int16_t reference=0;std::memcpy(&reference,bytes.data()+0x28,sizeof(reference));
-    if(!(channels&0x20) || reference!=-1) return zone;
+    if(!(channels&0x20) || (reference!=-1 && (reference<0 || !playerWorker))) return zone;
     zone.center={scalar(0),scalar(4),scalar(8)};
     // Native867C09 negates this stored angle before its sine/cosine transform;
     // the generic type3 route representation consumes the transformed angle.

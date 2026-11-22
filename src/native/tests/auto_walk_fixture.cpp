@@ -33,6 +33,7 @@ uintptr_t memory=0;
 std::map<unsigned,Handler> hooks;
 std::vector<std::wstring> speech;
 bool lastInterrupt=false;
+bool refuseTextPlan=false;
 char stallDiagnostic[512]{};
 uint64_t autoWalkClock() { return clockValue; }
 int __cdecl mode() { return dialogue; }
@@ -119,6 +120,7 @@ TextRef planConcat(TextPlan& plan,TextRef left,TextRef right) {
     plan.nodes[plan.count]=node;return ++plan.count;
 }
 bool commitTextPlan(const TextPlan& plan) {
+    if(refuseTextPlan) return false;
     if(!plan.valid || plan.epoch!=generation() || !plan.headline || plan.headline>plan.count ||
         plan.count>plan.nodes.size() || plan.used>plan.bytes.size()) return false;
     std::array<std::wstring,TextPlanNodeLimit> rendered{};
@@ -309,6 +311,25 @@ int main() {
         ++epoch;clockValue+=4000;updateAutoWalk();check(!spokeStuck(),"a frame-check takeover before a room change stays silent");*control=2;
         begin();speech.clear();*control=0;hooks.at(0x471980)(e);clockValue+=3500;updateAutoWalk();
         check(spokeStuck(),"control still off three seconds later away from the destination, with no scene or room change, is spoken");
+        *control=2;
+    }
+    {
+        auto* control=reinterpret_cast<uint8_t*>(address(0x1000000));
+        const auto boarding=[&] {
+            begin({0,0,20});leg.target.id=0xb101;wcscpy_s(leg.target.name.data(),leg.target.name.size(),L"Rail boarding position");
+            speech.clear();*control=0;hooks.at(0x471980)(e);frames(1);
+        };
+        boarding();
+        pad::State boardingPad;autoWalkController(boardingPad);
+        check(keyboard()[0xc8] && boardingPad.ly==24000,"bounded boarding correction still reaches keyboard and controller after W38 takes control");
+        focused=false;check(!keyboard()[0xc8],"boarding correction still respects focus");focused=true;
+        player.z=18;frames(1);
+        check(!keyboard()[0xc8] && speech.size()==1 && speech.back()==L"Rail boarding position: route destination reached",
+            "boarding correction reports arrival at the band boundary and releases steering");
+        boarding();clockValue+=3001;boardingPad={};autoWalkController(boardingPad);
+        check(!keyboard()[0xc8] && !boardingPad.ly,"expired boarding correction cannot inject between field ticks");
+        updateAutoWalk();
+        check(speech.empty(),"boarding correction timeout outside the band stays silent");
         *control=2;
     }
     begin(); *reinterpret_cast<uint8_t*>(address(0x1000000))=0;
