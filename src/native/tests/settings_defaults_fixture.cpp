@@ -118,10 +118,10 @@ int main(int argc,char** argv) {
         check(!setting(Setting::AutoExtraInfo) && settingInfo(Setting::AutoExtraInfo).initial==0,"fresh extra information defaults Off");
         check(!setting(Setting::UnavailableCue) && settingInfo(Setting::UnavailableCue).initial==0,"fresh rejection cue defaults Off");
         check(setting(Setting::SphereNodeNumbers)==1 && settingInfo(Setting::SphereNodeNumbers).initial==1 &&
-            static_cast<unsigned>(Setting::SphereNodeNumbers)==39,"node numbers default On with a new appended ID");
-        check(static_cast<unsigned>(Setting::AutoDetail)==2 && static_cast<unsigned>(Setting::BlitzAssist)==36 &&
-            static_cast<unsigned>(Setting::AutoExtraInfo)==37 && static_cast<unsigned>(Setting::UnavailableCue)==38,
-            "appending the rejection cue preserves all previous setting IDs");
+            static_cast<unsigned>(Setting::SphereNodeNumbers)==37,"node numbers default On with a new appended ID");
+        check(static_cast<unsigned>(Setting::AutoDetail)==2 && static_cast<unsigned>(Setting::BlitzAssist)==34 &&
+            static_cast<unsigned>(Setting::AutoExtraInfo)==35 && static_cast<unsigned>(Setting::UnavailableCue)==36,
+            "setting IDs match the enum after the maximum HP and MP settings were removed");
         for(const auto id:assists)check(settingInfo(id).initial==0 && setting(id)==0,"fresh auto-success must default Off");
         for(const auto id:cues)check(settingInfo(id).initial==1 && setting(id)==1,"fresh puzzle cues must default On");
         check(GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES,"loading fresh defaults must not create a settings file");
