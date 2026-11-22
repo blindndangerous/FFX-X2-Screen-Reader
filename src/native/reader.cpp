@@ -120,10 +120,12 @@ unsigned initializeReader(bool& initializedHooks) {
     }
     // FFX-2 gets keyboard input and map load scopes: no FFX extension scan, dependency check
     // or reader hook. features stays 0 because no reader runs.
+#if FFX2_SUPPORT
     if(nativeProfile==NativeProfile::Ffx2) {
         if(startFfx2Input(initializedHooks)) announceFfx2Boot();
         return 0;
     }
+#endif
     if (!resolveNativeExtensions()) { recordLog("native readers refused: extension address verification failed"); return 0; }
     if (!validateNativeDependencies()) { recordLog("native readers refused: feature dependency verification failed"); return 0; }
     if (MH_Initialize() != MH_OK) return 0;
