@@ -12,6 +12,7 @@
 #include "speech_queue.hpp"
 #include "mod_state.hpp"
 #include "process_storage.hpp"
+#include "dev_pipe.hpp"
 
 namespace ffx {
 #ifdef FFX_SPEECH_WAKE_TEST
@@ -176,6 +177,9 @@ DWORD WINAPI speechThread(void*) {
             std::string utf8(static_cast<size_t>(size),'\0');
             WideCharToMultiByte(CP_UTF8,0,item.text.c_str(),-1,&utf8[0],size,nullptr,nullptr);
             recordLog("text seq=%u interrupt=%d %s",h.sequence,interrupt,utf8.c_str());
+#ifdef FFX_DEV_UTILITIES
+                devSpeechTap(h.producer,utf8.c_str());
+#endif
         }
         const int mode=(h.flags&speechq::Voiced)?setting(Setting::VoicedDialogue):2;
         if(mode==0) {recordLog("dialogue suppressed seq=%u",h.sequence);continue;}

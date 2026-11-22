@@ -5,6 +5,7 @@
 #include "mod_menu.hpp"
 #include "lightning.hpp"
 #include "nonblocking_snapshots.hpp"
+#include <atomic>
 namespace ffx {
 namespace {
 struct PublishedContext { UtilityContext token; unsigned allowed=0; };
@@ -15,6 +16,13 @@ UtilityContext current;
 unsigned serial=0;
 bool allowed=false;
 int previousMode=-1;
+// Game-thread cache of the field term (without focus) for the dev pipe.
+bool fieldReady=false;
+#ifdef FFX_DEV_UTILITIES
+// Development pipe focus hold (dev_focus.hpp): the map generation it was set
+// in. Cleared on pipe disconnect and on map generation change.
+std::atomic<unsigned> focusHoldEpoch{0};
+#endif
 #ifndef FFX_READER_TEST
 HWND rootForeground() { return GetAncestor(GetForegroundWindow(),GA_ROOT); }
 #endif
@@ -33,7 +41,11 @@ bool utilityContextValid(const UtilityContext& token,bool requireGameFocus) {
     if(!valid) return false;
 #ifndef FFX_READER_TEST
     if(!IsWindow(token.window)) return false;
-    if(requireGameFocus && rootForeground()!=token.window) return false;
+    if(requireGameFocus && rootForeground()!=token.window
+#ifdef FFX_DEV_UTILITIES
+        && !devFocusHeld()
+#endif
+    ) return false;
 #else
     (void)requireGameFocus;
 #endif
@@ -49,6 +61,10 @@ void invalidateUtilityContext() {
 void updateUtilityContext() {
     if(!utilityGameThread()) return;
     const bool field=!scene && !inBattle() && !minigameActive() && !modMenuActive();
+    fieldReady=field;
+#ifdef FFX_DEV_UTILITIES
+    if(devFocusHeld() && focusHoldEpoch.load(std::memory_order_acquire)!=generation()) devFocusHoldFlag.store(false,std::memory_order_release);
+#endif
     using Mode=int(__cdecl*)();
     const int mode=field?reinterpret_cast<Mode>(address(0x46c840))():-1;
     HWND candidate=nullptr;
@@ -63,7 +79,10 @@ void updateUtilityContext() {
 #endif
     bool invalidate=false;
     if(!current.window && candidate) current.window=candidate;
-    const bool focused=candidate==current.window || utilityConsoleActive();
+    bool focused=candidate==current.window || utilityConsoleActive();
+#ifdef FFX_DEV_UTILITIES
+    if(devFocusHeld()) focused=true;
+#endif
     const bool next=field && current.window && focused;
     if(next!=allowed || current.epoch!=generation() || mode!=previousMode) {
         current.revision=++serial; invalidate=!next || allowed;
@@ -72,6 +91,14 @@ void updateUtilityContext() {
     published.publish({current,allowed?1u:0u});
     if(invalidate) invalidateUtilityConsole();
 }
+bool utilityFieldReady() {return utilityGameThread() && fieldReady;}
+int utilityFieldMode() {return utilityGameThread()?previousMode:-1;}
+#ifdef FFX_DEV_UTILITIES
+void setDevFocusHold(bool held) noexcept {
+    if(held) focusHoldEpoch.store(generation(),std::memory_order_release);
+    devFocusHoldFlag.store(held,std::memory_order_release);
+}
+#endif
 bool utilityActionAllowed(bool force) {
     if(!utilityGameThread() || !utilityContextValid(utilityContext(),true) ||
         scene || inBattle() || minigameActive() || modMenuActive() || utilityConsoleActive()) return false;

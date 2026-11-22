@@ -4,6 +4,7 @@
 // Real archived code identities, synthetic memory/native API boundaries.
 // No game process or desktop window is opened.
 #include "../events.hpp"
+#include "../log_capture.hpp"
 #include "../utilities.hpp"
 #include "../utility_trials.hpp"
 #include "../utility_trials_data.hpp"
@@ -19,6 +20,7 @@
 #include "utility_prepared_adapter.hpp"
 #include "../puzzle_guide.hpp"
 #include "../puzzle_guide_owned.hpp"
+#include "../puzzle_jump.hpp"
 #include "../puzzle_guide_bindings.hpp"
 #include "../navigation_observations.hpp"
 #include "../navigation_intents.hpp"
@@ -78,6 +80,11 @@ float gagLastFrequency=0;
 int patternAutoDetail=0;
 std::array<std::vector<uint8_t>,16> viaWorkers,viaSignals;
 Point fixturePlayer;
+#if defined(FFX_DEV_UTILITIES) && defined(FFX_UTILITY_COMMAND_FIXTURE)
+std::vector<uint8_t> fixtureActor(0x880);
+uint16_t fixtureRoom=196;
+LogCapture testMark;
+#endif
 int initY=0;
 bool battle=false;
 bool delayedActions=false;
@@ -155,6 +162,7 @@ void load(const TrialUtility& t,const ScriptAction& action,bool prepare=true) {
     put(root,0,ptr(chunk)+0x400);put(root,4,ptr(chunk));put(root,0x2e,static_cast<uint16_t>(0));
     put(target,0,ptr(chunk)+0x500);put(target,4,ptr(chunk));put(target,0x2e,static_cast<uint16_t>(action.worker));
     put(target,0x88,ptr(signal));put(controller,0xc,static_cast<uint16_t>(2));
+    put(controller,0,uint8_t{2}); // Native field control starts with the player.
     put(controller,0x2c,ptr(globals));
     if (std::string(t.script)=="dome0700" && action.worker!=32) {
         put(controller,0xc,static_cast<uint16_t>(3));
@@ -241,8 +249,14 @@ void cancelPedestal() {}
 void clearNavRoute() {}
 std::atomic<int> scene{0};
 bool minigameActive() { return minigame; }
+// Native control/animation is modeled here; utility_control_fixture exercises
+// the real continuation hook's restore timing and ownership guards.
+void __cdecl fixtureRestoreControl() {}
 uintptr_t address(unsigned rva) {
     switch(rva) {
+#if defined(FFX_DEV_UTILITIES) && defined(FFX_UTILITY_COMMAND_FIXTURE)
+    case 0xd2ca90:return reinterpret_cast<uintptr_t>(&fixtureRoom);
+#endif
     case 0xf26ae8: { static uintptr_t c;c=ptr(controller);return reinterpret_cast<uintptr_t>(&c); }
     case 0x46a7c0:return reinterpret_cast<uintptr_t>(worker);
     case 0x46c500:return reinterpret_cast<uintptr_t>(getter);
@@ -251,6 +265,7 @@ uintptr_t address(unsigned rva) {
     case 0x465390:return reinterpret_cast<uintptr_t>(dispatchQueued);
     case 0x46fed0:return reinterpret_cast<uintptr_t>(warp);
     case 0x46c840:return reinterpret_cast<uintptr_t>(mode);
+    case 0x471a50:return reinterpret_cast<uintptr_t>(fixtureRestoreControl);
     default:throw std::runtime_error("Unexpected native fixture address");
     }
 }
@@ -274,7 +289,13 @@ bool pedestalActiveCrossing(const Entity&) { return false; }
 bool pedestalActiveContact(const Entity&) { return false; }
 bool pedestalActivePlan(const Entity&,PedestalPlan&) { return false; }
 std::wstring pedestalConsentName(const PedestalPlan&) { return L"Fixture push control"; }
-uintptr_t playerActor() { return 0; }
+uintptr_t playerActor() {
+#if defined(FFX_DEV_UTILITIES) && defined(FFX_UTILITY_COMMAND_FIXTURE)
+    return fixtureActor[2]?ptr(fixtureActor):0;
+#else
+    return 0;
+#endif
+}
 std::wstring direction(Point) { return L"north"; }
 void startUtilityConsole() {}
 void openUtilityConsole() { ++consoleOpened; }
@@ -308,9 +329,10 @@ namespace {
 bool fixtureGuideControl=true;
 ffx::PedestalNavigationState fixtureGuidePedestal{};
 const ffx::nav::Scene* fixtureGuideScene=nullptr;
-// Live scene workers for the guide: {local worker, interaction channels}.
-std::vector<std::pair<unsigned,unsigned>> fixtureGuideWorkers;
-std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
+// Copied type-6 floor panel facts from the guide's observation boundary.
+struct FixtureGuidePanel {unsigned local,channels,entry=2;};
+std::vector<FixtureGuidePanel> fixtureGuideWorkers;
+std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action,unsigned seek=0) {
     using namespace ffx;
     UtilityScript script=utilityScript();
     uintptr_t worker0=utilityWorker(script,0);
@@ -319,8 +341,9 @@ std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
     nav::Scene& guideScene=*([]()->nav::Scene* { static nav::Scene value{};return &value; })();
     std::memset(&guideScene,0,sizeof(guideScene));guideScene.epoch=generation();guideScene.revision=1;guideScene.primary=script.chunk;guideScene.partCount=1;
     guideScene.control=fixtureGuideControl;guideScene.pedestal=fixtureGuidePedestal;fixtureGuideScene=&guideScene;
-    for(const auto& [local,channels]:fixtureGuideWorkers) {auto& fact=guideScene.workers[guideScene.count++];
-        fact.valid=true;fact.part=0;fact.local=local;fact.global=guideScene.count-1;fact.interactions.channels=channels;}
+    for(const auto& [local,channels,entry]:fixtureGuideWorkers) {auto& fact=guideScene.workers[guideScene.count++];
+        fact.valid=true;fact.part=0;fact.local=local;fact.global=guideScene.count-1;fact.type=6;
+        fact.interactions.channels=channels;if(channels&0x20) fact.interactions.entries[5]=entry;}
     auto& part=guideScene.parts[0];
     check(nativeAtelSpan(script.chunk,part.span),"Native guide fixture captures resource span");
     part.span.epoch=guideScene.epoch;part.guideReady=true;part.bindingsReady=true;part.identityReady=true;
@@ -349,11 +372,14 @@ std::wstring fixturePuzzleGuideSync(ffx::OwnedGuideAction action) {
     }
     speechq::Header header{};header.generation=guideScene.epoch;
     struct WorkerGuard {bool previous;WorkerGuard():previous(fixtureNativeOwner){fixtureNativeOwner=false;}~WorkerGuard(){fixtureNativeOwner=previous;}} guard;
-    return puzzleGuideOwned(action,guideScene,Mesh{},std::vector<Entity>{},header,0,0);
+    return puzzleGuideOwned(action,guideScene,Mesh{},std::vector<Entity>{},header,0,0,seek);
 }
 }
+#ifdef FFX_DEV_UTILITIES
+namespace ffx {bool devNavigationSelect(const wchar_t*,bool) {return false;}bool devNavigationDump(const wchar_t*) {return false;}}
+#endif
 namespace ffx::nav {
-bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned) {
+bool submitNavigationQuery(Query query,bool,unsigned,unsigned local,uintptr_t,unsigned) {
     OwnedGuideAction action;
     switch(query) {
     case Query::GuideStep: action=OwnedGuideAction::Step;break;
@@ -363,9 +389,12 @@ bool submitNavigationQuery(Query query,bool,unsigned,unsigned,uintptr_t,unsigned
     case Query::GuidePath: action=OwnedGuideAction::Path;break;
     case Query::GuideCompleted: action=OwnedGuideAction::Completed;break;
     case Query::GuideTileCompleted: action=OwnedGuideAction::TileCompleted;break;
+#ifdef FFX_DEV_UTILITIES
+    case Query::GuideSeek: action=OwnedGuideAction::Seek;break;
+#endif
     default:return false;
     }
-    const auto text=fixturePuzzleGuideSync(action);if(!text.empty()) utilityReply(text);return true;
+    const auto text=fixturePuzzleGuideSync(action,local);if(!text.empty()) utilityReply(text);return true;
 }
 bool scenePedestalPlan(const Scene&,const Entity&,PedestalPlan&) { return false; }
 InteractionZone sceneInteractionZone(const WorkerFact&,unsigned,float) { return {}; }
@@ -382,6 +411,51 @@ bool takePuzzleGuideTarget(unsigned,unsigned,QueuedPuzzleTarget&) { return false
 void startPuzzleGuideTargets() { std::abort(); }
 void retirePuzzleGuideTargets() { std::abort(); }
 }
+#ifdef FFX_UTILITY_COMMAND_FIXTURE
+namespace {
+void __cdecl dispatchQueued(int,int) { std::abort(); }
+void devCommandFixtures() {
+    updateUtilityContext();
+    const auto run=[](const wchar_t* command,const wchar_t* expected) {
+        const auto count=replies.size();check(queueUtility(command),"development command queued");pumpUtilities();
+        check(replies.size()==count+1 && replies.back()==expected,"development command reply");
+    };
+#ifdef FFX_DEV_UTILITIES
+    run(L"var c0000cd",L"No active field script.");
+    put(chunk,0,1u);put(chunk,0xc,0x1d0u);put(chunk,0x30,0x1000u);put(chunk,0x34,uint16_t{1});
+    memcpy(chunk.data()+0x1d0,"test0000",8);
+    put(chunk,0x38,0x400u);put(chunk,0x402,uint16_t{2});put(chunk,0x414,0x200u);
+    put(root,0,ptr(chunk)+0x400);put(root,4,ptr(chunk));put(controller,0xc,uint16_t{1});
+    declaration(0x0c0000cd,1);declaration(0x01000a70,17);
+    setValue(0x0c0000cd,1,1);setValue(0x01000a70,17,23,16);
+    utility_fixture_resources::prepareUtilityResources(ptr(chunk),chunk.data(),chunk.size());
+    run(L"var 0x0c0000cd",L"0c0000cd = 1.");
+    run(L"var 1000a70 16",L"1000a70 = 23.");
+    run(L"var c0000cz",L"Invalid hexadecimal binding ID.");
+    run(L"var 100000000",L"Invalid hexadecimal binding ID.");
+    run(L"var c0000cd 1",L"Element out of range.");
+    run(L"var c0000cd = 256",L"Value out of range.");
+    run(L"var c0000cd =",L"Invalid decimal value.");
+    check(!writes && queueUtility(L"var c0000cd=9") && !writes,"write waits for the native pump");
+    pumpUtilities();check(writes==1 && replies.back()==L"c0000cd = 9.","native pump writes and speaks the result");
+    run(L"var c0000cd",L"c0000cd = 9.");
+    fixturePlayer={-0.25,2.0,3.125};put(fixtureActor,2,uint16_t{1});put(fixtureActor,0x158,1.5707963f);
+    run(L"pos",L"X -0.3, Y 2.0, Z 3.1. Facing 90 degrees. Room 196. Script test0000.");
+    logCaptureHandler.store([](const LogCapture& packet) noexcept {testMark=packet;});
+    run(L"MARK Phase One 50% \u00e9",L"Marked.");
+    check(testMark.count==1 && std::strcmp(testMark.format.data(),"test mark: %s")==0 &&
+        testMark.arguments[0].owned && std::strcmp(readLogArgument<const char*>(testMark,0),"Phase One 50% \xc3\xa9")==0,
+        "mark captures original text as an owned UTF-8 log argument");
+    logCaptureHandler.store(nullptr);
+#else
+    for(const auto command:{L"pos",L"var c0000cd",L"var c0000cd = 1",L"mark Phase One"})
+        run(command,L"Unknown command. Type help for available commands.");
+#endif
+    std::puts("PASS: development command parsing, queued writes, position, log marks and release gates.");
+}
+}
+int main() try { ffx_fixture::initializeRuntime();installUtilities();devCommandFixtures();
+#else
 #include "zanarkand_fixture.inc"
 #include "zanarkand_pattern_fixture.inc"
 #include "utility_choice_replay.inc"
@@ -647,4 +721,5 @@ int main() try { ffx_fixture::initializeRuntime();std::setvbuf(stdout,nullptr,_I
     delayedActions=false;
     viaFixtures();
     std::puts("PASS: all-six natural interaction substitution, original reveal/collection handoff, destruction-only stay, normal completion, opt-out, generation guards, utilities and development/release console gates.");
+#endif
 } catch(const std::exception& error) {std::fprintf(stderr,"FAIL: uncaught fixture exception: %s\n",error.what());return 1;}

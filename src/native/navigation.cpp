@@ -28,7 +28,14 @@
 #include "puzzle_guide_owned.hpp"
 #include "puzzle_guide_targets.hpp"
 #include "utilities.hpp"
+#include "dev_pipe.hpp"
+#ifdef FFX_DEV_UTILITIES
+#include "scene_snapshot.hpp"
+#include <filesystem>
+#endif
 #include <algorithm>
+#include <cwctype>
+#include <string>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -120,6 +127,55 @@ bool resumeAutoWalk(const NativeRouteTarget& target) {
     interested.store(true,std::memory_order_release);
     return nav::submitNavigationQuery(nav::Query::Resume);
 }
+#ifdef FFX_DEV_UTILITIES
+// Development pipe select/walk text. Game-thread publisher, preparation reader.
+nav::ResumeMailbox testTarget;
+std::string devUtf8(const std::wstring& text) {
+    std::string out;for(const auto c:text) {
+        if(c<0x80) out+=static_cast<char>(c);
+        else if(c<0x800) {out+=static_cast<char>(0xc0|(c>>6));out+=static_cast<char>(0x80|(c&0x3f));}
+        else {out+=static_cast<char>(0xe0|(c>>12));out+=static_cast<char>(0x80|((c>>6)&0x3f));out+=static_cast<char>(0x80|(c&0x3f));}
+    }
+    return out;
+}
+std::wstring devLower(std::wstring text) {for(auto& c:text) c=static_cast<wchar_t>(std::towlower(c));return text;}
+// "scene dump <name>": the game thread publishes the name and bumps the
+// request; the preparation owner writes its copied Scene on its next ready
+// observation. Files go to %FFX_EVIDENCE_ROOT%\scenes (outside Git).
+nav::ResumeMailbox dumpName;std::atomic<unsigned> dumpRequested{0};unsigned dumpServed=0;
+std::filesystem::path devEvidenceRoot() {
+    wchar_t value[1024];auto length=GetEnvironmentVariableW(L"FFX_EVIDENCE_ROOT",value,1024);
+    if(length && length<1024) return value;
+    length=GetEnvironmentVariableW(L"LOCALAPPDATA",value,1024);
+    return length && length<1024?std::filesystem::path(value)/L"FFX-SR"/L"evidence":std::filesystem::path(L".");
+}
+void serviceSceneDump(const nav::Scene& observation,const std::vector<Entity>& entities) {
+    const auto want=dumpRequested.load(std::memory_order_acquire);if(want==dumpServed) return;
+    dumpServed=want;nav::ResumeRequest request;
+    if(!dumpName.take(request)) {devPipeEvent("scene","err dump name not received");return;}
+    AtelIdentity identity;char script[12]{};unsigned checksum=0;
+    if(observation.partCount && readyAtelIdentity(observation.parts[0].span.chunk,identity) && identity.span.serial==observation.parts[0].span.serial) {
+        std::memcpy(script,identity.name,sizeof(script)-1);checksum=identity.checksum;
+    }
+    std::error_code error;const auto folder=devEvidenceRoot()/L"scenes";std::filesystem::create_directories(folder,error);
+    const auto file=folder/(std::wstring(request.name.data())+L".ffxscene");
+    if(!writeSceneSnapshot(file.wstring(),observation,script,checksum)) {devPipeEvent("scene",("err cannot write "+devUtf8(file.wstring())).c_str());return;}
+    // Sidecar: the scanned destinations, for reading without a loader.
+    std::FILE* text=nullptr;auto sidecar=file;sidecar.replace_extension(L".txt");
+    if(!_wfopen_s(&text,sidecar.c_str(),L"wb") && text) {
+        std::fprintf(text,"room=%u script=%s checksum=0x%08x player=%.3f %.3f %.3f entities=%zu\n",observation.room,script,checksum,
+            observation.player.x,observation.player.y,observation.player.z,entities.size());
+        for(std::size_t i=0;i<entities.size();++i) {const auto& e=entities[i];
+            std::fprintf(text,"%zu id=0x%x worker=%d local=%u inactive=%d push=%u pos=%.3f %.3f %.3f name=%s\n",i,e.id,e.worker,
+                e.worker>=0 && static_cast<unsigned>(e.worker)<observation.count?observation.workers[e.worker].local:0u,e.inactive?1:0,e.pushControl,
+                e.position.x,e.position.y,e.position.z,devUtf8(e.name).c_str());
+        }
+        std::fclose(text);
+    }
+    devPipeEvent("scene",("dump room="+std::to_string(observation.room)+" script="+script+" entities="+std::to_string(entities.size())+
+        " bytes="+std::to_string(sizeof(SceneSnapshotHeader)+sizeof(nav::Scene))+" path="+devUtf8(file.wstring())).c_str());
+}
+#endif
 void lockSelected() {
     auto& s=owned();const auto rows=filtered();s.selection=s.selected<rows.size()?key(*rows[s.selected]):EntityKey{};interested.store(true,std::memory_order_release);
 }
@@ -270,6 +326,25 @@ void execute(const Pending& event) {
     }
     case nav::Query::Distance:announce(event,true,false);break;
     case nav::Query::Path:case nav::Query::SilentPath:pathfind(event);break;
+#ifdef FFX_DEV_UTILITIES
+    case nav::Query::TestSelect:case nav::Query::TestWalk: {
+        const bool walk=query==nav::Query::TestWalk;nav::ResumeRequest request;
+        if(!testTarget.take(request)) {devPipeEvent("target","err mailbox busy");emit(event,L"Test selection not received","navigation-path",false);break;}
+        const auto wanted=devLower(request.name.data());const auto rows=filtered();unsigned row=0;
+        while(row<rows.size() && devLower(label(*rows[row])).find(wanted)==std::wstring::npos) ++row;
+        if(wanted.empty() || row==rows.size()) {
+            devPipeEvent("target",("err not found text="+devUtf8(request.name.data())+" rows="+std::to_string(rows.size())).c_str());
+            emit(event,L"No destination matches "+std::wstring(request.name.data()),"navigation-selection");break;
+        }
+        s.selected=row;clearNavRoute();lockSelected();
+        const auto& target=*rows[row];
+        devPipeEvent("target",((walk?"walk":"select")+std::string(" index=")+std::to_string(row+1)+" total="+std::to_string(rows.size())+
+            " id="+std::to_string(target.id)+" worker="+std::to_string(target.worker)+" inactive="+std::to_string(target.inactive?1:0)+
+            " label="+devUtf8(label(target))).c_str());
+        if(walk) pathfind(event);else announce(event);
+        break;
+    }
+#endif
     case nav::Query::Resume: {
         nav::ResumeRequest request;
         if(!resumeTarget.take(request)) {emit(event,L"Auto walk not resumed","navigation-path",false);break;}
@@ -303,6 +378,14 @@ void execute(const Pending& event) {
         catch(const std::exception& error) {const auto* reason=error.what();emit(event,L"Utility stopped: "+std::wstring(reason,reason+std::strlen(reason))+L".","utility-reply");}
         break;
     }
+#ifdef FFX_DEV_UTILITIES
+    case nav::Query::GuideSeek: {
+        if(event.query.policyRevision!=ownedPuzzleGuideRevision()) break;
+        try {const auto text=puzzleGuideOwned(OwnedGuideAction::Seek,s.observation,s.mesh,s.entities,event.header,event.query.manual,event.query.intentRevision,event.query.local);if(!text.empty()) {consoleReplyReady(text.c_str(),text.size());emit(event,text,"utility-reply");}}
+        catch(const std::exception& error) {const auto* reason=error.what();emit(event,L"Utility stopped: "+std::wstring(reason,reason+std::strlen(reason))+L".","utility-reply");}
+        break;
+    }
+#endif
     case nav::Query::GuideTarget: {
         if(!event.direct || event.query.policyRevision!=ownedPuzzleGuideRevision()) break;
         bool matching=false;for(unsigned part=0;part<s.observation.partCount;++part) if(s.observation.parts[part].span.chunk==event.direct->chunk && s.observation.parts[part].span.serial==event.direct->serial) {matching=true;break;}
@@ -394,6 +477,9 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     }
     s.ready=true;
     s.unavailable=false;
+#ifdef FFX_DEV_UTILITIES
+    serviceSceneDump(observation,s.entities);
+#endif
     const std::wstring pedestal=s.selected<rows.size() && rows[s.selected]->pushControl?instruction(*rows[s.selected]):std::wstring{};
     const bool hadRoute=navRouteKnown();updateOwnedNavAudio(observation,s.mesh,s.entities,header,pedestal);
     if(lostSelection) {
@@ -470,6 +556,19 @@ void interactionAfter(Event& e) {if(observationNeeded() && e.before[0]!=read<uin
 }
 void navigationReachabilityChanged() {if(interested.load()) nav::requestNavigationScene();}
 void refreshNavigation() {enqueue(nav::Query::Refresh);}
+#ifdef FFX_DEV_UTILITIES
+bool devNavigationSelect(const wchar_t* text,bool walk) {
+    if(!nativeGameThread()) return false;
+    if(walk) cancelNavigationCommand();
+    testTarget.publish(text,0,0,{});interested.store(true,std::memory_order_release);
+    return nav::submitNavigationQuery(walk?nav::Query::TestWalk:nav::Query::TestSelect);
+}
+bool devNavigationDump(const wchar_t* name) {
+    if(!nativeGameThread()) return false;
+    dumpName.publish(name,0,0,{});dumpRequested.fetch_add(1,std::memory_order_release);
+    interested.store(true,std::memory_order_release);nav::requestNavigationScene();return true;
+}
+#endif
 void refreshSelectedBeacon() {enqueue(nav::Query::Beacon);}
 bool requestNavigationAssistRoute() {return nav::submitNavigationQuery(nav::Query::AssistRoute);}
 void requestNavigationAssistInstruction() {enqueue(nav::Query::AssistInstruction);}

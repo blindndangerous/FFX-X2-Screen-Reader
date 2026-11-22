@@ -32,6 +32,7 @@ if errorlevel 1 goto failed
 if /I "%~1"=="--fixture-runtime" goto success
 if /I "%~1"=="--review" goto review
 if /I "%~1"=="--message-hints" goto messagehints
+if /I "%~1"=="--puzzle-sequences" goto puzzlesequences
 if /I "%~1"=="--abi" goto abi
 if /I "%~1"=="--threading" goto threading
 if /I "%~1"=="--tail" goto tail
@@ -42,6 +43,9 @@ if /I "%~1"=="--retirement" goto retirement
 if /I "%~1"=="--jecht" goto jecht
 if /I "%~1"=="--lightning" goto lightning
 if /I "%~1"=="--console" goto console
+if /I "%~1"=="--dev-pipe" goto devpipe
+if /I "%~1"=="--djose-scene" goto djosescene
+if /I "%~1"=="--snapshots" goto snapshots
 if /I "%~1"=="--readers" goto readers
 if /I "%~1"=="--sphere" goto sphere
 if /I "%~1"=="--controller" goto controller
@@ -73,6 +77,10 @@ if /I "%~1"=="--speech" goto speech
 if /I "%~1"=="--menu-speech" goto menuspeech
 if /I "%~1"=="--atel-resources" goto atelresources
 
+python "%REPO_ROOT%\src\puzzles\tests\test_header_output.py"
+if not "%errorlevel%"=="0" goto failed
+echo PASS: puzzle generator overwrite protection
+
 :modtoggle
 cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:mod_toggle_fixture.exe "%TEST_SRC%mod_toggle_fixture.cpp" "%TEST_SRC%..\mod_toggle.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
@@ -99,11 +107,36 @@ if not "%errorlevel%"=="0" goto failed
 puzzle_guide_progress_fixture.exe
 if not "%errorlevel%"=="0" goto failed
 :messagehints
-cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:puzzle_guide_message_fixture.exe "%TEST_SRC%puzzle_guide_message_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp"
+cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:puzzle_guide_message_fixture.exe "%TEST_SRC%puzzle_guide_message_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp"
 if not "%errorlevel%"=="0" goto failed
 puzzle_guide_message_fixture.exe
 if not "%errorlevel%"=="0" goto failed
+cl /nologo /W4 /EHsc /std:c++17 /MT /Fe:zanarkand_guide_fixture.exe "%TEST_SRC%zanarkand_guide_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\nav_geometry.cpp"
+if not "%errorlevel%"=="0" goto failed
+zanarkand_guide_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+:puzzlesequences
+cl /nologo /W4 /O2 /EHsc /Gy /std:c++17 /MT /Fe:puzzle_sequence_fixture.exe "%TEST_SRC%puzzle_sequence_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_rules.cpp" /link /OPT:REF
+if not "%errorlevel%"=="0" goto failed
+puzzle_sequence_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--puzzle-sequences" goto success
 if /I "%~1"=="--message-hints" goto success
+:djosescene
+rem Development tooling: synthetic Djose scene (gap jump, central lift) and scene snapshot round trip.
+cl /nologo /W4 /O2 /EHsc /Gy /std:c++17 /MT /DFFX_DEV_UTILITIES /Fe:djose_scene_fixture.exe "%TEST_SRC%djose_scene_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_rules.cpp" /link /OPT:REF
+if not "%errorlevel%"=="0" goto failed
+djose_scene_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--djose-scene" goto success
+goto speech
+:snapshots
+rem Opt-in: load every %FFX_EVIDENCE_ROOT%\scenes\*.ffxscene written by "scene dump <name>". No file fails.
+cl /nologo /W4 /O2 /EHsc /Gy /std:c++17 /MT /DFFX_DEV_UTILITIES /Fe:djose_scene_fixture.exe "%TEST_SRC%djose_scene_fixture.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_rules.cpp" /link /OPT:REF
+if not "%errorlevel%"=="0" goto failed
+djose_scene_fixture.exe --snapshots
+if not "%errorlevel%"=="0" goto failed
+goto success
 :speech
 if not exist PrismRuntime mkdir PrismRuntime
 cl /nologo /W4 /EHsc /std:c++17 /MT /LD /Fe:PrismRuntime\prism.dll "%TEST_SRC%fake_prism.cpp" /link /DEF:"%TEST_SRC%fake_prism.def"
@@ -257,7 +290,7 @@ if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--controller" goto success
 :navigationservice
 if not exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\files\ffx_ps2\ffx\master\jppc\event\obj\kl\klyt1000\klyt1000.ebp" goto navigationservice_missing
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" /link user32.lib
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_RETIREMENT_TEST /Fe:navigation_service_fixture.exe "%TEST_SRC%navigation_service_fixture.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\nav_cues.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" /link user32.lib
 if errorlevel 1 goto failed
 navigation_service_fixture.exe
 if errorlevel 1 goto failed
@@ -340,7 +373,7 @@ echo SKIP: readers needs "%FFX_EVIDENCE_ROOT%\native\hudTextureClipBody.bin"
 if "%~1"=="" goto reachability
 goto success
 :readers_have
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:reader_fixture.exe "%TEST_SRC%reader_fixture.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\save_load_menu.cpp" "%TEST_SRC%..\field_details.cpp" "%TEST_SRC%..\field_targets.cpp" "%TEST_SRC%..\naming.cpp" "%TEST_SRC%..\aeon_attributes.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\nav_exits.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_facing.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\messages.cpp" "%TEST_SRC%..\message_text.cpp" "%TEST_SRC%..\button_glyphs.cpp" "%TEST_SRC%..\field_controls.cpp" "%TEST_SRC%..\dialogue_voice.cpp" "%TEST_SRC%..\movie_dialogue.cpp" "%TEST_SRC%..\help.cpp" "%TEST_SRC%..\monster_arena.cpp" "%TEST_SRC%..\copied_text.cpp" "%TEST_SRC%..\copied_controls.cpp" "%TEST_SRC%..\intro_cue.cpp" "%TEST_SRC%..\airship_search.cpp" "%TEST_SRC%..\airship_destinations.cpp" "%TEST_SRC%..\game_binding_input.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\status_review.cpp" "%TEST_SRC%..\status_grid.cpp" "%TEST_SRC%..\shops.cpp" "%TEST_SRC%..\confirmations.cpp" "%TEST_SRC%..\esc_settings.cpp" "%TEST_SRC%..\sphere_grid.cpp" "%TEST_SRC%..\sphere_jump.cpp" "%TEST_SRC%..\sphere_data.cpp" "%TEST_SRC%..\sphere_paths.cpp" "%TEST_SRC%..\sphere_sections.cpp" "%TEST_SRC%..\sphere_expert.cpp" "%TEST_SRC%..\sphere_orientation.cpp" "%TEST_SRC%..\sphere_planner.cpp" "%TEST_SRC%..\sphere_owned.cpp" "%TEST_SRC%..\sphere_text.cpp" "%TEST_SRC%..\battle.cpp" "%TEST_SRC%..\battle_hud.cpp" "%TEST_SRC%..\battle_graphics.cpp" "%TEST_SRC%..\battle_sensor.cpp" "%TEST_SRC%..\battle_announcements.cpp" "%TEST_SRC%..\battle_results.cpp" "%TEST_SRC%..\equipment_overflow.cpp" "%TEST_SRC%..\battle_status.cpp" "%TEST_SRC%..\status_animation.cpp" "%TEST_SRC%..\overdrive.cpp" "%TEST_SRC%..\game_details.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\esc_details.cpp" "%TEST_SRC%..\esc_capture.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\utility_text_plans.cpp" /link user32.lib gdi32.lib
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:reader_fixture.exe "%TEST_SRC%reader_fixture.cpp" "%TEST_SRC%..\text.cpp" "%TEST_SRC%..\game_text.cpp" "%TEST_SRC%..\field_menus.cpp" "%TEST_SRC%..\save_load_menu.cpp" "%TEST_SRC%..\field_details.cpp" "%TEST_SRC%..\field_targets.cpp" "%TEST_SRC%..\naming.cpp" "%TEST_SRC%..\aeon_attributes.cpp" "%TEST_SRC%..\navigation.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\puzzle_guide_targets.cpp" "%TEST_SRC%..\navigation_scene.cpp" "%TEST_SRC%..\navigation_observations.cpp" "%TEST_SRC%..\navigation_intents.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\reachability_capture.cpp" "%TEST_SRC%..\reachability_worker.cpp" "%TEST_SRC%..\nav_memory.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\nav_exits.cpp" "%TEST_SRC%..\exit_labels.cpp" "%TEST_SRC%..\swimming_navigation.cpp" "%TEST_SRC%..\navigation_labels.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_facing.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\atel.cpp" "%TEST_SRC%..\atel_memory.cpp" "%TEST_SRC%..\atel_resources.cpp" "%TEST_SRC%..\messages.cpp" "%TEST_SRC%..\message_text.cpp" "%TEST_SRC%..\button_glyphs.cpp" "%TEST_SRC%..\field_controls.cpp" "%TEST_SRC%..\dialogue_voice.cpp" "%TEST_SRC%..\movie_dialogue.cpp" "%TEST_SRC%..\help.cpp" "%TEST_SRC%..\monster_arena.cpp" "%TEST_SRC%..\copied_text.cpp" "%TEST_SRC%..\copied_controls.cpp" "%TEST_SRC%..\intro_cue.cpp" "%TEST_SRC%..\airship_search.cpp" "%TEST_SRC%..\airship_destinations.cpp" "%TEST_SRC%..\game_binding_input.cpp" "%TEST_SRC%..\system_menus.cpp" "%TEST_SRC%..\system_menu_capture.cpp" "%TEST_SRC%..\ready_text.cpp" "%TEST_SRC%..\status_review.cpp" "%TEST_SRC%..\status_grid.cpp" "%TEST_SRC%..\shops.cpp" "%TEST_SRC%..\confirmations.cpp" "%TEST_SRC%..\esc_settings.cpp" "%TEST_SRC%..\sphere_grid.cpp" "%TEST_SRC%..\sphere_jump.cpp" "%TEST_SRC%..\sphere_data.cpp" "%TEST_SRC%..\sphere_paths.cpp" "%TEST_SRC%..\sphere_sections.cpp" "%TEST_SRC%..\sphere_expert.cpp" "%TEST_SRC%..\sphere_orientation.cpp" "%TEST_SRC%..\sphere_planner.cpp" "%TEST_SRC%..\sphere_owned.cpp" "%TEST_SRC%..\sphere_text.cpp" "%TEST_SRC%..\battle.cpp" "%TEST_SRC%..\battle_hud.cpp" "%TEST_SRC%..\battle_graphics.cpp" "%TEST_SRC%..\battle_sensor.cpp" "%TEST_SRC%..\battle_announcements.cpp" "%TEST_SRC%..\battle_results.cpp" "%TEST_SRC%..\equipment_overflow.cpp" "%TEST_SRC%..\battle_status.cpp" "%TEST_SRC%..\status_animation.cpp" "%TEST_SRC%..\overdrive.cpp" "%TEST_SRC%..\game_details.cpp" "%TEST_SRC%..\selection_details.cpp" "%TEST_SRC%..\esc_details.cpp" "%TEST_SRC%..\esc_capture.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\ready_game_text.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\butterfly_navigation.cpp" "%TEST_SRC%..\swimming_route.cpp" "%TEST_SRC%..\butterfly_paths.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\utility_text_plans.cpp" /link user32.lib gdi32.lib
 if not "%errorlevel%"=="0" goto failed
 reader_fixture.exe
 if not "%errorlevel%"=="0" goto failed
@@ -468,7 +501,7 @@ battle_target_text_fixture.exe
 if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--review" goto success
 :input
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:input_fixture.exe "%TEST_SRC%input_fixture.cpp" "%TEST_SRC%..\input.cpp" "%TEST_SRC%..\direct_input.cpp" /link user32.lib dxguid.lib
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:input_fixture.exe "%TEST_SRC%input_fixture.cpp" "%TEST_SRC%..\input.cpp" "%TEST_SRC%..\direct_input.cpp" "%TEST_SRC%..\bevelle_rail.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" /link user32.lib dxguid.lib
 if not "%errorlevel%"=="0" goto failed
 input_fixture.exe
 if not "%errorlevel%"=="0" goto failed
@@ -498,19 +531,25 @@ if not "%errorlevel%"=="0" goto failed
 proxy_forwarding.exe
 if not "%errorlevel%"=="0" goto failed
 :utilities
+:devpipe
+cl /nologo /W4 /WX /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES /Fe:dev_pipe_fixture.exe "%TEST_SRC%dev_pipe_fixture.cpp" "%TEST_SRC%..\dev_pipe.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib advapi32.lib
+if not "%errorlevel%"=="0" goto failed
+dev_pipe_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+if /I "%~1"=="--dev-pipe" goto success
+cl /nologo /W4 /WX /EHsc /std:c++17 /MT /Fe:utility_control_fixture.exe "%TEST_SRC%utility_control_fixture.cpp" "%TEST_SRC%..\utility_scripts.cpp" /link user32.lib
+if not "%errorlevel%"=="0" goto failed
+utility_control_fixture.exe
+if not "%errorlevel%"=="0" goto failed
+call :utility_fixtures /DFFX_UTILITY_COMMAND_FIXTURE
+if not "%errorlevel%"=="0" goto failed
 if exist "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\maps_v3.json" goto utilities_have
 echo SKIP: utilities needs "%FFX_EVIDENCE_ROOT%\offline-output\FFX\20261003_audit\maps_v3.json"
 goto success
 :utilities_have
 python "%TEST_SRC%prepare_utilities.py"
 if not "%errorlevel%"=="0" goto failed
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES /Fe:utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib
-if not "%errorlevel%"=="0" goto failed
-utility_fixture.exe
-if not "%errorlevel%"=="0" goto failed
-cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /Fe:release_utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib
-if not "%errorlevel%"=="0" goto failed
-release_utility_fixture.exe
+call :utility_fixtures
 if not "%errorlevel%"=="0" goto failed
 goto success
 :sdlowner
@@ -540,3 +579,12 @@ goto failed
 :failed
 popd
 exit /b 1
+:utility_fixtures
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST /DFFX_DEV_UTILITIES %~1 /Fe:utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\dev_pipe.cpp" "%TEST_SRC%..\puzzle_jump.cpp" "%TEST_SRC%..\utility_dev_commands.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib advapi32.lib
+if not "%errorlevel%"=="0" exit /b 1
+utility_fixture.exe
+if not "%errorlevel%"=="0" exit /b 1
+cl /nologo /W4 /EHa /std:c++17 /MT /DFFX_READER_TEST %~1 /Fe:release_utility_fixture.exe "%TEST_SRC%utility_fixture.cpp" "%TEST_SRC%..\utilities.cpp" "%TEST_SRC%..\dev_pipe.cpp" "%TEST_SRC%..\puzzle_jump.cpp" "%TEST_SRC%..\utility_dev_commands.cpp" "%TEST_SRC%..\utility_context.cpp" "%TEST_SRC%..\utility_memory.cpp" "%TEST_SRC%..\utility_scripts.cpp" "%TEST_SRC%..\gagazet.cpp" "%TEST_SRC%..\utility_trials.cpp" "%TEST_SRC%..\utility_warps.cpp" "%TEST_SRC%..\navigation_targets.cpp" "%TEST_SRC%..\puzzle_solver.cpp" "%TEST_SRC%..\zanarkand_patterns.cpp" "%TEST_SRC%..\via_purifico.cpp" "%TEST_SRC%..\puzzle_completion.cpp" "%TEST_SRC%..\puzzle_guide.cpp" "%TEST_SRC%..\puzzle_guide_owned.cpp" "%TEST_SRC%..\bevelle_rail_plan.cpp" "%TEST_SRC%..\puzzle_tiles.cpp" "%TEST_SRC%..\nav_interactions.cpp" "%TEST_SRC%..\nav_geometry.cpp" "%TEST_SRC%..\nav_zones.cpp" "%TEST_SRC%..\pedestal_state.cpp" "%TEST_SRC%..\pedestal_rules.cpp" "%TEST_SRC%..\owned_retirement.cpp" "%TEST_SRC%..\utility_text.cpp" /link user32.lib advapi32.lib
+if not "%errorlevel%"=="0" exit /b 1
+release_utility_fixture.exe
+exit /b %errorlevel%

@@ -19,6 +19,8 @@
 #include "esc_details.hpp"
 #include "nonblocking_snapshots.hpp"
 #include "mod_state.hpp"
+#include "dev_pipe.hpp"
+#include <cstdio>
 #include <atomic>
 
 namespace ffx {
@@ -114,6 +116,9 @@ void inputEvent(Event&) {
     }
     drainKeys();
     pumpUtilities();
+#ifdef FFX_DEV_UTILITIES
+    pumpDevPipe();
+#endif
     updateAutoWalk();
     updatePedestalInput();
     if (!utilityConsoleActive() && !modMenuActive()) pumpPuzzleSolver();
@@ -127,6 +132,9 @@ void inputAfter(Event&) {
 }
 void dispatchHotkey(unsigned vk,bool shift,bool control) {
     if(!modEnabled.load()) return;
+#ifdef FFX_DEV_UTILITIES
+    {char event[64];std::snprintf(event,sizeof(event),"vk=0x%02x shift=%d control=%d",vk,shift?1:0,control?1:0);devPipeEvent("key",event);}
+#endif
     if(dispatchBlitzKey(vk,control)) return;
     if(dispatchFieldControlsKey(vk,control)) return;
     if(dispatchBattleSensorKey(vk,control)) return;
@@ -187,6 +195,9 @@ bool capturesKey(unsigned vk,bool shift,bool control) {
     return binding.handler && (!binding.available || binding.available());
 }
 void installInput() {
+#if defined(FFX_DEV_UTILITIES) && !defined(FFX_READER_TEST)
+    startDevPipe();
+#endif
     const auto user = GetModuleHandleW(L"user32.dll");
     const char* names[] = {"PeekMessageA", "PeekMessageW", "GetMessageA", "GetMessageW"};
     for (unsigned i = 0; i < 4; ++i) hookAddress(reinterpret_cast<uintptr_t>(GetProcAddress(user, names[i])), 0xffff0000 + i, messageEnter, received);

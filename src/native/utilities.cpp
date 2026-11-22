@@ -1,10 +1,12 @@
 #include "utilities.hpp"
 #include "via_purifico.hpp"
+#include "utility_dev_commands.hpp"
 #include "utility_memory.hpp"
 #include "utility_trials.hpp"
 #include "utility_warps.hpp"
 #include "events.hpp"
 #include "puzzle_solver.hpp"
+#include "puzzle_jump.hpp"
 #include "mod_menu.hpp"
 #include "minigames.hpp"
 #include "nonblocking_snapshots.hpp"
@@ -36,6 +38,13 @@ std::wstring normalized(std::wstring value) {
     const auto begin = value.find_first_not_of(L" \r\n\t"), end = value.find_last_not_of(L" \r\n\t");
     if (begin == std::wstring::npos) return {};
     value = value.substr(begin, end - begin + 1);
+#ifdef FFX_DEV_UTILITIES
+    // Normalize the verb, while retaining the original marker text.
+    if(value.size()>4 && value[4]==L' ') {
+        for(size_t i=0;i<4;++i) value[i]=towlower(value[i]);
+        if(value.compare(0,4,L"mark")==0) return value;
+    }
+#endif
     for (auto& c : value) c = towlower(c);
     return value;
 }
@@ -81,6 +90,9 @@ UtilityText executeUtilityNative(std::wstring_view command) {
     const auto split = command.find(L' ');
     const auto verb = command.substr(0, split);
     const std::wstring_view arguments = split == std::wstring::npos ? std::wstring_view{} : command.substr(split + 1);
+#ifdef FFX_DEV_UTILITIES
+    if (verb == L"puzzle" && arguments.substr(0, 5) == L"jump ") return puzzleJumpCommand(arguments.substr(5));
+#endif
     if (verb == L"puzzle") return puzzleCommand(arguments);
     if(verb==L"via") return viaCommand(arguments);
 #ifdef FFX_DEV_UTILITIES
@@ -88,6 +100,10 @@ UtilityText executeUtilityNative(std::wstring_view command) {
         L"Ctrl+Shift+F12 turns the screen reader mod off or on.\r\n"
         L"Shift+F1 in the field opens utilities. Type a command and press Enter. Escape returns to the game.\r\n"
         L"where: current script. warps: trial destinations. warps besaid: search rooms.\r\n"
+        L"Use pos for player position, facing, room and script.\r\n"
+        L"Read a script variable with var, a hex ID and an optional element.\r\n"
+        L"Write a script variable with var hex ID = decimal value.\r\n"
+        L"Use mark followed by text to label the test log.\r\n"
         L"warp besaid: first trial. warp 122 0: room and entrance. Warps preserve story progress.\r\n"
         L"warp macalania-test: early-save testing only; advances story to the playable Macalania trial stage. Reload your original save after testing.\r\n"
         L"warp gagazet-test: early-save testing only; prepares the unfinished cave trials. Follow Prepare swimming party before entering the water. Reload your original save after testing.\r\n"
@@ -103,6 +119,9 @@ UtilityText executeUtilityNative(std::wstring_view command) {
     }
     if (verb == L"warp") return L"The warp destination must be prepared by the development console.";
     if (verb == L"trial") return trialCommand(arguments);
+    if (verb == L"pos") return utilityDevPosition(arguments);
+    if (verb == L"var") return utilityDevVariable(arguments);
+    if (verb == L"mark") return utilityDevMark(arguments);
 #else
     if (verb == L"help") return L"Ctrl+Shift+F12 turns the screen reader mod off or on. F8 opens the accessibility mod menu. F6 toggles beacon; F7 toggles autodetail. I reads descriptions. In trials F9 selects the previous step, F10 the next, and F11 repeats the current step. Outside trials F11 repeats speech.";
 #endif

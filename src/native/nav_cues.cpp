@@ -16,6 +16,7 @@
 #include "butterfly_navigation.hpp"
 #include "wall_cues.hpp"
 #include "log_capture.hpp"
+#include "dev_focus.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
