@@ -1,4 +1,5 @@
 #include "navigation_observations.hpp"
+#include "floor_panels.hpp"
 #include "process_storage.hpp"
 #include "nonblocking_snapshots.hpp"
 #include "auto_walk.hpp"
@@ -20,6 +21,19 @@ std::atomic<bool> started{false},waiting{false};
 unsigned lastCaptured=0,lastRevision=0;
 unsigned pressureRevision=0;
 bool pressure=false;
+struct RailPrompt {uintptr_t chunk=0,window=0,text=0;unsigned epoch=0,revision=0,serial=0,worker=0;} railPrompt;
+unsigned railTextRevision=0;
+void railTextChanging(Event& e) {if(e.args[0]==0 && nativeGameThread()) {++railTextRevision;railPrompt={};}}
+void rememberRailPrompt(const Scene& s) {
+    railPrompt={};
+    if(!s.bevelleRailPromptWorker) return;
+    const auto window=read<uintptr_t>(address(0x14676b0));
+    const auto text=window?read<uintptr_t>(window+0x94):0;
+    if(!text) return;
+    for(unsigned i=0;i<s.partCount;++i) if(s.parts[i].span.chunk==s.primary) {
+        railPrompt={s.primary,window,text,s.epoch,s.revision,s.parts[i].span.serial,s.bevelleRailPromptWorker};return;
+    }
+}
 struct Packet {unsigned kind=0,slot=0,ticket=0;QueryObservation query;};
 unsigned nonzero(std::atomic<unsigned>& counter) {const auto next=counter.fetch_add(1,std::memory_order_acq_rel)+1;return next?next:counter.fetch_add(1,std::memory_order_acq_rel)+1;}
 void release(unsigned slot,unsigned ticket) {if(slot<Slots) tickets[slot].compare_exchange_strong(ticket,0,std::memory_order_release,std::memory_order_relaxed);}
@@ -52,6 +66,9 @@ void prepared() noexcept {if(waiting.load(std::memory_order_acquire)) requestNav
 void startNavigationObservations(QueryConsumer queries,SceneConsumer scenes,ObservationReset resets) {
     if(started.load(std::memory_order_acquire)) return;
     frames.prepare();prepareNavigationSceneStorage();queryConsumer.store(queries,std::memory_order_release);sceneConsumer.store(scenes,std::memory_order_release);resetConsumer.store(resets,std::memory_order_release);
+    hook(0x4b8980,railTextChanging,nullptr);
+    // The show call closes an old window as it installs the new prompt.
+    hook(0x4b8510,[](Event& e) {if(e.parentRva!=0x4589f0) railTextChanging(e);},nullptr);
     if(!onAtelPrepared(prepared)) throw std::runtime_error("Navigation preparation notification unavailable");
     speechq::registerDomain(Domain,process,reset);speechq::registerDomainMaintenance(Domain,retireCanceled);started.store(true,std::memory_order_release);
 }
@@ -84,7 +101,9 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire,std::memory_order_relaxed)) {slot=i;break;}}
     if(slot==Slots) {if(!pressure) {output(L"Navigation data is busy. Updates resume when it recovers.",false,"navigation-pressure");pressure=true;pressureRevision=currentRevision;}return false;}
     auto& frame=frames.get()[slot];frame.requested=want;frame.revision=currentRevision;frame.capturedAt=GetTickCount64();
+    const auto textRevision=railTextRevision;
     frame.available=captureNavigationScene(frame.scene,currentRevision,geometry);
+    if(!frame.available && floorPanelChunk.load()) floorPanelRevision.fetch_add(1);
     if(frame.scene.epoch!=generation() || currentRevision!=revision.load(std::memory_order_acquire)) {
         release(slot,token|Writing);
         // A refused observation is retried only on a new request or a real
@@ -92,6 +111,7 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
         lastCaptured=want;lastRevision=currentRevision;
         return false;
     }
+    if(frame.available && textRevision==railTextRevision) rememberRailPrompt(frame.scene);else railPrompt={};
     // Deliver failure as bounded metadata too. The preparation owner gives
     // each waiting command feedback; failed partial scene fields stay unread.
     AreaNameDemand names;if(frame.available && areaNames.tryRead(names)) captureNavigationAreaNames(frame.scene,names);
@@ -100,6 +120,12 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
     Packet p;p.kind=1;p.slot=slot;p.ticket=token;
     if(!speechq::captureDomain(Domain,p,frame.scene.epoch)) {release(slot,token);return false;}
     lastCaptured=want;lastRevision=currentRevision;return available;
+}
+unsigned bevelleRailPromptOwner(uintptr_t chunk,unsigned serial) {
+    if(!railPrompt.worker || railPrompt.epoch!=generation() || railPrompt.revision!=revision.load(std::memory_order_acquire) ||
+        railPrompt.chunk!=chunk || railPrompt.serial!=serial || read<uintptr_t>(address(0x14676b0))!=railPrompt.window ||
+        read<uintptr_t>(railPrompt.window+0x94)!=railPrompt.text) return 0;
+    return railPrompt.worker;
 }
 void navigationWaitingForData(bool value) {waiting.store(value,std::memory_order_release);}
 bool navigationDataPending() {return waiting.load(std::memory_order_acquire);}

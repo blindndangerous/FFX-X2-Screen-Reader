@@ -40,7 +40,10 @@ UNUSED_READER_ENDPOINT(resetButterfly) UNUSED_READER_ENDPOINT(installAirshipSear
 UNUSED_READER_ENDPOINT(resetAirshipSearch) UNUSED_READER_ENDPOINT(installIntroCue)
 UNUSED_READER_ENDPOINT(resetMessageViews)
 #undef UNUSED_READER_ENDPOINT
-bool hook(unsigned,Handler,Handler) {std::abort();}
+bool hook(unsigned rva,Handler before,Handler after) {
+    check((rva==0x4b8980 || rva==0x4b8510) && before && !after,"only rail prompt lifetime hooks may register");
+    return true;
+}
 bool enableHooks() {std::abort();}
 bool tryNativeReaderAccess() noexcept {std::abort();}
 void releaseNativeReaderAccess() noexcept {std::abort();}

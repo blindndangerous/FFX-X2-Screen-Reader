@@ -4,6 +4,8 @@
 // facing/arming/starting; a worker never dereferences the stored native tokens.
 // See Docs/features/navigation/index.md#movement.
 #include "navigation_intents.hpp"
+#include "dev_focus.hpp"
+#include "floor_panels.hpp"
 #include "navigation_events.hpp"
 #include "owned_nav_target.hpp"
 #include "nonblocking_snapshots.hpp"
@@ -25,7 +27,7 @@ struct Frame {
     NativeRouteTarget target;AtelSpan span;AtelIdentity script;PedestalPlan plan;SceneBindings bindings;RouteEvents events;
     AtelSavedFacts saved;std::array<uint8_t,0x68c0-0x1ec> currentSaved;
     std::array<uint8_t,0x4c> geometry;
-    uintptr_t controller=0,primary=0;unsigned epoch=0,revision=0,manual=0,global=0,local=0,header=0,type=0,model=0,actorCount=0,zeroGlobal=0,zeroHeader=0,collisionSerial=0;
+    uintptr_t controller=0,primary=0;unsigned panelRevision=0,epoch=0,revision=0,manual=0,global=0,local=0,header=0,type=0,model=0,actorCount=0,zeroGlobal=0,zeroHeader=0,collisionSerial=0;
     Intent kind=Intent::Face;ULONGLONG capturedAt=0;
     bool pointOnly=false,announce=true;Point player,actorPose;
 };
@@ -58,7 +60,7 @@ bool qualify(unsigned slot,unsigned token) {
     if(f.capturedAt>now || now-f.capturedAt>250) return rejected("observation age ms",static_cast<unsigned>(now-f.capturedAt),250u);
     if(!nativeReaderResourcesReady()) return rejected("reader resources");
     if(scene) {lastRejection=IntentRejection::Message;return rejected("message or scene open",static_cast<unsigned>(scene.load()));}
-    if(!gameFocused() || inBattle() || modMenuActive() || utilityConsoleActive()) {lastRejection=IntentRejection::Context;return rejected("focus, menu, console or battle");}
+    if(!gameFocusedOrHeld() || inBattle() || modMenuActive() || utilityConsoleActive()) {lastRejection=IntentRejection::Context;return rejected("focus, menu, console or battle");}
     const auto controller=read<uintptr_t>(address(0xf26ae8)),player=playerActor();
     const auto primary=read<uintptr_t>(controller+0x48),controlled=read<uintptr_t>(address(0xf00740));
     if(controller!=f.controller || primary!=f.primary || player!=controlled) {
@@ -103,7 +105,8 @@ bool qualify(unsigned slot,unsigned token) {
         // A callback may change after worker preparation but before native
         // movement starts. Never start a route against obsolete ledge facts.
         if(f.collisionSerial!=navCollisionSerial() || !f.events.ready || !sameRouteEvents(f.events,captureRouteEvents(controller))) return rejected("collision serial or route events",f.collisionSerial,navCollisionSerial());
-        NavLeg leg;if(!navLeg(leg) || leg.pendingCollision || leg.target.worker!=f.target.worker || leg.target.id!=f.target.id || leg.target.pushControl!=f.target.pushControl || leg.target.pushLocal!=f.target.pushLocal) return rejected("route leg");
+        if(f.panelRevision && !panelFactsFresh(f.panelRevision,f.capturedAt,now)) return rejected("floor panel state");
+        NavLeg leg;if(!navLeg(leg) || leg.pendingCollision || leg.panelRevision!=f.panelRevision || (f.panelRevision && leg.panelSample!=floorPanelSample.load()) || leg.target.panelLocal!=f.target.panelLocal || leg.target.worker!=f.target.worker || leg.target.id!=f.target.id || leg.target.pushControl!=f.target.pushControl || leg.target.pushLocal!=f.target.pushLocal) return rejected("route leg");
         if(f.pointOnly && distanceXZ(leg.final,f.target.position)>.1) return rejected("route end");
     }
     return true;
@@ -114,8 +117,17 @@ void invoke(unsigned slot) {
     else if(f.kind==Intent::UpdatePedestal) updatePedestalOwnedTarget(f.target);
     else if(f.kind==Intent::AssistFailed) cancelPedestal();
     else {
-        if(f.kind==Intent::ArmAndStart || f.kind==Intent::ArmAndFace) {UtilityScript script;if(!scriptFor(f,script)) return;armPedestalOwned(f.target,script,f.plan,f.kind==Intent::ArmAndStart);}
-        if(f.kind==Intent::ArmAndFace) faceNavigationTarget(f.target);else startAutoWalk(f.announce);
+        bool announce=f.announce;
+        if(f.kind==Intent::ArmAndStart || f.kind==Intent::ArmAndFace) {
+            UtilityScript script;if(!scriptFor(f,script)) return;
+            const bool entrance=bevelleEntrance(f.target.pushControl,f.target.position);
+            const bool armed=armPedestalOwned(f.target,script,f.plan,f.kind==Intent::ArmAndStart || entrance);
+            if(entrance && !armed) {
+                output(L"Rail pedestal assistance is unavailable.",true,"navigation-action-refused");return;
+            }
+            if(entrance) announce=false; // The pedestal owner cues the approach and crossing.
+        }
+        if(f.kind==Intent::ArmAndFace) faceNavigationTarget(f.target);else startAutoWalk(announce);
     }
 }
 }
@@ -135,6 +147,10 @@ bool submitNavigationIntent(const Scene& observation,const Entity& target,Intent
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire)) {slot=i;break;}}
     if(slot==Slots) return false;auto& f=frames.get()[slot];OwnedNavTarget captured;
     if(!captureOwnedNavTarget(target,captured)) {release(slot,token|Writing);return false;}f.target=captured.native;
+    f.panelRevision=0;
+    if(observation.room==320 || target.panelLocal) f.panelRevision=observation.panelRevision;
+    else for(unsigned i=0;i<observation.partCount;++i)
+        if(observation.parts[i].span.chunk==observation.primary && observation.parts[i].panelMap) f.panelRevision=observation.panelRevision;
     f.span=observation.parts[part].span;f.controller=observation.controller;f.primary=observation.primary;f.epoch=observation.epoch;f.revision=wantedRevision;f.manual=manual;f.pointOnly=pointOnly;f.player=observation.player;f.events=observation.geometry.events;f.collisionSerial=observation.collisionSerial;
     if(worker) {f.global=worker->global;f.local=worker->local;f.header=worker->header;f.type=worker->type;f.geometry=worker->geometry;}f.saved=observation.saved;f.kind=kind;f.capturedAt=observation.capturedAt;
     f.announce=announce;
@@ -159,8 +175,10 @@ void dispatchNavigationIntents() {
         action.prepare=[slot,token] {return qualify(slot,token);};action.invoke=[slot] {invoke(slot);};
         action.retire=[slot,token] {release(slot,token|Held);};
         const auto kind=frames.get()[slot].kind;
-        action.complete=[kind](bool okay) {
+        const bool guarded=frames.get()[slot].panelRevision!=0;
+        action.complete=[kind,guarded](bool okay) {
             if(okay || kind==Intent::UpdatePedestal) return;
+            if(guarded) {output(noSafePanelRoute,false,"navigation-action-canceled");return;}
             if(const auto text=intentCancelText(lastRejection)) output(text,false,"navigation-action-canceled");
         };
         if(!deferNativeAction(action)) {release(slot,token|Held);output(L"Navigation action is busy. Request the route again.",false,"navigation-pressure");}

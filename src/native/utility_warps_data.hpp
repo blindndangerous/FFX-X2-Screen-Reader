@@ -1,3 +1,4 @@
+// Hand-maintained; original generator inputs are not retained.
 // Generated from extracted entrance tables; no invented spawn range.
 #pragma once
 namespace ffx {

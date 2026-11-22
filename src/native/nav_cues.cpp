@@ -1,4 +1,5 @@
 #include "nav_audio.hpp"
+#include "floor_panels.hpp"
 #include "auto_walk.hpp"
 #include "field_controls.hpp"
 #include "utilities.hpp"
@@ -64,6 +65,8 @@ struct State {
     unsigned epoch=0,revision=0,routeEpoch=0,audioContext=0,collisionSerial=0,routeCollisionSerial=0;
     nav::CollisionSnapshot copiedCollision,routeCollision;
     bool arrived=false,allowed=false,ready=false,automaticPush=false;
+    // Pedestal whose arrival was last spoken; a held push re-routes to it.
+    int spokenWorker=-1;unsigned spokenId=0,spokenEpoch=0;
     // Consecutive observations without the route's destination, and when the
     // first of them was captured.
     unsigned missing=0,arrivalSerial=0;ULONGLONG missingSince=0;
@@ -95,6 +98,12 @@ void publishLeg() {
                 p.leg.arrivalInside=s.arrivalRoute.back();
             }
         }
+        if(s.collision.panels.required) {
+            const auto& panels=s.collision.panels;
+            if(!panels.ready || !panelFactsFresh(panels.revision,panels.capturedAt,GetTickCount64())) {publishEmpty();return;}
+            p.leg.panelSample=panels.sample;p.leg.panelRevision=panels.revision;p.leg.panelCapturedAt=panels.capturedAt;
+            p.leg.panelCorridor=panelLegCorridor(panels,s.target.panelLocal,p.leg.start,p.leg.goal)-panels.radius;
+        }
         OwnedNavTarget copied;std::memset(&copied,0,sizeof(copied));if(!captureOwnedNavTarget(s.target,copied)) {publishEmpty();return;}p.leg.target=copied.native;
     }
     publishSnapshot(p);
@@ -121,8 +130,25 @@ bool ownsAutomaticPush(const Entity& target) {
     return push.armed && push.held && push.epoch==owned().epoch && push.control>=1 && push.control<=2 &&
         push.control==target.pushControl && push.worker==target.worker && push.id==target.id && push.local==target.pushLocal;
 }
+// In game (Macalania, 2026-11-19): holding the push key re-routes the
+// approach to the same pedestal, which spoke the arrival a second time.
+bool repeatsPushArrival(const Entity& target) {
+    const auto& s=owned();const auto& push=s.push;
+    return target.pushControl && push.armed && push.held && push.epoch==s.epoch && push.control==target.pushControl &&
+        push.worker==target.worker && push.id==target.id && s.spokenEpoch==s.epoch && s.spokenWorker==target.worker && s.spokenId==target.id;
+}
+void noteSpokenTarget(const Entity& target) {
+    auto& s=owned();s.spokenTarget=target;s.spokenTargetName=target.name.empty()?target.category:target.name;
+    s.spokenTargetEpoch=generation();s.spokenTargetAt=GetTickCount64();
+}
 void setRoute(const std::vector<Point>& points,const Entity& target,bool newRoute=false,bool assisted=false) {
-    reconcile();auto& s=owned();s.epoch=generation();s.legs=points;s.nextLeg=1;s.routeEpoch=s.epoch;s.arrived=false;s.missing=0;
+    reconcile();auto& s=owned();
+    if(s.collision.panels.required || target.panelLocal) {
+        auto safe=panelSafeRoute(s.collision,target,points);
+        if(safe.empty()) {loseNavRoute(L"no safe route around active panels");return;}
+        s.legs=std::move(safe);
+    } else s.legs=points;
+    s.epoch=generation();s.nextLeg=1;s.routeEpoch=s.epoch;s.arrived=false;s.missing=0;
     s.arrivalRoute.clear();s.arrivalNext=1;s.arrivalRouted=false;
     s.routeCollisionSerial=s.collisionSerial;s.routeCollision=s.copiedCollision;
     s.destination=target.name.empty()?target.category:target.name;s.target=target;known=!s.destination.empty();
@@ -159,8 +185,10 @@ void advance() {
         }
         const auto goal=s.legs[s.nextLeg];const double steps=distanceXZ(s.player,goal)/11.13;
         const auto pointRange=setting(Setting::AutoWalk)?1.0:11.13;
-        if(s.nextLeg+1==s.legs.size() && (s.target.swimDepth?navigationTargetReached(s.target,s.player):
-            (s.target.zone.valid?navigationTargetReached(s.target,s.player):distanceXZ(s.player,goal)<=pointRange) && (horizontal || std::abs(s.player.y-goal.y)<=8))) {
+        const bool reached=s.target.panelLocal?insidePanel(s.collision.panels.rows[s.target.panelLocal-57],s.player):
+            s.nextLeg+1==s.legs.size() && (s.target.swimDepth?navigationTargetReached(s.target,s.player):
+            (s.target.zone.valid?navigationTargetReached(s.target,s.player):distanceXZ(s.player,goal)<=pointRange) && (horizontal || std::abs(s.player.y-goal.y)<=8));
+        if(reached) {
             s.arrived=true;
         } else if(!s.target.swimDepth || distanceXZ(s.player,goal)>.1) {
             double pan=0,front=1;
@@ -195,7 +223,10 @@ void advance() {
     if(!current()) return;
     publishLeg();publishNavAudio(audio);
     if(s.arrived && s.routeEpoch && (!s.arrivalSerial || navArrivalConfirmation.load(std::memory_order_acquire)==s.arrivalSerial)) {
-        if(!s.automaticPush) emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
+        if(!s.automaticPush) {
+            emit(s.destination+L": route destination reached"+(s.target.pushControl?L". "+s.pedestal:L""),"navigation-arrival");
+            s.spokenWorker=s.target.pushControl?s.target.worker:-1;s.spokenId=s.target.id;s.spokenEpoch=s.epoch;
+        }
         if(setting(Setting::Beacon) && setting(Setting::Arrival)) navAudioArrival();s.routeEpoch=0;
     }
 }
@@ -286,7 +317,11 @@ void clearNavRoute() {navRouteStopReported=true;clearRevision.fetch_add(1,std::m
 void loseNavRoute(const wchar_t* reason) {
     // A pending battle resume speaks its own outcome ("not found" when the
     // destination is really gone), so a route lost while it waits stays silent.
-    const bool announce=onOwner() && current() && known.load(std::memory_order_acquire) &&
+    // A Bevelle boarding stop (0xb100+pedestal) vanishes whenever the pedestal
+    // leaves or a recess dialog opens; the ride itself is the outcome.
+    const bool boardingStop=onOwner() && owned().target.id>=0xb100u && owned().target.id<=0xb1ffu;
+    if(boardingStop) recordLog("navigation route to Bevelle boarding stop dropped: %ls",reason);
+    const bool announce=onOwner() && current() && known.load(std::memory_order_acquire) && !boardingStop &&
         !(owned().arrived && !owned().routeEpoch) && !autoWalkResumePending() && claimNavRouteStopSpeech();
     releaseAutoWalk();clearNavRoute();
     if(announce) emit(L"Route lost: "+std::wstring(reason),"navigation-route-lost");
@@ -296,7 +331,9 @@ void captureNavCamera() {
     static nav::CopiedCamera previous;static unsigned previousRevision=0,previousEpoch=0;
     const auto revision=clearRevision.load(std::memory_order_acquire),epoch=generation();
     nav::CopiedCamera camera;
-    if(navRouteKnown() && gameFocused() && !scene && !inBattle() && !modMenuActive() && !utilityConsoleActive() && !nativeFieldControlReason()) camera.valid=cameraBasis(camera.forward,camera.right);
+    // Sampled in the whole field, route or not: a cut without a route speaks a
+    // short cue. The first valid sample of a room is only the baseline.
+    if(gameFocusedOrHeld() && !scene && !inBattle() && !modMenuActive() && !utilityConsoleActive() && !nativeFieldControlReason()) camera.valid=cameraBasis(camera.forward,camera.right);
     if(!camera.valid) cameraSerial.fetch_add(1,std::memory_order_acq_rel);
     const bool cut=previousRevision==revision && previousEpoch==epoch && nav::cameraCut(previous,camera);
     if(cut) cameraSerial.fetch_add(1,std::memory_order_acq_rel);
@@ -318,7 +355,7 @@ void updateNavTarget(const Entity& target) {
     if(!onOwner()) {if(!captureRoute(TargetPacket,{},target)) output(L"Navigation updates are busy. Updates resume when it recovers.",false,"navigation-pressure");return;}
     reconcile();auto& s=owned();
     finishConfirmedArrival();
-    if(s.routeEpoch!=s.epoch || target.actor!=s.target.actor || target.worker!=s.target.worker || target.id!=s.target.id || target.pushControl!=s.target.pushControl || target.pushLocal!=s.target.pushLocal || sameTarget(s.target,target)) return;
+    if(s.target.panelLocal || s.routeEpoch!=s.epoch || target.actor!=s.target.actor || target.worker!=s.target.worker || target.id!=s.target.id || target.pushControl!=s.target.pushControl || target.pushLocal!=s.target.pushLocal || sameTarget(s.target,target)) return;
     s.target=target;if(target.inactive) {loseNavRoute(L"destination inactive");return;}
     const auto route=navigationRouteOwned(s.collision,s.player,target,s.live);
     if(route.empty()) {loseNavRoute(L"destination outside the connected floor");}
@@ -333,19 +370,38 @@ void updateOwnedNavAudio(const nav::Scene& observation,const Mesh& mesh,const st
     // Keep silence through the final native completion/late arrival snapshot.
     // A newly requested route resets the latch, including manual socket routes.
     if(s.routeEpoch==s.epoch && ownsAutomaticPush(s.target)) s.automaticPush=true;
+    // A dispatched script can leave the floor unchanged. Keep input fenced
+    // until the worker checks a current observation, then renew the same leg.
+    if(s.routeEpoch==s.epoch && mesh.panels.ready && mesh.panels.revision!=floorPanelRevision.load() &&
+        GetTickCount64()-mesh.panels.capturedAt<=250) {nav::requestNavigationScene();return;}
+    if(s.routeEpoch==s.epoch && (s.collision.panels.required || mesh.panels.required)) {
+        const auto& previous=s.collision.panels;
+        const auto& next=mesh.panels;
+        if(!panelFactsFresh(next.revision,next.capturedAt,GetTickCount64()))
+            loseNavRoute(L"floor panel state changed or unavailable. Walk manually.");
+        else if(!sameFloorPanels(previous,next)) {
+            const unsigned bit=s.target.panelLocal?1u<<(s.target.panelLocal-57):0;
+            auto afterTouch=previous;
+            afterTouch.active&=~bit;afterTouch.pattern=next.pattern;
+            if((previous.active&bit) && !(next.active&bit) && sameFloorPanels(afterTouch,next) &&
+                touchesPanel(previous.rows[s.target.panelLocal-57],s.player,s.player,previous.radius)) s.arrived=true;
+            else loseNavRoute(L"floor panel state changed or unavailable. Walk manually.");
+        }
+    }
     s.collision=mesh;s.live=targets;s.camera={observation.forward,observation.right,observation.cameraValid};nav::CameraScope camera(observation.forward,observation.right,observation.cameraValid);
     finishConfirmedArrival();
-    if(s.routeEpoch==s.epoch) {
+    if(s.routeEpoch==s.epoch && !(s.target.panelLocal && s.arrived)) {
         const auto target=std::find_if(targets.begin(),targets.end(),[&](const Entity& e) {return e.actor==s.target.actor && e.worker==s.target.worker && e.id==s.target.id && e.pushControl==s.target.pushControl && e.pushLocal==s.target.pushLocal;});
         // Guide point routes have no entity owner; they retain their copied goal.
         // The field list rebuilt after a battle or scene can lack the destination
         // for a frame. Lose the route only after two observations spanning half a second.
-        if(s.target.worker>=0 && target==targets.end()) {
+        if(!s.target.panelLocal && s.target.worker>=0 && target==targets.end()) {
+            if(mesh.panels.required) {loseNavRoute(L"floor panel route target unavailable");return;}
             if(!s.missing++) s.missingSince=observation.capturedAt;
             if(s.missing>=MissingObservations && observation.capturedAt-s.missingSince>=MissingMs) loseNavRoute(L"destination gone");
             return;
         }
-        if(s.target.worker>=0) {s.missing=0;updateNavTarget(*target);if(!s.routeEpoch) {advance();return;}}
+        if(!s.target.panelLocal && s.target.worker>=0) {s.missing=0;updateNavTarget(*target);if(!s.routeEpoch) {advance();return;}}
         // A native ledge sequence may relocate the player or change crossing
         // ownership without moving the destination. Retire/replan the actual
         // remaining legs; never keep steering back across a returning ledge.

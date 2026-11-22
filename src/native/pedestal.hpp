@@ -53,9 +53,8 @@ struct PedestalPlan {
     std::wstring_view blocked;
     unsigned phase=0,producer=0,entry=0;
     bool complete=false;
-    // The push key is not the consent: at this pedestal Confirm opens its
-    // sphere prompt. Auto walk to the pedestal is the consent (Besaid,
-    // Kilika).
+    // A requested walk can continue into the push. Besaid and Kilika use
+    // physical contact (Confirm opens the sphere prompt). Bevelle uses W39's edge.
     bool walkConsent=false;
 };
 static_assert(std::is_trivially_copyable_v<PedestalSnapshot> && std::is_trivially_destructible_v<PedestalPlan>);
@@ -74,6 +73,8 @@ PedestalPlan currentPedestalPlan(const Entity&);
 void preparePedestalZone(Entity&,uintptr_t worker);
 bool pedestalCrossingZone(Entity&);
 bool pedestalActiveCrossing(const Entity&);
+inline bool bevelleEntrance(unsigned control,Point position) {return control==7 && position.z<0;}
+bool pedestalEntranceCrossing();
 bool pedestalActiveContact(const Entity&);
 bool pedestalActivePlan(const Entity&,PedestalPlan&);
 bool pedestalContactZone(Entity&);
@@ -85,10 +86,9 @@ struct PedestalNavigationState {
     double touch=0; // Learned off-side touch radius (in-game F27), or 0.
 };
 PedestalNavigationState capturePedestalNavigationState(); // Native owner, fixed copied state only.
-// walk: armed by an auto walk start (backslash), which is the consent for a
-// walk-consent plan. Selecting or facing the pedestal arms without it.
+// walk records the request to walk, including backslash from Bevelle staging.
 void armPedestal(const Entity&,bool walk=false);
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool walk=false);
+bool armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool walk=false);
 void updatePedestalOwnedTarget(const NativeRouteTarget&);
 void cancelPedestal();
 void updatePedestalInput();

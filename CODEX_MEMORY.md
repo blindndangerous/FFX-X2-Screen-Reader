@@ -1,4 +1,157 @@
-# FFX current memory — November16
+# FFX current memory — November17
+
+November 17, step 4. Zanarkand guide Path can submit a requested walk around
+qualified active floor rectangles. A changed or unavailable panel observation
+stops steering. Touching only the chosen panel counts as arrival. From rest,
+steering checks clearance for a two-frame pulse. The worker logs per-panel
+opcode counts for the field check. The detached worktree has offline coverage. Gameplay remains
+pending. See the [cloister record](Docs/features/puzzles/index.md#cloisters).
+
+November 17 r28 follow-up. Guide Path describes the Bevelle entrance. Backslash
+with Auto walk enabled starts the cued crossing. A repeat reports progress.
+Only a completed direct collection in the same epoch and script allocation
+can skip the W16:8 reward at W54:6's original request.
+
+November 17 r27 review. Bevelle direct collection respects field control and
+the physical W54 caller's progression. W38 boarding tracks the verified stop
+and input band. W43 and rail-message speech use qualified, fresh observations.
+Besaid Path refreshes after dialogue closes. Macalania manual pushes use motion
+and destination phases. Zanarkand floor Path gives manual directions. The
+build and native suite exited 0 with 155 PASS lines and four evidence skips.
+Strict replay passed 724 checks across 49 events with zero XFAIL. Python
+discovery passed 15 tests with one archive class skipped. See the
+[cloister record](Docs/features/puzzles/index.md#cloisters) for offline limits
+and the nonvisual gameplay procedure.
+
+November17 Bevelle G and Besaid message repair. Chest collection records the
+reward. The guide waits for native ascent evidence before offering the final
+platform. At earlier stops, Expected and Path use the entrance pedestal, the
+current boarding position or the rail Confirm prompt. Besaid's visible result
+message owns the guide until it closes. Strict replay passes 620 checks across
+45 events with no XFAIL. The full native suite and no-deploy build both exited 0.
+The suite recorded 123 PASS lines plus proxy forwarding and four evidence skips.
+Collision traversal, input and audible speech still
+require gameplay confirmation. See the [cloister record](Docs/features/puzzles/index.md#cloisters).
+
+November17 sequence replay tests link the unchanged production guide and owned
+observation helpers. Six streams cover entrance/on-rail collection, W70/W69 reset
+and seven-panel recovery, one-message close, coalescing/late activation and missed
+rail departure/new room epoch. Narrow XFAILs retain Bevelle G (including its
+upper-rail variant) and expose existing Besaid message action/path conflicts.
+Geometry checks establish coarse level prerequisites only; native rewards,
+input consumption, physical traversal and audible output remain unverified.
+See [the puzzle record](Docs/features/puzzles/index.md#cloisters) and
+`.local/sequence-replay-verification.json`. Existing uncommitted fixes remain;
+no production edit, commit, deployment, game input or scratchpad script edit.
+Final native suite and no-deploy build exit exactly 0: 123 PASS records plus
+proxy forwarding, five XFAIL assertions and four retained-evidence skips.
+The new host checks 38 events with 543 assertions; strict mode exits 1 on the
+five known failures. All 25 other pre-existing changed files are byte-identical.
+
+November17 puzzle generator protection: the user confirmed the original design
+archives, ATEL tables and FFXDataParser inputs are no longer retained. Existing
+native data is the maintained authority. All three puzzle generators now refuse
+differing in-place headers/includes unless `--overwrite-maintained` is explicit;
+`--output-dir` allows separate output. Eight evidence-free guard tests run in the
+full native suite. Regenerate-and-diff is intentionally skipped. Prior Bevelle
+and Zanarkand changes remain intact; data-file changes are banner comments only.
+See [the puzzle record](Docs/features/puzzles/index.md#cloisters) and
+`.local/regen-guard-verification.json` for the verification receipt. No commit,
+deployment or game interaction in this task.
+
+November17 r25 Zanarkand floor-guide repair: native pattern 2 needs seven
+successes, not all ten alternative panel rows. The generator blocked its two-slot
+70/74/79 group after one; pattern 4 had the same defect in both groups. Corrected
+conjunctive guards capture second slots 0x26/28 (18/32 guide bindings). Current
+interaction facts replace visited receipts; reset entries, equal-count resets,
+stale completed steps and first-pedestal prerequisites have focused coverage.
+F2 is warning-only: auto walk still crosses active panels and can reset patterns;
+no-progress stops and safe avoidance remain unverified. Owned diagnostics report
+completion observations, count drops, quotas, channels and data age, not lossless
+event history. Existing Bevelle/Macalania changes are preserved. No commit,
+deployment, game interaction or Tester Logs access. Eleven fail-before/pass-after
+groups and a 1,197-case retained-script audit support the repair. Full native
+suite exits 0: 121 PASS records plus proxy forwarding, four unchanged evidence
+skips and no failures. No-deploy build exits 0; no new warning category. Source
+hashes are unchanged through both final gates. Full-suite/build receipt: `.local/zanarkand-r25-verification.json`. See the maintained
+[guide record](Docs/features/puzzles/index.md#cloisters) for rules, offline limits
+and the prioritized later nonvisual procedure. Live audio/timing remain unverified.
+
+
+November17 r25 Bevelle repair: direct W16:8 collection omitted its normal
+W54:6 caller's Common005D control restore. Only that utility contract now opts
+into native restoration at its exact final RET, before next-signal dispatch,
+with controller/entry/signal/chunk/epoch/allocation/native-owner guards. The
+other five retained chest continuations already restore control themselves.
+Bevelle entrance wording describes automatic crossing; Macalania manual push
+and Besaid/Kilika walk-consent advice remain. Exact armed W39:6 entrance launch
+retires its stale walking route before the ride. Junction cue design/timing
+and all earlier guide changes are preserved.
+Final full native suite exits 0: 110 PASS records plus proxy forwarding, four
+unchanged evidence skips, no failures. No-deploy build exits 0; warning categories
+match r24. The new production-hook fixture passes 34 checks; A/B/C each failed
+before repair. An initial full run is superseded because the new test stub
+crashed on a null signal and its runner missed a negative exit code; both test
+defects were corrected before the final full rerun. Production/build inputs
+were unchanged. Receipts: `.local/bevelle-r25-{full-tests,build,script-audit}.log`,
+`.local/bevelle-r25-verification.json`. No commit, deployment, game interaction
+or Tester Logs access. Actual native restoration during rail motion and audible
+recovery remain unverified. See the [maintained guide record](Docs/features/puzzles/index.md#cloisters)
+for the repair contract and prioritized entrance/on-rail collection procedure.
+
+November17 r24 Bevelle/Macalania follow-up: preserved the uncommitted entrance,
+treasure and rail-stop fixes. Rail Confirm now names the copied inverse-remap
+binding (default C, distinct from push X); step/path and proactive speech agree.
+The existing GuideCompleted refresh announces active Bevelle window openings
+and arrow changes once per observed phase, rejecting timing snapshots older
+than 100 ms. Removed the old post-acceptance variable-write cue. W22's added
+phase keeps the combined bounded capture at 30/32 rows. Original script phases
+last 12 ticks (nominal 0.4 s at 30 ticks/s); spatial junction windows have no fixed
+countdown. W43 accepts held Confirm in either phase; the reported delayed miss
+cannot be assigned an exact cause offline. Native input/timing is unchanged.
+Shared pedestal hints require push key plus direction for non-assisted controls;
+the active Macalania guide observes manual phase-99 motion and destination/control
+return for start/completion speech, excluding reset motion and armed assistance.
+Final full native suite: exit 0, 109 PASS records plus proxy forwarding, four
+unchanged evidence skips, zero failures. Final no-deploy build: exit 0, warning
+categories unchanged. Receipts: `.local/bevelle-r24-final-{full-tests,build}.log`,
+`.local/bevelle-r24-verification.json`; final source hashes unchanged through both.
+No commit, deployment, game interaction or Tester Logs access. Live audible
+timing remains unverified. See the [maintained guide record](Docs/features/puzzles/index.md#cloisters)
+for timing evidence, limitations and the consolidated nonvisual test procedure.
+
+November17 live rail-stop follow-up: the user reports the entrance-completion
+fix passes, but visible prompt wording and later junction waits fail. Current
+source now recognizes nearby enabled W40-W51 rail regions with clear accepted-
+input latches, handles the rail-owned message, and names Confirm/arrow timing.
+The upper second junction reads its copied phase to distinguish left/source
+from right/power recess. Query-only diagnostics include W40/W39 and are capped
+at one line/second. Both reported fixtures fail before and pass after; all
+original entrance/treasure fixes remain. Native capture/live timing are still
+unverified. See the [maintained guide record](Docs/features/puzzles/index.md#cloisters)
+and `.local/bevelle-rail-*.log`; the previous repair record below is historical.
+Final full suite: 107 PASS records, four retained-evidence skips, exit 0.
+Final no-deploy build: exit 0; existing warning categories only.
+No commit, deployment, PR or game interaction in this follow-up.
+
+November17 Bevelle entrance-guide repair: route-specific `done()` accepts any
+nonzero rail node after the entrance push, preserving fresh node 0. The actual
+owned-guide fixture fails before the fix on 0-to-19 without observing 1 and
+passes afterward; optional chest checkpoint recovery needs no logic change.
+Later same-task rail-stop follow-up: W39 keeps control disabled while W15 waits
+for W40's direction-confirm input. Its copied enabled callback now permits guide
+progress and configured-input speech at that prompt, preserving real settling
+guards. A newly observed treasure bit also recognizes console collection without
+the normal route's 0x26 flag; an old saved bit alone still cannot skip the room.
+The production fixture reproduces the disabled-control failure and passes after
+the correction, including repeat queries, path advice and chest recovery.
+Full native suite exits 0: 103 PASS records, 4 retained-evidence skips and no
+failures. No-deploy build exits 0; existing suite/build warning codes match the
+prior merge runs. Initial receipts: `.local/bevelle-{red,green,full-tests,build}.log`;
+latest follow-up: `.local/bevelle-stop-{red,green,full-tests,build}.log`.
+See the [puzzle guide record](Docs/features/puzzles/index.md#cloisters) for
+script evidence and the later gameplay procedure. No deployment or commit;
+gameplay/speech remains unverified.
 
 November16 mergecheck integration: working files resolve all six conflicts between
 detached `3e7aa54` and `feat/mod-toggle` `31844f4`. Both guide fallback and pending

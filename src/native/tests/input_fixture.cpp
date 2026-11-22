@@ -4,6 +4,10 @@
 #include "../events.hpp"
 #include "../mod_state.hpp"
 #include "../controller.hpp"
+#include "../bevelle_rail.hpp"
+#include "../pedestal_rvas.hpp"
+#include "../utility_memory.hpp"
+#include "../settings.hpp"
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <map>
@@ -26,6 +30,19 @@ bool inBattle() { return false; }
 void pauseNavAudio() {}
 void updateAutoWalk() {}
 void updatePedestalInput() {}
+bool railMap=false;
+uint16_t railAggregates[pedestal_rva::aggregates.size()]{},railWindowState=1;
+uintptr_t railWindows[8]{},railTextSource=0;
+uint8_t railText=3;
+unsigned railPromptOwner=0;
+int setting(Setting value) {return railMap && value==Setting::AutoWalk;}
+bool pedestalScript(unsigned control,UtilityScript&) {return railMap && control==7;}
+unsigned pedestalConfirmMask() {return 0x20;}
+void puzzleGuideRailRefresh() {}
+bool captureUtilityValue(const UtilityScript&,unsigned,unsigned,unsigned,int& value) noexcept {value=0;return true;}
+Point playerPosition() {return {};}
+bool inInteractionZone(const InteractionZone& zone,Point) {return zone.valid;}
+namespace nav {unsigned bevelleRailPromptOwner(uintptr_t,unsigned) {return railPromptOwner;}}
 void autoWalkPlayerInput(unsigned) {}
 void autoWalkKeyboard(uint8_t*) {}
 void autoWalkReaderModifier(bool) {}
@@ -72,8 +89,15 @@ std::map<unsigned,Listener> events;
 bool hook(unsigned rva,Handler enter,Handler leave) { events[rva]={enter,leave}; return true; }
 bool hookAddress(uintptr_t,unsigned id,Handler enter,Handler leave) { return hook(id,enter,leave); }
 bool applyAddedHooks() { return true; }
-uintptr_t address(unsigned offset) { return offset?offset:reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)); }
+uintptr_t address(unsigned offset) {
+    for(size_t i=0;i<pedestal_rva::aggregates.size();++i)
+        if(offset==pedestal_rva::aggregates[i]) return reinterpret_cast<uintptr_t>(&railAggregates[i]);
+    if(offset>=0x14676b0 && offset<0x14676d0) return reinterpret_cast<uintptr_t>(&railWindows[(offset-0x14676b0)/4]);
+    return offset?offset:reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+}
 bool copy(uintptr_t p,void* out,size_t length) {
+    if(railWindows[0] && p==railWindows[0]+0x2c && length==sizeof railWindowState) {memcpy(out,&railWindowState,length);return true;}
+    if(railWindows[0] && p==railWindows[0]+0x94 && length==sizeof railTextSource) {memcpy(out,&railTextSource,length);return true;}
     __try { memcpy(out,reinterpret_cast<void*>(p),length); return true; }
     __except(1) { return false; }
 }
@@ -115,6 +139,42 @@ static void fire(unsigned id,Event e) {
     if(handler.enter)handler.enter(e); if(handler.leave)handler.leave(e);
 }
 static void drain() { fire(0x471d10,{}); }
+static void railChecks() {
+    using namespace pedestal_rva;
+    constexpr uint16_t Confirm=0x20,Other=0x40;
+    auto held=[] {return read<uint16_t>(address(Held));};
+    auto pressedBits=[] {return read<uint16_t>(address(Pressed));};
+    BevelleRailPlan plan;plan.epoch=epoch;plan.at=GetTickCount64();plan.count=1;
+    plan.rows[0].worker=50;plan.rows[0].wanted=1;plan.rows[0].zone.valid=true;
+    publishBevelleRailPlan(plan);railMap=true;drain();
+    check(held()==Confirm && pressedBits()==Confirm,"guarded rail row starts a Confirm hold");
+    testForeground=false;drain();
+    check(!held() && !pressedBits(),"field tick releases guarded rail Confirm on focus loss");
+    testForeground=true;drain();check(held()==Confirm,"refocused field can hold Confirm again");
+    scene=1;fire(0x225930,{});
+    check(!held() && !pressedBits(),"native menu input releases rail Confirm without a field tick");
+    scene=0;drain();check(held()==Confirm,"returning to field permits a fresh rail hold");
+    railWindows[0]=reinterpret_cast<uintptr_t>(&railWindows[0]);
+    railTextSource=reinterpret_cast<uintptr_t>(&railText);railPromptOwner=45;drain();
+    check(!held() && !pressedBits(),"new visible prompt of another owner releases a stale guarded hold");
+    railPromptOwner=0;drain();
+    check(!held() && !pressedBits(),"new reward dialogue cannot be confirmed under a stale rail plan");
+    plan.rows[0].worker=40;publishBevelleRailPlan(plan);railPromptOwner=40;drain();
+    check(held()==Confirm && pressedBits()==Confirm,"matching live prompt owner permits the planned row");
+    clearBevelleRailPlan();
+    BevelleRailPlan empty;
+    check(readBevelleRailPlan(empty) && !empty.count && !empty.epoch && !empty.at,"clearing publishes an empty rail plan");
+    const auto field=events.at(0x471d10);Event e;
+    if(field.enter) field.enter(e);
+    // The native aggregator can report a physical Confirm after last frame's
+    // synthetic press. Retiring the old hold must preserve that fresh input.
+    for(unsigned rva:aggregates) write<uint16_t>(address(rva),Confirm|Other);
+    field.leave(e);
+    for(unsigned rva:aggregates) check(read<uint16_t>(address(rva))==(Confirm|Other),"release preserves physical Confirm on every aggregate");
+    railWindows[0]=0;railMap=false;
+    for(unsigned rva:aggregates) write<uint16_t>(address(rva),0);
+    std::puts("PASS: guarded rail Confirm focus, native menu, prompt identity, plan clear and physical input preservation.");
+}
 int main() {
     // Set only this test thread's message-key table. Physical async input and
     // the user's desktop are unchanged while GetKeyState becomes deterministic.
@@ -477,5 +537,6 @@ int main() {
     check(pressed==beforeOff && keys[DIK_N]==0x80,"key held while off is not a fresh mod press on reenable");
     keys.fill(0);fire(0xfffe0001,state);keys[DIK_N]=0x80;fire(0xfffe0001,state);drain();
     check(pressed==beforeOff+1,"shortcut rearms after physical release");
+    railChecks();
     std::puts("PASS: native keyboard, Escape PInput manual help/retirement, exclusive Shift-F1 under queue pressure/console focus, plain F1 and NVDA F12 passthrough, modifier/context shortcuts, exclusive menus, buffered Peek, focus, generation and SDL isolation.");
 }

@@ -1,9 +1,11 @@
 #include <cwchar>
 #include "input_device.hpp"
+#include "dev_focus.hpp"
 // Port of the user's FFXII navigation/auto_walk.cpp: camera-relative input,
 // same-poll manual priority, 250 ms stale mask, 600 ms interrupted field gap,
 // line rejoin, octant hysteresis, bounded unstick and 15 s progress cap.
 #include "auto_walk.hpp"
+#include "floor_panels.hpp"
 #include "nav_audio.hpp"
 #include "settings.hpp"
 #include "mod_menu.hpp"
@@ -20,6 +22,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 namespace ffx {
 #ifdef FFX_READER_TEST
 uint64_t autoWalkClock();
@@ -32,8 +35,10 @@ std::atomic<unsigned> manualRevision{1};
 std::atomic<unsigned> routeFailures{0};
 std::atomic<unsigned> mask{0},maskEpoch{0};
 std::atomic<unsigned> maskCollisionSerial{0};
-std::atomic<uint64_t> stamp{0};
-unsigned epoch=0;
+std::atomic<unsigned> maskPanelRevision{0},maskPanelSample{0};
+std::atomic<uint64_t> maskPanelAt{0},stamp{0};
+uint64_t panelPendingSince=0;
+unsigned epoch=0,panelDrain=0,panelPulse=0,panelBits=0;
 uint64_t previous=0,octantSince=0,improved=0,movingSince=0,unstickUntil=0,collisionPendingSince=0;
 int octant=-1;
 bool unstickRight=false;
@@ -110,6 +115,10 @@ constexpr unsigned readerModifierScans[]={0xd2,0x52,0x3a};
 constexpr unsigned cancelScans[]={0x11,0x1e,0x1f,0x20,0xc8,0xd0,0xcb,0xcd,0x1c,0x01};
 std::atomic<bool> readerModifier{false};
 std::array<bool,256> readerOwned{},physicalDown{}; // DirectInput poll owner only
+// Keys held while the mod menu was open stay the menu's until released. The
+// Enter that activated "Read path to current step" otherwise bumped the manual
+// revision each poll and rejected the route it had just asked for (271, 273).
+std::array<bool,256> menuOwned{};
 // Battle resume. A walk that stops because a battle starts (directly, or through
 // the resource change or control loss that opens it) is armed; the battle must
 // begin within ArmMs. After the battle, the field must be safe with an unchanged
@@ -146,7 +155,7 @@ const wchar_t* unsafeReason() {
     // Common 005E -> 871980 clears controller bit 2 and controlled actor;
     // Common 005D -> 871A50 restores them. This includes silent cutscenes.
     if(!setting(Setting::AutoWalk)) return L"setting disabled";
-    if(!gameFocused()) return L"focus lost";
+    if(!gameFocusedOrHeld()) return L"focus lost";
     if(scene || inBattle()) return L"field unavailable";
     if(modMenuActive() || utilityConsoleActive()) return L"menu opened";
     return nativeFieldControlReason();
@@ -167,6 +176,9 @@ constexpr uint64_t InteractionHomeMs=3000;
 // A cold correction from 4.5 units outside previously timed out while advancing.
 constexpr uint64_t InteractionHomeDeadlineMs=15000;
 constexpr double ArrivalHomeUnits=11.13,ArrivalCloseUnits=2.0;
+constexpr double BoardingBandSlack=ArrivalCloseUnits;
+constexpr uint64_t BandSteerMs=3000;
+uint64_t bandSteerSince=0;
 struct Arrival {bool active=false,settling=false,faced=false;uint64_t since=0,still=0,began=0,progressed=0,homingMs=0;unsigned frames=0;Point origin,seen,goal;double best=-1;const char* ended="initial settling";} arrival;
 void announceStop(const wchar_t* spokenReason) {
     if(stopAnnounced) return;
@@ -182,10 +194,10 @@ bool resumable(const char* reason) {
 }
 void stop(const char* reason,const wchar_t* spokenReason=nullptr,bool routeFailure=false) {
     if(routeFailure) routeFailures.fetch_add(1,std::memory_order_acq_rel);
-    const bool was=engaged.exchange(false); mask=0; cancel=false; stamp=0;messageGuard={};arrival={};
+    const bool was=engaged.exchange(false); mask=0; cancel=false; stamp=0;messageGuard={};arrival={};bandSteerSince=0;
     if(was) {
         recordLog("auto walk stopped: %s",reason);
-        if(resumable(reason)) {resumeCancel=false;resumeSince=nowMs();resumeRoom=currentRoom();resumeWhere=playerPosition();resumePhase=inBattle()?ResumeBattle:ResumeArmed;}
+        if(!maskPanelRevision.load() && resumable(reason)) {resumeCancel=false;resumeSince=nowMs();resumeRoom=currentRoom();resumeWhere=playerPosition();resumePhase=inBattle()?ResumeBattle:ResumeArmed;}
         else resumePhase=ResumeNone;
         if(spokenReason && epoch==generation() && (!routeFailure || claimNavRouteStopSpeech())) announceStop(spokenReason);
     }
@@ -200,9 +212,30 @@ struct ControlTakeover {unsigned epoch=0;uint64_t at=0;bool armed=false;} takeov
 const wchar_t* const ControlDisabled=L"player control disabled";
 void controlTaken() {
     if(!engaged) return;
-    NavLeg leg;const bool arriving=navLeg(leg) && distanceXZ(playerPosition(),leg.final)<=NearDestinationUnits;
+    NavLeg leg;const bool haveLeg=navLeg(leg);
+    const auto distance=haveLeg?distanceXZ(playerPosition(),leg.final):std::numeric_limits<double>::infinity();
+    const bool arriving=distance<=NearDestinationUnits;
     stop(arriving?"player control disabled near the destination":"player control disabled");
     takeover={};if(!arriving) takeover={epoch,nowMs(),true};
+    // W38 can take control before the player reaches the boarding band.
+    if(distance<=BoardingBandSlack && leg.target.id>=0xb100u && leg.target.id<=0xb1ffu && epoch==generation()) {
+        TextPlan said;prepareTextPlan(said,"auto-walk",false);
+        said.headline=planConcat(said,planLiteral(said,leg.target.name.data()),planLiteral(said,L": route destination reached"));
+        commitTextPlan(said);
+    }
+}
+// W38 also takes control when the player enters the boarding region from
+// the recess side, at the region edge. Holding the boarding direction there
+// can walk out of the region before the handler commits, so keep steering
+// to the stand point for up to BandSteerMs.
+bool steerIntoBoardingBand() {
+    NavLeg leg;const auto player=playerPosition();
+    if(nativeVisibleMessageText() || !navLeg(leg) || leg.target.id<0xb100u || leg.target.id>0xb1ffu || distanceXZ(player,leg.final)>NearDestinationUnits ||
+        distanceXZ(player,leg.final)<=BoardingBandSlack) {bandSteerSince=0;return false;}
+    const auto now=nowMs();
+    if(!bandSteerSince) {bandSteerSince=now;recordLog("auto walk boarding: control taken %.1f units from the stand point, steering on",distanceXZ(player,leg.final));}
+    if(now-bandSteerSince>BandSteerMs) {bandSteerSince=0;return false;}
+    return true;
 }
 void serviceTakeover() {
     if(!takeover.armed) return;
@@ -221,7 +254,13 @@ bool messageAllowsAssist() {
     messageGuard={};return true;
 }
 unsigned command() {
-    if(!messageAllowsAssist() || !engaged || cancel || maskEpoch!=generation() || maskCollisionSerial!=navCollisionSerial() || !safe() || nowMs()-stamp.load()>250) return 0;
+    if(!messageAllowsAssist() || !engaged || cancel || maskEpoch!=generation() || maskCollisionSerial!=navCollisionSerial()) return 0;
+    const auto now=nowMs();
+    if(now-stamp.load()>250) return 0;
+    if(const auto reason=unsafeReason())
+        if(!bandSteerSince || now-bandSteerSince>BandSteerMs || std::wcscmp(reason,ControlDisabled)!=0 || nativeVisibleMessageText()) return 0;
+    const auto panelRevision=maskPanelRevision.load();
+    if(panelRevision && (maskPanelSample.load()!=floorPanelSample.load() || !panelFactsFresh(panelRevision,maskPanelAt.load(),GetTickCount64()))) return 0;
     return mask.load();
 }
 void textOpened(Event& e) {
@@ -236,7 +275,7 @@ void textOpened(Event& e) {
     }
     takeover={};stop("dialogue",L"dialogue");
 }
-void controlDisabled(Event&) { controlTaken(); }
+void controlDisabled(Event&) { if(!engaged || !steerIntoBoardingBand()) controlTaken(); }
 }
 void setNavigationInputAssist(NavigationKeyboardAssist keyAssist,NavigationControllerAssist padAssist) { keyboardAssist=keyAssist;controllerAssist=padAssist; }
 void suspendAutoWalk() {manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("reset");else {engaged=false;cancel=true;mask=0;stamp=0;}}
@@ -256,7 +295,7 @@ bool toggleAutoWalkOff(void (*cancelCommand)()) {
 }
 void releaseAutoWalk() {routeFailures.fetch_add(1,std::memory_order_acq_rel);manualRevision.fetch_add(1,std::memory_order_acq_rel);if(nativeGameThread()) stop("route lost");else {engaged=false;cancel=true;mask=0;stamp=0;}}
 bool autoWalkResumePending() {return resumePhase.load()!=ResumeNone;}
-void cancelAutoWalk() {stopAutoWalk();resumePhase=ResumeNone;resumeCancel=true;readerOwned.fill(false);physicalDown.fill(false);readerModifier=false;}
+void cancelAutoWalk() {stopAutoWalk();resumePhase=ResumeNone;resumeCancel=true;readerOwned.fill(false);menuOwned.fill(false);physicalDown.fill(false);readerModifier=false;}
 void setAutoWalkResume(AutoWalkResume handler) {resumeHandler=handler;}
 unsigned autoWalkInputRevision() {return manualRevision.load(std::memory_order_acquire);}
 bool autoWalkActive() { return engaged && !cancel; }
@@ -279,20 +318,31 @@ void startAutoWalk(bool announce) {
     if(leg.target.swimDepth && ((nativeInputUsesController() && diveButton<0) || (!nativeInputUsesController() && !diveScan))) {
         output(L"Auto walk unavailable: Dive has no configured control",false,"auto-walk"); return;
     }
+    if(leg.panelRevision && !panelFactsFresh(leg.panelRevision,leg.panelCapturedAt,GetTickCount64())) {
+        output(noSafePanelRoute,false,"auto-walk");return;
+    }
+    maskPanelRevision=leg.panelRevision;maskPanelSample=leg.panelSample;maskPanelAt=leg.panelCapturedAt;
+    panelDrain=PedestalDrainFrames;panelPulse=panelBits=0;panelPendingSince=0;
     walking=leg.target; resumePhase=ResumeNone;
     epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;waypointReached=false;
     precision={};precision.seen=playerPosition();inputTrace={};
     const auto now=nowMs(); improved=movingSince=now; unstickUntil=0;
-    last=playerPosition();progressGoal=leg.goal; cancel=false; engaged=true;
+    last=playerPosition();progressGoal=leg.goal;cancel=false;
     scans=movementKeys();
-    if(announce) {
+    if(announce || leg.panelRevision) {
+        stopAnnounced=false;
         TextPlan announcement;prepareTextPlan(announcement,"auto-walk",false);
         announcement.headline=planConcat(announcement,planLiteral(announcement,L"Auto walking to "),planLiteral(announcement,leg.target.name.data()));
-        commitTextPlan(announcement);
+        const bool queued=commitTextPlan(announcement);
+        if(leg.panelRevision && !queued) {
+            recordLog("floor panel walk refused: start announcement unavailable");
+            output(noSafePanelRoute,false,"auto-walk");return;
+        }
     }
+    engaged=true;
     // Precision counts native input events, not calls made while starting
     // from inside one. Keep the cleared mask until that event's sole update.
-    if(walking.pushControl<1 || walking.pushControl>2) updateAutoWalk();
+    if(!leg.panelRevision && (walking.pushControl<1 || walking.pushControl>2)) updateAutoWalk();
 }
 // Walking outside the battle means the player took over; battle commands and
 // confirming results do not.
@@ -326,15 +376,32 @@ void updateAutoWalk() {
     const auto now=nowMs();
     if(cancel) {stop("player input");return;}
     if(const auto reason=unsafeReason()) {
-        if(std::wcscmp(reason,ControlDisabled)==0) {controlTaken();return;}
-        const bool explicitStop=!setting(Setting::AutoWalk) || modMenuActive() || utilityConsoleActive();
-        stop("context",explicitStop?nullptr:reason);if(explicitStop) resumePhase=ResumeNone;return;
-    }
+        if(std::wcscmp(reason,ControlDisabled)!=0) {
+            const bool explicitStop=!setting(Setting::AutoWalk) || modMenuActive() || utilityConsoleActive();
+            stop("context",explicitStop?nullptr:reason);if(explicitStop) resumePhase=ResumeNone;return;
+        }
+        if(!steerIntoBoardingBand()) {controlTaken();return;}
+    } else bandSteerSince=0;
     if(previous && now-previous>600) {stop("field update interrupted",L"game paused");return;}
     const auto frameMs=previous?now-previous:0;previous=now;
     inputTrace.active=false;
     NavLeg leg;
-    if(!navLeg(leg)) { stop("route lost",L"route lost",true); return; }
+    if(!navLeg(leg)) {stop("route lost",maskPanelRevision.load()?L"floor panel route unavailable. Walk manually.":L"route lost",true);return;}
+    if(bool(leg.panelRevision)!=bool(maskPanelRevision.load()) || (leg.panelRevision &&
+        (leg.target.worker!=walking.worker || leg.target.panelLocal!=walking.panelLocal || leg.target.id!=walking.id ||
+         GetTickCount64()-leg.panelCapturedAt>250))) {
+        stop("floor panel facts expired",L"floor panel state changed or unavailable. Walk manually.",true);return;
+    }
+    if(leg.panelRevision && leg.arrived) {stop("arrived");return;}
+    if(leg.panelRevision && (leg.panelSample!=floorPanelSample.load() || leg.panelRevision!=floorPanelRevision.load())) {
+        if(mask.exchange(0)) {panelPulse=0;panelDrain=PedestalDrainFrames;}
+        else if(panelDrain) --panelDrain;
+        if(!panelPendingSince) {panelPendingSince=now;refreshNavCollision();}
+        else if(now-panelPendingSince>=250) stop("floor panel update pending",L"floor panel state unavailable. Walk manually.",true);
+        return;
+    }
+    panelPendingSince=0;
+    maskPanelRevision=leg.panelRevision;maskPanelSample=leg.panelSample;maskPanelAt=leg.panelCapturedAt;
     // Withhold only synthetic input while the worker rebuilds a changed gate.
     // No wait occurs on this owner. An unavailable result stops immediately;
     // a pending result has the existing600ms field-recovery bound.
@@ -355,6 +422,18 @@ void updateAutoWalk() {
     precision.stride=std::max(precision.stride,distanceXZ(player,precision.seen));precision.seen=player;
     inputTrace.active=leg.target.pushControl>=1 && leg.target.pushControl<=2;
     inputTrace.at=now;inputTrace.dt=frameMs;inputTrace.target=leg.goal;inputTrace.world={};
+    double panelSlack=0;
+    if(leg.panelRevision) {
+        // The worker has already subtracted the copied collision body radius.
+        // Native input uses only the certified tube around this one segment.
+        const double dx=leg.goal.x-leg.start.x,dz=leg.goal.z-leg.start.z,len=dx*dx+dz*dz;
+        const double t=len?std::clamp(((player.x-leg.start.x)*dx+(player.z-leg.start.z)*dz)/len,0.0,1.0):0;
+        const Point nearest{leg.start.x+t*dx,player.y,leg.start.z+t*dz};
+        panelSlack=leg.panelCorridor-distanceXZ(nearest,player);
+        if(panelSlack<=0) {
+            stop("floor panel clearance",L"floor panel too close. Walk manually.",true);return;
+        }
+    }
     if(pedestalWalkLeg(leg,player)) {mask=0;stamp=now;last=player;return;}
     if(!leg.arrived && arrival.active && leg.arrivalSerial) {arrival.settling=false;arrival.frames=0;}
     if(leg.arrived) {
@@ -363,13 +442,14 @@ void updateAutoWalk() {
             if(!target.butterfly && !target.swimDepth) faceNavigationTarget(target);
             stop("arrived");return;
         }
-        if(!arrival.active) {arrival={};arrival.active=true;arrival.progressed=arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=target.pushControl!=0 || (!leg.arrivalSerial && target.zone.obstacleRadius>0);}
-        const Point center=target.pushControl?target.position:leg.arrivalSerial?leg.goal:target.zone.center;
+        const bool pushStand=target.pushControl && !pedestalSocketTarget(target);
+        if(!arrival.active) {arrival={};arrival.active=true;arrival.progressed=arrival.began=arrival.since=arrival.still=now;arrival.origin=arrival.seen=player;arrival.settling=pushStand || (!leg.arrivalSerial && target.zone.obstacleRadius>0);}
+        const Point center=pushStand?target.position:leg.arrivalSerial?leg.goal:target.zone.center;
         progressGoal=center;
         // Every ordinary target can carry the live pedestal keep-out, even
         // across the room. Only a correction that enters it is unsafe.
         const auto canHome=[&] {
-            if(target.pushControl || leg.arrivalUnreachable) return false;
+            if(pushStand || leg.arrivalUnreachable) return false;
             if(target.zone.obstacleRadius<=0) return true;
             const double x=center.x-player.x,z=center.z-player.z,length=x*x+z*z;
             const auto obstacle=target.zone.obstacle;
@@ -432,7 +512,7 @@ void updateAutoWalk() {
             navArrivalConfirmation.store(leg.arrivalSerial,std::memory_order_release);
             refreshNavCollision();stop("arrived");return;
         }
-        if(!arrival.faced && !target.pushControl) {logOutside();stop("arrived outside the interaction zone",L"not in interaction range");return;}
+        if(!arrival.faced && !pushStand) {logOutside();stop("arrived outside the interaction zone",L"not in interaction range");return;}
         stop("arrived");return;
     }
     if(leg.target.swimDepth) {
@@ -476,6 +556,7 @@ void updateAutoWalk() {
         }
     } else waypointReached=false;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
+        if(leg.panelRevision) {stop("floor panel route stalled",L"safe floor panel route blocked. Walk manually.",true);return;}
         if(leg.target.butterfly) { stop("butterfly route stalled",L"butterfly route stalled"); return; }
         refreshNavCollision();
         if(leg.target.pushControl>=1 && leg.target.pushControl<=2) {pedestalRetryNoProgress();stop("pedestal stopped before handoff");return;}
@@ -523,6 +604,14 @@ void updateAutoWalk() {
             recordLog("auto walk no progress: player %.3f %.3f %.3f, pedestal %.3f %.3f %.3f, waypoint %.3f %.3f %.3f",
                 player.x,player.y,player.z,pedestal.x,pedestal.y,pedestal.z,progressGoal.x,progressGoal.y,progressGoal.z);
             const bool retry=pedestalRetryNoProgress();
+            // A long leg can drift onto a stair side and slide there. A fresh
+            // route from the current position recovers; try that once per 2 min.
+            static uint64_t reroutedAt=0;
+            const auto handler=resumeHandler.load();
+            if(!retry && !pedestalRoute && !leg.panelRevision && !leg.target.butterfly && handler && (!reroutedAt || now-reroutedAt>=120000)) {
+                reroutedAt=now;stop("no progress reroute");resumePhase=ResumeNone;
+                recordLog("auto walk no progress reroute: %s",handler(walking)?"requested":"unavailable");return;
+            }
             stop("no progress",retry?nullptr:L"no progress"); return;
         }
     }
@@ -530,7 +619,7 @@ void updateAutoWalk() {
     if(!relativeBearing({steer.x-player.x,0,steer.z-player.z},pan,front)) { stop("camera unavailable",L"camera unavailable"); return; }
     const auto degrees=std::atan2(pan,front)*180/3.14159265358979323846;
     int desired=(static_cast<int>(std::round(degrees/45))+8)&7;
-    if(octant>=0 && desired!=octant && !pedestalRoute) {
+    if(octant>=0 && desired!=octant && !pedestalRoute && !leg.panelRevision) {
         auto difference=degrees-octant*45; while(difference>180) difference-=360; while(difference< -180) difference+=360;
         const int gap=std::abs(desired-octant);
         if(std::abs(difference)<=32.5 || ((gap==1 || gap==7) && now-octantSince<250)) desired=octant;
@@ -538,13 +627,36 @@ void updateAutoWalk() {
     if(desired!=octant) { octant=desired; octantSince=now; }
     if(now<unstickUntil) desired=(desired+(unstickRight?2:6))&7;
     inputTrace.target=steer;inputTrace.world={steer.x-player.x,0,steer.z-player.z};
+    if(leg.panelRevision) {
+        // Native 82D180 ramps by 32/256 per field frame. Start from rest,
+        // bound the whole pulse including coast, then drain before turning.
+        const auto bits=octMasks[desired];
+        if(panelPulse && panelBits!=bits) panelPulse=0;
+        if(!panelPulse && panelDrain) {--panelDrain;mask=0;return;}
+        if(!panelPulse) {
+            unsigned frames=2;
+            const auto stride=4*precision.stride; // A cold two-frame pulse reaches 64/256.
+            const auto travel=[&](unsigned n) {return std::sqrt(2.0)*stride*(n*n-2)/8;};
+            // Two frames from rest peak at 64/256. Adjacent 32/256 frames
+            // stay below deadzone 48 even diagonally. See the 1.65-unit
+            // digital stride in Docs/features/navigation/index.md:727.
+            const auto bound=stride>0?travel(frames):std::sqrt(2.0)*1.65*64/256;
+            if(bound>=panelSlack) {
+                stop("floor panel pulse clearance",L"floor panel too close. Walk manually.",true);return;
+            }
+            const auto room=std::min(panelSlack,distanceXZ(player,leg.goal));
+            while(stride>0 && frames<8 && travel(frames+1)<room) ++frames;
+            panelBits=bits;panelPulse=frames;panelDrain=PedestalDrainFrames;
+        }
+        --panelPulse;mask=panelBits;stamp=now;return;
+    }
     mask=precisionInput(octMasks[desired] | (leg.target.swimDepth?16u:0u),leg,player); stamp=now;
 }
 void autoWalkReaderModifier(bool held) {readerModifier=held;}
 void autoWalkPlayerInput(unsigned vk) {
     // Reader chords belong to the screen reader: neither auto walk nor an armed
     // pedestal approach may take them as manual movement.
-    if(readerModifier) return;
+    if(readerModifier || modMenuActive()) return;
     pedestalPlayerInput(vk);
     if(pedestalConsentVk(vk)) return;
     const bool movement=vk=='W' || vk=='A' || vk=='S' || vk=='D' || vk==VK_UP || vk==VK_DOWN || vk==VK_LEFT || vk==VK_RIGHT;
@@ -558,16 +670,18 @@ void autoWalkKeyboard(uint8_t* keys) {
     bool modifier=false;
     for(unsigned scan:readerModifierScans) if(keys[scan]&0x80) modifier=true;
     readerModifier=modifier;
+    const bool menu=modMenuActive();
     for(unsigned i=0;i<256;++i) {
         const bool down=(keys[i]&0x80)!=0;
         readerOwned[i]=down && (readerOwned[i] || (modifier && !physicalDown[i]));
+        menuOwned[i]=down && (menuOwned[i] || menu);
         physicalDown[i]=down;
     }
-    // The pedestal approach sees only the player's keys, never reader-owned ones.
+    // The pedestal approach sees only the player's keys, never reader- or menu-owned ones.
     std::array<uint8_t,256> playerKeys;
-    for(unsigned i=0;i<256;++i) playerKeys[i]=readerOwned[i]?0:keys[i];
+    for(unsigned i=0;i<256;++i) playerKeys[i]=readerOwned[i] || menuOwned[i]?0:keys[i];
     pedestalKeyboardInput(playerKeys.data());
-    const auto player=[&](unsigned scan) {return (keys[scan]&0x80) && !readerOwned[scan];};
+    const auto player=[&](unsigned scan) {return (keys[scan]&0x80) && !readerOwned[scan] && !menuOwned[scan];};
     bool physical=false;
     for(unsigned scan:cancelScans) if(player(scan) && !pedestalConsentKey(scan)) physical=true;
     for(unsigned scan:scans) if(player(scan) && !pedestalConsentKey(scan)) physical=true;

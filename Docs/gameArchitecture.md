@@ -158,8 +158,8 @@ Butterfly routes require manual steering because ordinary octant Auto walk
 cannot guarantee narrow hazard detours. Other targets retain normal routing.
 
 `field_targets` snapshots the common target controller's actual party order,
-highlight/all-party state and displayed HP/MP on entry/return. Central `hpReadout`
-serves battle and field HP preferences. `field_menus` captures Customize's native
+highlight/all-party state and displayed HP/MP on entry/return and speaks the current/maximum numbers the
+target list draws. `field_menus` captures Customize's native
 gear ID before its completion transition and fetches the fresh name afterward.
 The 4D5800 hook and its state operands have an archived unique signature and
 dependency coverage in both compiled profiles. Combined build is deployed;
@@ -177,8 +177,8 @@ deferred ATEL requests and warps; native469040/resource hooks now run normally.
 The Win32 console reads only copied context tokens and text, with safe cancellation
 focus restoration. Exact Common0051 lightning queries preserve ordinary native
 mechanics/counters while supplying a once-per-strike cue/optional press edge.
-`hpReadout` uses current HP and native actor+594 maximum for percentage/default or
-numeric maximum preference, shared by Change/Summon and H. Main F8 keeps Speech
+Change/Summon rows and H speak current HP and MP only, matching what those
+native rows and the default battle panel draw. Main F8 keeps Speech
 and grouped Navigation audio/Navigation/Miscellaneous pages.
 [Full architecture, evidence and limits](console_thread_hardening_20261008.md);
 [exact two-map processors/signature qualification](thunder_lightning_20261008.md).

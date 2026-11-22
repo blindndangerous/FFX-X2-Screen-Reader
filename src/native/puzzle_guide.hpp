@@ -17,6 +17,7 @@ struct PuzzleStep {
 struct PuzzleRoute { const char* script; std::vector<PuzzleStep> steps; unsigned returnStep=0; };
 std::wstring puzzleGuide(std::wstring_view action);
 void puzzleGuideCompleted();
+void puzzleGuideRailRefresh();
 void resetPuzzleGuide();
 void installPuzzleGuide();
 }

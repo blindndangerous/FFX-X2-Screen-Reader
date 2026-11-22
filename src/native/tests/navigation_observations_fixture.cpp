@@ -13,6 +13,10 @@ unsigned fixtureEpoch=1;
 bool owner=true;
 uint16_t room=1;
 unsigned roomReads=0;
+constexpr uintptr_t PromptChunk=0x10,PromptWindow=0x20,PromptText=0x30;
+uintptr_t promptSource=PromptText;
+bool verifiedPrompt=false;
+std::map<unsigned,ffx::Handler> before;
 std::vector<std::wstring> said;
 std::vector<ffx::nav::QueryObservation> acceptedQueries;
 unsigned acceptedScenes=0;
@@ -44,15 +48,22 @@ unsigned generation() {return fixtureEpoch;}
 bool nativeGameThread() {return owner;}
 bool inBattle() {return false;}
 bool nativeReaderResourcesReady() noexcept {return true;}
-uintptr_t address(unsigned rva) {check(rva==0xd2ca90,"only the current room is mapped");return reinterpret_cast<uintptr_t>(&room);}
+uintptr_t address(unsigned rva) {
+    if(rva==0x14676b0) return rva;
+    check(rva==0xd2ca90,"only the current room and rail text are mapped");return reinterpret_cast<uintptr_t>(&room);
+}
 bool copy(uintptr_t source,void* target,size_t bytes) {
+    if(owner && bytes==sizeof(uintptr_t)) {
+        if(source==0x14676b0) {std::memcpy(target,&PromptWindow,bytes);return true;}
+        if(source==PromptWindow+0x94) {std::memcpy(target,&promptSource,bytes);return true;}
+    }
     check(owner && source==reinterpret_cast<uintptr_t>(&room) && bytes==sizeof(room),"room read uses the native-owned fixture adapter");
     ++roomReads;std::memcpy(target,&room,bytes);return true;
 }
 unsigned autoWalkInputRevision() {return 1;}
 bool onAtelPrepared(AtelPreparedHandler) {return true;}
 int setting(Setting) {return 1;}
-bool hook(unsigned,Handler,Handler) {return true;}
+bool hook(unsigned rva,Handler enter,Handler) {before[rva]=enter;return true;}
 bool output(const std::wstring& text,bool,const char*) {said.push_back(text);return true;}
 bool output(const wchar_t* text,bool,const char*) {said.emplace_back(text);return true;}
 bool outputDialogue(const std::wstring& text,bool interrupt,const char* producer,bool) {return output(text,interrupt,producer);}
@@ -61,7 +72,10 @@ namespace nav {unsigned navigationIntentRevision() {return 1;}}
 namespace ffx::nav {
 void prepareNavigationSceneStorage() {}
 bool captureNavigationScene(Scene& captured,unsigned revision,bool) {
-    captured.epoch=generation();captured.revision=revision;captured.count=1;return true;
+    captured.epoch=generation();captured.revision=revision;captured.count=1;
+    captured.bevelleRailPromptWorker=verifiedPrompt?40:0;
+    captured.primary=PromptChunk;captured.partCount=1;captured.parts[0].span={PromptChunk,captured.epoch,2,0};
+    return true;
 }
 void captureNavigationAreaNames(Scene&,const AreaNameDemand&) {}
 }
@@ -100,5 +114,16 @@ int main() {
     check(!nav::captureRequestedNavigationScene(false,true) && busyNoticeCount()==2,"genuine drained recovery rearms the next pressure notice");
     nav::resetNavigationObservations();
     check(!nav::captureRequestedNavigationScene(false,true) && busyNoticeCount()==3,"scene revision rearms pressure notice while old slots retire");
+    owner=false;drainSpeechDomainsForTest();owner=true;
+    verifiedPrompt=true;
+    const auto prompt=[] {return nav::bevelleRailPromptOwner(PromptChunk,2);};
+    check(nav::captureRequestedNavigationScene(false,true) && prompt()==40 &&
+        !nav::bevelleRailPromptOwner(PromptChunk,3),"rail prompt witness uses the verified worker and script allocation");
+    promptSource=PromptText+1;check(!prompt(),"rail prompt owner is rejected when the live source changes");
+    promptSource=PromptText;Event e;before.at(0x4b8980)(e);
+    check(!prompt(),"slot zero text installation retires the witness even when window and text addresses are reused");
+    check(nav::captureRequestedNavigationScene(false,true) && prompt()==40,"a newly verified prompt restores the witness");
+    before.at(0x4b8510)(e);check(!prompt(),"closing the native rail window retires the witness");
+    std::puts("PASS: rail prompt witness rejects changed sources, allocation mismatches and reused slot-zero text.");
     std::printf("PASS: navigation observation pressure announcement, intermittent capture, drained recovery and revision reset. Synthetic scenes only; no EV or game data read.\n");
 }

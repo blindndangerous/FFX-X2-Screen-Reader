@@ -1,3 +1,4 @@
+// Hand-maintained; original generator inputs are not retained.
 // Generated original ATEL completion/gate contracts.
 #pragma once
 namespace ffx {

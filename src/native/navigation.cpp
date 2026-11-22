@@ -1,4 +1,5 @@
 #include "navigation.hpp"
+#include "floor_panels.hpp"
 #include "navigation_order.hpp"
 #include "nav_resume.hpp"
 #include "airship_map.hpp"
@@ -240,6 +241,15 @@ void pathfind(const Pending& event,bool assist=false) {
     else if(s.selected<rows.size()) selected=rows[s.selected];
     if(!selected) {if(!assist) emit(event,L"No entity selected","navigation-path");return;}
     const auto target=*selected;const auto player=s.observation.player;
+    const bool entrance=bevelleEntrance(target.pushControl,target.position);
+    if(entrance && !assist && event.query.query!=nav::Query::Path) {
+        if(event.query.query==nav::Query::Resume)
+            emit(event,L"Auto walk not resumed: Rail pedestal. Press "+modKeyName(ModKey::Route)+L".","navigation-path",false);
+        return;
+    }
+    if(s.mesh.panels.required && (!s.mesh.panels.ready || !panelFactsFresh(s.mesh.panels.revision,s.mesh.panels.capturedAt,GetTickCount64()))) {
+        resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;
+    }
     if(!s.mesh.events.ready) {resetNavAudio();emit(event,L"Navigation data is unavailable. Waiting for the field to become ready.","navigation-data-unavailable");return;}
     if(!assist) {
         const auto& o=s.observation;
@@ -259,7 +269,10 @@ void pathfind(const Pending& event,bool assist=false) {
     if(target.zone.valid && !target.zone.crossing && navigationTargetReached(target,player)) {
         if(assist) return;
         if(target.butterfly) {emit(event,label(target)+(target.butterflyStart?L": within start range":L": within catching range"),"navigation-facing");return;}
-        if(setting(Setting::AutoWalk)) intent(event,target,target.pushControl?nav::Intent::ArmAndFace:nav::Intent::Face);
+        if(setting(Setting::AutoWalk)) {
+            intent(event,target,target.pushControl?nav::Intent::ArmAndFace:nav::Intent::Face);
+            if(entrance) return; // The native crossing transition announces its own start.
+        }
         // A guide step that uses this pedestal without pushing it (a sphere
         // socket) replaces the push plan in the arrival text.
         if(target.pushControl) {const auto guided=ownedGuidePedestalStep(s.observation,target);
@@ -276,6 +289,7 @@ void pathfind(const Pending& event,bool assist=false) {
     if(start<0 || end<0) {resetNavAudio();emit(event,label(target)+(start<0?L": player is outside the mapped floor":L": destination is outside the mapped floor"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;}
     const auto points=navigationRouteOwned(s.mesh,player,target,s.entities);
     if(points.empty()) {
+        if(s.mesh.panels.required) {resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;}
         if(target.zone.valid) for(const auto& row:interactionRouteDiagnostics(s.mesh,player,target,s.entities)) recordLog("%s",row.c_str());
         resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;
     }
@@ -427,7 +441,11 @@ void resetOwned(unsigned) {
 }
 void receiveQuery(const speechq::Header& header,const nav::QueryObservation& query) {
     if((owned().epoch && owned().epoch!=query.epoch) || (owned().revision && owned().revision!=query.revision)) resetOwned(query.epoch);
-    auto& s=owned();if(s.pending.size()>=128) {if(query.query==nav::Query::GuideTarget) {QueuedPuzzleTarget retired;takePuzzleGuideTarget(query.local,query.resourceSerial,retired);}speechq::emitOwned(L"Navigation is busy. Try the command again after it recovers.",header,"navigation-pressure",false,false);return;}
+    auto& s=owned();if(s.pending.size()>=128) {
+        if(query.query==nav::Query::GuideCompleted) {releaseOwnedGuideRefresh();return;}
+        if(query.query==nav::Query::GuideTarget) {QueuedPuzzleTarget retired;takePuzzleGuideTarget(query.local,query.resourceSerial,retired);}
+        speechq::emitOwned(L"Navigation is busy. Try the command again after it recovers.",header,"navigation-pressure",false,false);return;
+    }
     Pending event{header,query,{}};
     if(query.query==nav::Query::GuideTarget) {event.direct.emplace();if(!takePuzzleGuideTarget(query.local,query.resourceSerial,*event.direct)) {speechq::emitOwned(L"Navigation action is unavailable or retired. Request the route again.",header,"utility-reply",false,false);return;}}
     s.pending.push_back(std::move(event));processPending();if(s.unavailable) reportWaiting();
@@ -463,6 +481,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
         s.meshContext.collision.actorFlags==geometry.collision.actorFlags && s.meshContext.collision.actorIsControlled==geometry.collision.actorIsControlled &&
         s.meshContext.collision.remaps==geometry.collision.remaps && (!geometry.swimming || (s.meshContext.floor==geometry.floor && s.meshContext.player.y==geometry.player.y));
     if(!sameMesh) {s.mesh=nav::decodeNavigationSceneMesh(observation);s.haveMesh=true;}
+    s.mesh.panels=readFloorPanels(observation);
     s.mesh.player=geometry.player;s.mesh.playerTriangle=geometry.floor;
     nav::stageAirshipPassages(observation,s.mesh,found);nav::collapseInactiveDuplicates(found);
     nav::orderEntities(found,s.entities,key,s.selection.valid);nav::keepVerdicts(found,s.entities,key,s.meshContext.roomState==geometry.roomState);
@@ -472,6 +491,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     else retireOwnedReachability();
     auto rows=filtered();bool kept=false;for(unsigned i=0;i<rows.size();++i) if(s.selection.valid && key(*rows[i])==s.selection) {s.selected=i;kept=true;break;}
     const bool lostSelection=s.selection.valid && !kept && nav::selectionLossSpoken(observation.allowed,observation.control);
+    const unsigned lostId=s.selection.id;
     if(lostSelection) {
         s.selection={};nav::orderEntities(s.entities,{},key,false);requestOwnedReachability(observation,s.entities,true);rows=filtered();
     }
@@ -482,7 +502,12 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
 #endif
     const std::wstring pedestal=s.selected<rows.size() && rows[s.selected]->pushControl?instruction(*rows[s.selected]):std::wstring{};
     const bool hadRoute=navRouteKnown();updateOwnedNavAudio(observation,s.mesh,s.entities,header,pedestal);
-    if(lostSelection) {
+    if(lostSelection && lostId>=0xb100u && lostId<=0xb1ffu) {
+        // A Bevelle boarding stop leaves with its pedestal; the ride is the outcome.
+        if(hadRoute) loseNavRoute(L"boarding stop left");
+        else recordLog("navigation selection Bevelle boarding stop left");
+    }
+    else if(lostSelection) {
         if(hadRoute) loseNavRoute(L"destination unavailable");
         else speechq::emitOwned(L"Target lost: destination unavailable",header,"navigation-target-lost",false,false);
     }
@@ -490,7 +515,29 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
     processPending();
     if(s.announceReady) {s.announceReady=false;speechq::emitOwned(L"Navigation ready.",header,"navigation-ready",false,false);}
 }
+// Only the worker formats the diagnostic. Cumulative counters survive late
+// scene delivery, including a walk that stops before the next report.
+std::array<std::atomic<unsigned>,28> panelOpcodeBumps{};
+void reportPanelBumps() {
+    if(!floorPanelChunk.load(std::memory_order_acquire)) return;
+    static ULONGLONG last=0;
+    static std::array<unsigned,panelOpcodeBumps.size()> lastCounts{};
+    static unsigned lastSample=0;
+    const auto now=GetTickCount64();
+    if(now-last<5000) return;
+    const auto sample=floorPanelSample.load();
+    auto counts=lastCounts;
+    for(unsigned i=0;i<counts.size();++i) counts[i]=panelOpcodeBumps[i].load(std::memory_order_relaxed);
+    if(counts==lastCounts && sample==lastSample) return;
+    last=now;lastCounts=counts;lastSample=sample;
+    std::string line;
+    for(unsigned i=0;i<counts.size();++i) {
+        line+=" W"+std::to_string(i?56+i:38)+"="+std::to_string(counts[i]);
+    }
+    recordLog("floor panel opcode bumps (cumulative), sample %u:%s",sample,line.c_str());
+}
 void maintenance() {
+    reportPanelBumps();
     retirePuzzleGuideTargets();
     if(!storage.ready()) return;auto& s=owned();if(s.revision && s.revision!=nav::navigationObservationRevision()) {resetOwned(generation());return;}
     if(s.ready && applyOwnedReachability(s.observation,s.entities)) {
@@ -516,6 +563,7 @@ void enqueue(nav::Query query,bool shift=false,bool cancel=false) {
 }
 void pathKey(bool shift) {
     if(inBattle()) output(L"Field navigation is unavailable in battle",true,"navigation-path");
+    else if(pedestalEntranceCrossing()) output(L"Rail pedestal: crossing in progress.",true,"navigation-path");
     // Backslash again during a walk stops it rather than re-reading and restarting the route.
     else if(!shift && toggleAutoWalkOff(cancelNavigationCommand)) return;
     else if(!interested.load(std::memory_order_acquire) && !nav::navigationDataPending()) output(L"No entity selected",true,"navigation-path");
@@ -551,8 +599,30 @@ void collisionChanged(Event&) {
     navCollisionRevision.fetch_add(1,std::memory_order_acq_rel);pauseNavRouteAudio();refreshNavCollision();
 }
 void wallAfter(Event& e) {if(!e.before[1] || inBattle()) return;using Getter=unsigned(__cdecl*)(unsigned);if(static_cast<unsigned>(e.before[0])!=reinterpret_cast<Getter>(address(0x43e960))(static_cast<unsigned>(e.args[0]))) collisionChanged(e);}
+void panelScriptBefore(Event& e) {
+    const auto chunk=floorPanelChunk.load(std::memory_order_acquire);
+    if(!chunk) return;
+    uintptr_t owner=0;uint16_t local=0;
+    if(!copy(e.args[0]+4,&owner,sizeof(owner)) ||
+        (owner==chunk && !copy(e.args[0]+0x2e,&local,sizeof(local)))) {
+        floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);return;
+    }
+    if(owner!=chunk) return;
+    // W38 dispatches the group activation/reset writes. Each panel initializes
+    // its own geometry and handles touch. Fence these scripts before execution,
+    // including an ABA change between two otherwise identical observations.
+    if(local==38 || (local>=57 && local<=83)) {
+        floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);
+        panelOpcodeBumps[local==38?0:local-56].fetch_add(1,std::memory_order_relaxed);
+    }
+}
 void interactionBefore(Event& e) {e.before[0]=read<uint8_t>(e.args[0]+0xab);}
-void interactionAfter(Event& e) {if(observationNeeded() && e.before[0]!=read<uint8_t>(e.args[0]+0xab)) nav::requestNavigationScene();}
+void interactionAfter(Event& e) {if(observationNeeded() && e.before[0]!=read<uint8_t>(e.args[0]+0xab)) {
+    const auto chunk=floorPanelChunk.load(std::memory_order_acquire);
+    if(chunk && ((e.before[0]^read<uint8_t>(e.args[0]+0xab))&0x20) && read<uintptr_t>(e.args[0]+4)==chunk)
+        floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);
+    nav::requestNavigationScene();
+}}
 }
 void navigationReachabilityChanged() {if(interested.load()) nav::requestNavigationScene();}
 void refreshNavigation() {enqueue(nav::Query::Refresh);}
@@ -572,7 +642,7 @@ bool devNavigationDump(const wchar_t* name) {
 void refreshSelectedBeacon() {enqueue(nav::Query::Beacon);}
 bool requestNavigationAssistRoute() {return nav::submitNavigationQuery(nav::Query::AssistRoute);}
 void requestNavigationAssistInstruction() {enqueue(nav::Query::AssistInstruction);}
-void resetNavigation() {nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
+void resetNavigation() {if(floorPanelChunk.exchange(0)) floorPanelRevision.fetch_add(1);nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
 void prepareNavigationScriptRetirement();void prepareNavRetirement();
 void installNavigation() {
     storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();setAutoWalkResume(resumeAutoWalk);installPedestal();nav::startNavigationIntents();
@@ -582,7 +652,7 @@ void installNavigation() {
     for(unsigned rva:{0x425010u,0x42b500u,0x426770u}) hook(rva,nullptr,actorEvent);
     hook(0x382730,nullptr,[](Event&) {setFieldAudioAllowed(!inBattle() && !airshipNavigationUiActive());resetBattle();if(interested.load()) nav::requestNavigationScene();});
     hook(0x43e9e0,wallBefore,wallAfter);hook(0x43d3b0,movementBefore,movementAfter);hook(0x45bf70,interactionBefore,interactionAfter);hook(0x45c140,interactionBefore,interactionAfter);
-    hook(0x43ea00,nullptr,collisionChanged);
+    hook(0x43ea00,nullptr,collisionChanged);hook(0x464180,panelScriptBefore,nullptr);
     hotkey(VK_OEM_3,[](bool shift) {enqueue(nav::Query::Scan,shift,true);});hotkey(VK_OEM_6,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Next,shift,true);});hotkey(VK_OEM_4,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Previous,shift,true);});
     hotkey('P',[](bool shift) {if(!inBattle()) enqueue(nav::Query::Distance,shift);});hotkey(VK_OEM_5,[](bool shift) {if(sphereGridOpen()) spherePathKey(shift);else pathKey(shift);});
 }

@@ -96,7 +96,10 @@ unsigned copiedWallCues() noexcept {
 }
 void captureWallCues() {
     if(!nativeGameThread() || !snapshots.ready()) return;
-    if(!setting(Setting::Walls) || airshipNavigationUiActive()) {cancelWallCues();return;}
+    // Room23 (title/save-load, startmap0) and 15C/15D (its attract/intro route)
+    // load field geometry behind the title movie. They are not playable rooms.
+    const auto room=read<uint16_t>(address(0xd2ca90),0xffff);
+    if(!setting(Setting::Walls) || airshipNavigationUiActive() || room==23 || room==0x15c || room==0x15d) {cancelWallCues();return;}
     if(!ownerReady.load(std::memory_order_acquire)) {
         cancelWallCues();if(!unavailableEpisode) {unavailableEpisode=true;output(L"Wall cues are unavailable.",false,"wall-cue-unavailable");}return;
     }

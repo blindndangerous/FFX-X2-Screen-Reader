@@ -15,6 +15,7 @@
 #include "wakka.hpp"
 #include "auto_walk.hpp"
 #include "pedestal.hpp"
+#include "bevelle_rail.hpp"
 #include "lightning.hpp"
 #include "esc_details.hpp"
 #include "nonblocking_snapshots.hpp"
@@ -121,13 +122,15 @@ void inputEvent(Event&) {
 #endif
     updateAutoWalk();
     updatePedestalInput();
+    updateBevelleRail();
     if (!utilityConsoleActive() && !modMenuActive()) pumpPuzzleSolver();
 }
-void inputBefore(Event&) { if(observeGameThread()) { updateUtilityContext(); pumpController(); } }
+void fieldInputBefore(Event&) {if(nativeGameThread()) clearBevelleRailInput();}
+void inputBefore(Event&) { if(observeGameThread()) { releaseBevelleRailIfUnavailable(); updateUtilityContext(); pumpController(); } }
 void inputAfter(Event&) {
     // Dispatch copied commands at their native input return, without running
     // field movement/utility pumps in a menu update.
-    if(nativeGameThread()) drainKeys();
+    if(nativeGameThread()) {releaseBevelleRailIfUnavailable();drainKeys();}
 }
 }
 void dispatchHotkey(unsigned vk,bool shift,bool control) {
@@ -208,7 +211,7 @@ void installInput() {
     // when no native arrow/Confirm is pressed. PInput/field returns alone do
     // not deliver the captured I/F7/review commands on information pages.
     hook(0x376220,nullptr,inputAfter);
-    hook(0x471d10,nullptr,inputEvent);
+    hook(0x471d10,fieldInputBefore,inputEvent);
     installDirectInputKeyboard();
     installController();
 }

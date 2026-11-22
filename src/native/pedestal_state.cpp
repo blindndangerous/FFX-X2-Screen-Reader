@@ -89,15 +89,16 @@ void preparePedestalZone(Entity& entity,uintptr_t worker) {
         }
         const auto actor=read<uintptr_t>(worker+0x9c);
         const double radius=actorContactRadius(actor,playerActor());
-        const double approach=std::max(5.0,radius+.7);
+        const double approach=entity.pushControl==4?8.8:std::max(5.0,radius+.7);
         zone={}; zone.shape=3; zone.height=9.5;
-        zone.width=zone.depth=.4;
+        zone.width=zone.depth=.4;if(entity.pushControl==4) {zone.width=delta.x?.6:1.0;zone.depth=delta.x?1.0:.6;} // lateral 1.0: see navigation_scene.cpp
         zone.center={p.x-delta.x*approach,p.y,p.z-delta.z*approach};
         zone.obstacle=p; zone.obstacleRadius=radius;
         // Native Djose/Macalania side rectangles exclude distances >=9.6.
-        zone.valid=std::isfinite(radius) && radius>0 && approach+.4<9.6;
+        zone.valid=std::isfinite(radius) && radius>0 && approach+(entity.pushControl==4?.6:.4)<9.6;
         if(entity.pushControl==7) {
-            zone.height=2;
+            // A .4 box sits .3 past the pedestal's touch; a digital stride overshoots it.
+            zone.height=2; zone.width=zone.depth=1;
             zone.center={p.x,p.y,std::max(268.0,p.z+approach)};
         }
         entity.inactive=!zone.valid;

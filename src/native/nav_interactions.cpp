@@ -120,17 +120,22 @@ NativeInteractionFacts captureNativeInteractionFacts(uintptr_t worker,EntryMask 
     const auto header=read<uintptr_t>(worker),chunk=read<uintptr_t>(worker+4);
     if(chunk!=span.chunk || span.epoch!=generation() || header<chunk || header-chunk>span.size || span.size-(header-chunk)<0x28) return facts;
     const unsigned type=read<uint8_t>(header);
-    if(!(read<uint16_t>(worker+0x34)&0x80) || (type==1 && read<uint8_t>(worker+0xaa)!=1)) return facts;
-    const auto flags=read<uint8_t>(worker+0xab);
+    uint16_t enabled=0;uint8_t flags=0;
+    if(!copy(worker+0x34,&enabled,sizeof(enabled))) return facts;
+    if(!(enabled&0x80)) {facts.entryReady=type==6;return facts;}
+    if((type==1 && read<uint8_t>(worker+0xaa)!=1) || !copy(worker+0xab,&flags,sizeof(flags))) return facts;
+    if(type==6 && !(flags&0x20)) {facts.entryReady=true;return facts;}
     using Entry=uint16_t(__cdecl*)(unsigned,unsigned,uintptr_t);
     using Priority=uint8_t(__cdecl*)(unsigned,unsigned);
     for(unsigned channel=0;channel<7;++channel) if(flags&(1u<<channel)) {
         if(type==6 && channel!=5) continue; // Player entry only; leave is not an approach action.
         if(type==1 && channel==0 && ((read<uint16_t>(worker+0x34)&0x220) || (read<uint8_t>(worker+0x36)&8))) continue;
         if(reinterpret_cast<Priority>(address(0x4767e0))(type,channel)==255) continue;
-        const auto entry=reinterpret_cast<Entry>(address(0x476360))(type,channel,read<uintptr_t>(worker+0x44));
+        uintptr_t table=0;const bool tableReady=copy(worker+0x44,&table,sizeof(table));
+        if(!tableReady) table=0; // Preserve the legacy getter fallback for ordinary navigation.
+        const auto entry=reinterpret_cast<Entry>(address(0x476360))(type,channel,table);
         if(entry>=read<uint16_t>(header+8) || !mask.contains(entry)) continue;
-        facts.entries[channel]=entry;facts.channels|=1u<<channel;
+        facts.entries[channel]=entry;facts.channels|=1u<<channel;if(type==6) facts.entryReady=tableReady;
     }
     return facts;
 }
