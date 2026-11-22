@@ -173,9 +173,20 @@ void advance() {
             s.arrivalRoute=std::move(correction);s.arrivalNext=1;s.arrivalRouted=true;
             if(s.arrivalRoute.size()<2) s.arrivalRoute.clear();
         }
-        while(s.arrivalNext+1<s.arrivalRoute.size() &&
-            distanceXZ(s.player,s.arrivalRoute[s.arrivalNext])<=.25 &&
-            std::abs(s.player.y-s.arrivalRoute[s.arrivalNext].y)<=8) ++s.arrivalNext;
+        // Precision pulses can settle about 0.4 units from a corner (Djose
+        // pedestal, live). Within one unit, advance when the direct segment to
+        // the following point keeps the pedestal keep-out clearance.
+        const auto clearOfObstacle=[&](Point a,Point b) {
+            const auto& zone=s.target.zone;if(zone.obstacleRadius<=0) return true;
+            const double x=b.x-a.x,z=b.z-a.z,length=x*x+z*z;
+            const double t=length>1e-8?std::clamp(((zone.obstacle.x-a.x)*x+(zone.obstacle.z-a.z)*z)/length,0.0,1.0):0;
+            return std::hypot(a.x+t*x-zone.obstacle.x,a.z+t*z-zone.obstacle.z)>=zone.obstacleRadius+.5;
+        };
+        while(s.arrivalNext+1<s.arrivalRoute.size() && std::abs(s.player.y-s.arrivalRoute[s.arrivalNext].y)<=8) {
+            const double distance=distanceXZ(s.player,s.arrivalRoute[s.arrivalNext]);
+            if(distance>1 || (distance>.25 && !clearOfObstacle(s.player,s.arrivalRoute[s.arrivalNext+1]))) break;
+            ++s.arrivalNext;
+        }
     }
     if(!current()) return;
     publishLeg();publishNavAudio(audio);

@@ -7,6 +7,11 @@
 #include <queue>
 #include <cstdio>
 namespace ffx {
+// Talk reach lost on a named socket face; see interactionEndpoint. A narrow
+// band outside a pedestal keep-out (Kilika: 5.5 to 5.8) keeps half its width.
+template<class Zone> double faceReachMargin(const Zone& zone) {
+    return zone.obstacleRadius>0?std::clamp((zone.range-zone.obstacleRadius-.5)/2,0.0,1.0):1.0;
+}
 namespace {
 std::vector<Point> crossWaterRoute(const Mesh&,Point,const InteractionZone&,bool);
 Point onSegment(Point a,Point b,Point p) {
@@ -87,7 +92,8 @@ std::vector<Point> interactionAnchors(const InteractionZone& zone,Point player) 
         return anchors;
     }
     if(distanceXZ(zone.approach,{})>.1) {
-        std::vector<Point> anchors{{zone.center.x+zone.approach.x*std::max(0.0,zone.range-.5),zone.center.y,zone.center.z+zone.approach.z*std::max(0.0,zone.range-.5)}};
+        const double reach=std::max(0.0,zone.range-(zone.talk?faceReachMargin(zone)+.25:.5));
+        std::vector<Point> anchors{{zone.center.x+zone.approach.x*reach,zone.center.y,zone.center.z+zone.approach.z*reach}};
         // Just outside pedestal contact, on the named face.
         if(zone.talk && zone.obstacleRadius>0) anchors.push_back({zone.obstacle.x+zone.approach.x*(zone.obstacleRadius+.6),zone.center.y,
             zone.obstacle.z+zone.approach.z*(zone.obstacleRadius+.6)});
@@ -136,6 +142,14 @@ std::vector<Point> interactionAnchors(const InteractionZone& zone,Point player) 
         const double a=i*6.283185307179586/16,r=zone.obstacleRadius+.6;
         anchors.push_back({zone.obstacle.x+r*std::cos(a),zone.center.y,zone.obstacle.z+r*std::sin(a)});
     }
+    // Wide push stand (Macalania): the box tolerates drift, but a stand 0.7-1.0
+    // off the push axis never started the native push in game 2026-11-20.
+    // Route only to anchors near the axis from the stand to the pedestal.
+    const double ax=zone.obstacle.x-zone.center.x,az=zone.obstacle.z-zone.center.z,axis=std::hypot(ax,az);
+    if(zone.shape==3 && !zone.talk && !zone.crossing && zone.obstacleRadius>0 && axis>1e-8 &&
+        std::max(zone.width,zone.depth)>.5 && std::min(zone.width,zone.depth)>.5)
+        anchors.erase(std::remove_if(anchors.begin(),anchors.end(),[&](Point p) {
+            return std::abs((p.x-zone.center.x)*az-(p.z-zone.center.z)*ax)/axis>.3;}),anchors.end());
     return anchors;
 }
 
@@ -289,6 +303,9 @@ template<class Zone> static bool interactionEndpoint(const Zone& zone,Point p,bo
     if(distanceXZ(zone.approach,{})>.1) {
         const double x=p.x-zone.center.x,z=p.z-zone.center.z,along=x*zone.approach.x+z*zone.approach.z;
         if(along<=0 || std::abs(x*zone.approach.z-z*zone.approach.x)>.65) return false;
+        // Live Djose pedestal (range 10): the socket answered at 9.3 units
+        // but not at 9.7 or 9.8, so arrival needs a 1-unit margin on the face.
+        if(zone.talk && std::hypot(x,z)>zone.range-faceReachMargin(zone)) return false;
     }
     if(!zone.talk) return true;
     if(zone.viewAngle<=0) return false;
@@ -310,6 +327,9 @@ void avoidContactPedestals(Entity& e,const std::vector<Entity>& entities) {
     // Push/contact walks own their deliberate entry. Ordinary routes refresh
     // the obstacle even when their copied destination already has a keep-out.
     if(e.pushControl || !e.zone.valid || e.zone.contactRadius>0) return;
+    // A talk zone around its own solid body (Djose upper pedestal) keeps the
+    // keep-out the scan gave it.
+    if(e.ownKeepOut) return;
     // Ordinary targets only acquire this keep-out from the live contact row.
     // Retire it when that row disappears or its native contact is disabled.
     e.zone.obstacle={};e.zone.obstacleRadius=0;

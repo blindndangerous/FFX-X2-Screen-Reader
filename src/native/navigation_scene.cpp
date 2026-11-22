@@ -1,8 +1,11 @@
 #include "navigation_scene.hpp"
+#include "dev_focus.hpp"
+#include "floor_panels.hpp"
 #include "field_controls.hpp"
 #include "airship_map.hpp"
 #include "navigation_targets.hpp"
 #include "interaction_region.hpp"
+#include "bevelle_boarding.hpp"
 #include "exit_labels.hpp"
 #include "room_areas.hpp"
 #include "utility_memory.hpp"
@@ -16,11 +19,91 @@
 #include "process_storage.hpp"
 #include "puzzle_guide_bindings.hpp"
 #include "navigation_order.hpp"
+#include "events.hpp"
+#include "log_capture.hpp"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 namespace ffx::nav {
 namespace {
+constexpr unsigned AtelShowMessage=0x4589f0;
+struct RailPromptSource {unsigned worker=0,serial=0,epoch=0;};
+struct RailPromptText {RailPromptSource source;uintptr_t window=0,text=0;};
+// Native owner only. Window and text addresses are opaque identity witnesses.
+RailPromptSource railPromptSource;
+RailPromptText railPromptText;
+void railPromptShow(Event& e) {
+    if(!nativeGameThread()) return;
+    e.before[0]=railPromptSource.worker;e.before[1]=railPromptSource.serial;e.before[2]=railPromptSource.epoch;
+    railPromptSource={};
+    if(e.epoch!=generation() || e.parentRva!=0x464180 || !e.args[0]) return;
+    const auto worker=e.args[0];const auto local=read<uint16_t>(worker+0x2e,0xffff);
+    // Entry 6 sets text 13 and shows window 0 in these four retained workers.
+    unsigned showPc=0;
+    switch(local) {
+    case 40:showPc=0x1c786;break;
+    case 45:showPc=0x1c9b9;break;
+    case 46:showPc=0x1ca54;break;
+    case 47:showPc=0x1caef;break;
+    default:return;
+    }
+    // Live 2026-11-18: the W40 prompt stayed unverified. Log the failed check.
+    const auto rejected=[&](const char* reason) {recordLog("bevelle rail prompt W%u unverified: %s",static_cast<unsigned>(local),reason);};
+    const auto controller=read<uintptr_t>(address(0xf26ae8));const auto chunk=read<uintptr_t>(worker+4);
+    if(!controller || !chunk || read<uintptr_t>(controller+0x48)!=chunk) return rejected("chunk");
+    AtelIdentity identity;
+    if(!readyAtelIdentity(chunk,identity) || std::strcmp(identity.name,"bvyt1100") || identity.length!=118582 ||
+        identity.checksum!=0x751a06ec || identity.workers!=58) return rejected("identity");
+    unsigned header=0;
+    if(!readyAtelWorkerHeader(chunk,local,header) || read<uintptr_t>(worker)!=chunk+header) return rejected("header");
+    const auto signal=read<uintptr_t>(worker+0x90);const auto level=read<uint8_t>(worker+0x32,0xff);
+    if(!signal || level>8 || read<uint16_t>(signal+8,0xffff)!=6 || (read<uint8_t>(signal+0xe)&15)!=level) return rejected("signal");
+    const auto pc=read<uintptr_t>(worker+0x12c+level*0x4c+0x18);
+    if(pc!=chunk+identity.codeOffset+showPc) {
+        recordLog("bevelle rail prompt W%u unverified: pc offset 0x%x",static_cast<unsigned>(local),static_cast<unsigned>(pc-chunk-identity.codeOffset));return;}
+    railPromptSource={local,identity.span.serial,e.epoch};
+    recordLog("bevelle rail prompt W%u verified",static_cast<unsigned>(local));
+}
+void railPromptShown(Event& e) {
+    if(nativeGameThread()) railPromptSource={static_cast<unsigned>(e.before[0]),static_cast<unsigned>(e.before[1]),static_cast<unsigned>(e.before[2])};
+}
+void railPromptInstalled(Event& e) {
+    if(!nativeGameThread() || e.args[0]!=0) return;
+    railPromptText={};
+    if(e.epoch!=generation() || e.parentRva!=AtelShowMessage || railPromptSource.epoch!=e.epoch || !railPromptSource.worker) return;
+    const auto window=read<uintptr_t>(address(0x14676b0));
+    if(window) railPromptText={railPromptSource,window,read<uintptr_t>(window+0x94)};
+    recordLog("bevelle rail prompt W%u installed window=%d text=%d",railPromptSource.worker,window!=0,railPromptText.text!=0);
+}
+void railPromptClosed(Event& e) {
+    if(!nativeGameThread() || e.args[0]!=0) return;
+    // Live 2026-11-18: AtelShowMessage calls this right after installing the
+    // prompt (same millisecond), which cleared it before any scene capture.
+    // Only a close from outside the show call retires the prompt.
+    if(e.parentRva==AtelShowMessage) {
+        if(railPromptText.text) recordLog("bevelle rail prompt W%u close ignored inside show",railPromptText.source.worker);
+        return;
+    }
+    if(railPromptText.text) recordLog("bevelle rail prompt W%u closed parent=0x%x",railPromptText.source.worker,e.parentRva);
+    railPromptText={};
+}
+unsigned visibleRailPromptWorker(unsigned visibleSlots,const AtelSpan& span,unsigned epoch) {
+    // Live 2026-11-18: a verified W40 prompt still gave input-worker=0. Log the
+    // failed check once per change.
+    static unsigned lastReason=~0u;
+    unsigned reason=0;
+    if(!railPromptText.text) reason=6;
+    else if(visibleSlots!=1) reason=1;
+    else if(railPromptText.source.epoch!=epoch) reason=2;
+    else if(railPromptText.source.serial!=span.serial) reason=3;
+    else if(read<uintptr_t>(address(0x14676b0))!=railPromptText.window) reason=4;
+    else if(read<uintptr_t>(railPromptText.window+0x94)!=railPromptText.text) reason=5;
+    if(reason!=lastReason) {
+        lastReason=reason;
+        recordLog("bevelle rail prompt W%u visible check %u slots=%u",railPromptText.source.worker,reason,visibleSlots);
+    }
+    return reason?0:railPromptText.source.worker;
+}
 struct CachedAreaNames {AreaNameDemand demand;uintptr_t table=0;unsigned available=0;bool ready=false;std::array<SceneAreaName,AreaNameLimit> rows;};
 ProcessStorage<CachedAreaNames> cachedAreaNames;
 template<class T,class Body> T field(const Body& body,unsigned offset) {
@@ -40,10 +123,10 @@ void captureBaajFacts(Scene& s,const WorkerFact& fact,uintptr_t worker,const Ate
     s.baajFactsReady=captureUtilityValue(script,0x01000a70,1,0,s.baajTreasureFlags) &&
         captureUtilityValue(script,0x0c000000,1,0,s.baajActivatedCount);
 }
-double radius(const ActorBody& body) {return (field<float>(body.bytes,0x5c)+field<float>(body.bytes,0x64))*.5*field<float>(body.bytes,0x4e4);}
+double radius(const ActorBody& body) {return collisionBodyRadius(body);}
 double bottom(const ActorBody& body) {const auto extent=field<float>(body.bytes,0x51c);return extent==0?field<float>(body.bytes,0x6a8):bodyPoint(body).y-extent;}
 void captureBindings(PartFact& part,uintptr_t controller,uintptr_t workerZero) {
-    part.bindings={};part.bindingsReady=part.guideReady=part.bindingsExpected=part.identityReady=false;
+    part.panelMap=false;part.bindings={};part.bindingsReady=part.guideReady=part.bindingsExpected=part.identityReady=false;
     const auto& span=part.span;if(span.size<0x38) return;
     const auto nameAt=read<unsigned>(span.chunk+0xc);if(nameAt>span.size-8) return;
     char name[9]{};if(!copy(span.chunk+nameAt,name,8)) return;
@@ -57,11 +140,12 @@ void captureBindings(PartFact& part,uintptr_t controller,uintptr_t workerZero) {
     else if(!std::strcmp(name,"mcyt0500")) {rows=macalania;count=_countof(macalania);}
     else if(!std::strcmp(name,"bvyt1100")) {rows=bevelle;count=_countof(bevelle);}
     static constexpr unsigned zanarkand[]={0x0c000021},butterfly[]={0x0c000041};
-    if(!std::strcmp(name,"dome0700")) {rows=zanarkand;count=_countof(zanarkand);}
+    if(!std::strcmp(name,"dome0700")) {part.panelMap=true;rows=zanarkand;count=_countof(zanarkand);}
     else if(!std::strcmp(name,"mcfr0100") || !std::strcmp(name,"mcfr0200")) {rows=butterfly;count=_countof(butterfly);}
     if(!rows) return;
     part.bindingsExpected=true;AtelIdentity identity;part.identityReady=readyAtelIdentity(span.chunk,identity) && identity.span.serial==span.serial;
     if(!part.identityReady) return;
+    if(part.panelMap && (std::strcmp(identity.name,name) || identity.length!=54261 || identity.checksum!=0x0d1b589b)) return;
     if(!workerZero || read<uintptr_t>(workerZero+4)!=span.chunk || read<uint16_t>(workerZero+0x2e,0xffff)!=0) return;
     UtilityScript script;script.controller=controller;script.chunk=span.chunk;script.worker=workerZero;script.header=read<uintptr_t>(workerZero);
     script.allocationSerial=span.serial;script.workers=read<uint16_t>(span.chunk+0x34);script.length=read<unsigned>(span.chunk);script.codeOffset=read<unsigned>(span.chunk+0x30);script.name=name;
@@ -84,10 +168,16 @@ void captureBindings(PartFact& part,uintptr_t controller,uintptr_t workerZero) {
     part.guideReady=true;
 }
 }
-void prepareNavigationSceneStorage() {cachedAreaNames.prepare();}
+void prepareNavigationSceneStorage() {
+    cachedAreaNames.prepare();
+    hook(AtelShowMessage,railPromptShow,railPromptShown);
+    hook(0x4b8980,nullptr,railPromptInstalled);
+    hook(0x4b8510,nullptr,railPromptClosed);
+}
 bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
     if(!nativeGameThread()) return false;
-    s.capturedAt=GetTickCount64();s.audioContext=navAudioContextSerial();s.collisionSerial=navCollisionSerial();
+    s.panelSample=floorPanelChunk.load()?floorPanelSample.fetch_add(1)+1:floorPanelSample.load();
+    s.panelRevision=floorPanelRevision.load();s.capturedAt=GetTickCount64();s.audioContext=navAudioContextSerial();s.collisionSerial=navCollisionSerial();
     s.epoch=generation();s.revision=revision;s.count=s.actorCount=s.partCount=s.areaNameCount=0;s.playerIndex=-1;s.geometryValid=s.surfaceReady=false;
     s.baajFactsReady=false;s.baajTreasureFlags=s.baajActivatedCount=-1;
     s.controller=read<uintptr_t>(address(0xf26ae8));const auto count=read<uint16_t>(s.controller+0xc);
@@ -106,8 +196,11 @@ bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
     }
     s.controlled=player==read<uintptr_t>(address(0xf00740));
     using MessageMode=int(__cdecl*)();s.message=reinterpret_cast<MessageMode>(address(0x46c840))()!=0;s.window=scene.load(std::memory_order_acquire);
-    s.visibleMessage=nativeVisibleMessageText();
-    s.allowed=!scene && !inBattle() && !airshipNavigationUiActive() && gameFocused() && !modMenuActive() && !utilityConsoleActive();s.control=(read<uint8_t>(s.controller)&2)!=0;
+    unsigned visibleSlots=0;
+    s.bevelleRailPromptWorker=0;
+    const bool matchRailPrompt=railPromptText.source.epoch==s.epoch && railPromptText.text;
+    s.visibleMessage=nativeVisibleMessageText(matchRailPrompt?&visibleSlots:nullptr);
+    s.allowed=!scene && !inBattle() && !airshipNavigationUiActive() && gameFocusedOrHeld() && !modMenuActive() && !utilityConsoleActive();s.control=(read<uint8_t>(s.controller)&2)!=0;
     s.playerIndex=static_cast<int>((player-actors)/0x880);s.actorCount=actorCount;s.count=count;
     s.swimming=read<uint8_t>(player+0x186)==2;s.dive=read<uint8_t>(address(swimming_rva::DiveEnabled))!=0;
     s.cameraValid=cameraBasis(s.forward,s.right);s.extraTalkRange=read<float>(s.controller+0x1f0);prepareCopiedControlSnapshot(s.controls);
@@ -140,7 +233,12 @@ bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
         fact.interactions=captureNativeInteractionFacts(worker,EntryMask{},span);fact.valid=validNativePoint(fact.position);
         if(fact.valid) captureBaajFacts(s,fact,worker,span);
     }
-    for(unsigned part=0;part<s.partCount;++part) {captureBindings(s.parts[part],s.controller,workerZeros[part]);s.parts[part].butterflyExiting=butterflyNavigationLeaving(s.parts[part].span);}
+    for(unsigned part=0;part<s.partCount;++part) {
+        auto& facts=s.parts[part];
+        captureBindings(facts,s.controller,workerZeros[part]);facts.butterflyExiting=butterflyNavigationLeaving(facts.span);
+        if(facts.span.chunk==s.primary) floorPanelChunk.store(facts.panelMap?s.primary:0,std::memory_order_release);
+        if(facts.span.chunk==s.primary) s.bevelleRailPromptWorker=visibleRailPromptWorker(visibleSlots,facts.span,s.epoch);
+    }
     if(needGeometry && captureNativeGeometry(s.geometry,revision,false)) {
         const auto& g=s.geometry.geometry;
         s.geometryValid=(!g.count || copyReadyRegion(g.triangles,s.triangles.data(),g.count*16,g.count*16)) &&
@@ -293,7 +391,11 @@ void pedestalZone(Entity& e,const Scene& s,const WorkerFact& w,const std::array<
             return;
         }
         if(e.pushControl==5 || e.pushControl==6) return;
-        if(plan.complete || !plan.blocked.empty() || plan.moves.empty()) {e.inactive=true;return;}
+        if(plan.complete || !plan.blocked.empty() || plan.moves.empty()) {
+            // A guided sphere step still routes to this pedestal's socket
+            // face (guideTargets), so keep its body as a keep-out.
+            e.inactive=true;if(actor) {e.zone.obstacle=e.position;e.zone.obstacleRadius=radius(*actor)+radius(player);}return;
+        }
         const auto p=e.position,goal=plan.moves.front().goal;const double x=goal.x-p.x,z=goal.z-p.z;
         const auto delta=std::abs(x)>std::abs(z)?Point{x>0?1.0:-1.0,0,0}:Point{0,0,z>0?1.0:-1.0};auto& zone=e.zone;
         if(e.pushControl==7 && plan.phase==0) {
@@ -302,10 +404,18 @@ void pedestalZone(Entity& e,const Scene& s,const WorkerFact& w,const std::array<
             zone.center={(edgeZone.center.x+edgeZone.end.x)*.5,edgeZone.center.y,(edgeZone.center.z+edgeZone.end.z)*.5-std::max(4.0,r+2)};
             zone.valid=edgeZone.valid && std::isfinite(r) && r>0;e.inactive=!zone.valid || !edge || entries(*edge,rows[edge->global].channels,EntryMask{1u<<6}).empty();return;
         }
-        const double r=actor?radius(*actor)+radius(player):0,approach=std::max(5.0,r+.7);
-        zone={};zone.shape=3;zone.height=9.5;zone.width=zone.depth=.4;zone.center={p.x-delta.x*approach,p.y,p.z-delta.z*approach};
-        zone.obstacle=p;zone.obstacleRadius=r;zone.valid=std::isfinite(r) && r>0 && approach+.4<9.6;
-        if(e.pushControl==7) {zone.height=2;zone.center={p.x,p.y,std::max(268.0,p.z+approach)};}e.inactive=!zone.valid;
+        // In-game 2026-11-18: Macalania's first pedestal blocked the player
+        // 7.4 units south of its origin, past the 6.7 radius stand point.
+        // Its native push rectangle reaches 9.6, so stand near that edge.
+        const double r=actor?radius(*actor)+radius(player):0,approach=e.pushControl==4?8.8:std::max(5.0,r+.7);
+        // A digital stride overshoots a small box along the push axis. The
+        // lateral half-width stays 1.0: a .4 box broke the first Macalania push
+        // in game 2026-11-20. Routes aim near the axis (interactionAnchors).
+        const double half=e.pushControl==4?.6:.4,side=e.pushControl==4?1.0:.4;
+        zone={};zone.shape=3;zone.height=9.5;zone.width=delta.x?half:side;zone.depth=delta.x?side:half;zone.center={p.x-delta.x*approach,p.y,p.z-delta.z*approach};
+        zone.obstacle=p;zone.obstacleRadius=r;zone.valid=std::isfinite(r) && r>0 && approach+half<9.6;
+        // A .4 box sits .3 past the pedestal's touch; a digital stride overshoots it.
+        if(e.pushControl==7) {zone.height=2;zone.width=zone.depth=1;zone.center={p.x,p.y,std::max(268.0,p.z+approach)};}e.inactive=!zone.valid;
     } catch(...) {if(e.pushControl>2 && e.pushControl!=5 && e.pushControl!=6) e.inactive=true;}
 }
 struct BuildContext {
@@ -348,12 +458,50 @@ void butterflyTarget(const Scene& s,const WorkerFact& w,const OwnedRow& row,cons
     Entity e;e.name=blue?L"Blue butterfly":L"Red butterfly";e.category=L"Object";e.butterfly=true;e.hazardous=red;e.worker=w.global;e.actor=w.actor;e.id=0xb000u+w.local;
     e.zone=touchZone(s,w);if(!e.zone.valid && blue) return;e.position=e.zone.center;e.distance=distanceXZ(s.player,e.position);e.usefulEntries=EntryMask(1u<<4);out.push_back(std::move(e));
 }
+// Publish the same stop identity and narrow arrival zone on every scene scan.
+// W38 has no actor. Its ordinary field-list row may be absent altogether.
+bool boardingTarget(const Scene& s,const WorkerFact& w,unsigned index,unsigned channels,std::vector<Entity>& entities) {
+    const auto& part=s.parts[w.part];
+    if(!part.guideReady || part.span.chunk!=s.primary || w.type!=3 || !(channels&8)) return false;
+    if((partBinding(part,0x0c00001f)!=1 && partBinding(part,0x0c000020)!=1) || partBinding(part,0x0c000024)!=0) return false;
+    const auto stop=bevelleStop(partBinding(part,0x0c000008),partBinding(part,0x0c000009));
+    if(!stop || w.interactions.entries[3]!=stop->entry) return false;
+    const auto region=sceneInteractionZone(w,8,0);
+    if(!region.valid || region.height<=0 || !region.width || !region.depth ||
+        distanceXZ(region.center,stop->center)>.1 || std::abs(region.center.y-stop->center.y)>.1) return false;
+    Point stand{stop->standX,region.center.y,stop->standZ?stop->standZ:region.center.z};
+    // Keep the complete arrival zone in both the live shape and the X band.
+    for(double dx:{-.5,.5}) for(double dz:{-.5,.5})
+        if(!inInteractionZone(region,{stand.x+dx,stand.y,stand.z+dz})) return false;
+    Entity target;target.name=L"Rail pedestal boarding position";target.category=L"Object";
+    target.worker=index;target.id=stop->targetId();target.position=stand;target.distance=distanceXZ(s.player,stand);
+    target.zone.valid=true;target.zone.shape=3;target.zone.worker=index;target.zone.center=stand;
+    target.zone.width=target.zone.depth=.5;target.zone.height=region.height;
+    entities.push_back(std::move(target));return true;
+}
+// W53 (catalog has no row) calls the empty pedestal from stop 14 to the
+// upper platform stop 15 (E6 1cd00). W54 E6 enables it at the chest.
+bool callPointTarget(const Scene& s,const WorkerFact& w,unsigned index,unsigned channels,std::vector<Entity>& entities) {
+    const auto& part=s.parts[w.part];
+    if(!part.guideReady || part.span.chunk!=s.primary || partBinding(part,0x0c000009)!=14) return false;
+    const auto region=sceneInteractionZone(w,8,0);
+    if(!region.valid) return false;
+    Entity target;target.name=L"Rail pedestal call point";target.category=L"Object";
+    target.worker=index;target.id=BevelleCallPointId;target.position=region.center;target.distance=distanceXZ(s.player,region.center);
+    // Live 22:06: enabled W53 reports channel 5 (0x20) with entry 5.
+    target.zone=region;target.zone.worker=index;target.inactive=!(channels&0x28);
+    entities.push_back(std::move(target));return true;
+}
 void buildPart(const OwnedAtelGuardView& view,void* opaque) {
     auto& context=*static_cast<BuildContext*>(opaque);const auto& s=context.scene;const auto& script=view.script;const auto catalog=navigationCatalog(script);const auto course=butterflyCourse(script);
     const wchar_t* categories[]={L"",L"Exit",L"Event",L"Save Sphere",L"Treasure Chest",L"NPC",L"Object",L"Shop"};
     for(unsigned i=0;i<s.count;++i) {
         const auto& w=s.workers[i];const auto& row=context.rows[i];if(!row.valid || w.part!=context.part) continue;
         const auto index=w.local;butterflyTarget(s,w,row,course,context.butterflies);
+        if(index==38 && script.name=="bvyt1100" && script.codeLength==118582 && script.checksum==0x751a06ec &&
+            boardingTarget(s,w,i,row.channels,context.entities)) continue;
+        if(index==53 && script.name=="bvyt1100" && script.codeLength==118582 && script.checksum==0x751a06ec &&
+            callPointTarget(s,w,i,row.channels,context.entities)) continue;
         if(w.type==4) {
             if(catalog && script.name=="cdsp0000" && index==30 && s.primary==s.parts[w.part].span.chunk && s.room==71 &&
                 (s.area==19 || s.area==20) && s.control && s.controlled && field<uint16_t>(s.actors[s.playerIndex].bytes,2)) {
@@ -375,8 +523,13 @@ void buildPart(const OwnedAtelGuardView& view,void* opaque) {
         // is inactive, like trial controls. A missing prerequisite must not
         // silently remove one of the six seals from the player's list.
         const bool region=target && target->identity==3 && w.type==6;
-        if(activeEntries.empty() && !trial && !region && !presence) continue;
-        Entity e;e.worker=i;e.inactive=activeEntries.empty();e.swimApproach=catalog && script.name=="stbv0000" && (index==16 || index==17 || index==25 || index==26);
+        // Bevelle W16 has no talk entry: W54 opens it when the player touches
+        // it after the final ascent (g26==1). List it until collected.
+        const auto& part=s.parts[w.part];
+        const bool contactChest=model==0x5002 && index==16 && script.name=="bvyt1100" && part.guideReady &&
+            partBinding(part,0x0c000026)==1 && !(partBinding(part,0x01000a70,16)&16);
+        if(activeEntries.empty() && !trial && !region && !presence && !contactChest) continue;
+        Entity e;e.worker=i;e.inactive=activeEntries.empty() && !contactChest;e.swimApproach=catalog && script.name=="stbv0000" && (index==16 || index==17 || index==25 || index==26);
         e.usefulEntries=useful;e.authoredTrialControl=trial;
         if(bound && (!field<uint16_t>(s.actors[w.actor].bytes,2) || field<unsigned>(s.actors[w.actor].bytes,0x824)==0xcdcdcdcd)) continue;
         if(w.type==1 && !bound) continue;int room=-1;
@@ -390,9 +543,46 @@ void buildPart(const OwnedAtelGuardView& view,void* opaque) {
             else if(result.interactive) {e.category=categories[navigationEntityCategory(nullptr,model,bound)];e.name=navigationEntityName(nullptr,model,bound,context.people);}else continue;
         } else continue;
         e.position=w.position;e.distance=distanceXZ(s.player,e.position);e.actor=w.actor;e.id=bound?model:e.category==L"Exit"?0xffff:0xfffe;
-        configurePedestalTarget(e,catalog?catalog->name:nullptr,index);e.zone=sceneInteractionZone(w,channels?channels:trial || presence?1u:region?0x20u:0u,s.extraTalkRange);
+        configurePedestalTarget(e,catalog?catalog->name:nullptr,index);e.zone=sceneInteractionZone(w,channels?channels:trial || presence?(w.type==6?0x20u:1u):region?0x20u:0u,s.extraTalkRange);
+        if(contactChest) {e.zone=touchZone(s,w);e.inactive=!e.zone.valid;}
+        // A chest's talk circle is 3D (height<0), so it can reach a ledge above the
+        // chest. Live in Macalania the game selected the chest from a ledge 7.8 units
+        // up but it did not open; from the chest's own floor it opened. Arrive on
+        // the chest's floor only.
+        if(model==0x5002 && !contactChest && e.zone.valid && e.zone.height<0) {
+            constexpr double ChestFloorBand=4;
+            e.zone.contactMinY=e.zone.center.y-ChestFloorBand;e.zone.contactMaxY=e.zone.center.y+ChestFloorBand;
+        }
+        // Macalania's reset tiles reference worker 0 (the player's worker), not -1.
+        if(w.type==6 && !e.zone.valid) {
+            int16_t reference=0;std::memcpy(&reference,w.geometry.data()+0x28,sizeof(reference));
+            for(unsigned j=0;reference>=0 && j<s.count;++j) {const auto& other=s.workers[j];
+                if(!other.valid || other.part!=w.part || other.local!=static_cast<unsigned>(reference)) continue;
+                // Live mcyt0500: worker 0 is type 1 with no bound actor; its
+                // current point (worker+0x558+0x10, read by native 867CE4)
+                // equals the player position at rest. While walking it trails
+                // the actor (live: 3.0 units apart), and while a message or
+                // script owns the player controlled is false. The native test
+                // reads this worker's point whatever it is, so only the
+                // tracking matters: allow 6 units, ignore control. On a ramp
+                // the trail also shows in height (live: 3.1 units).
+                const Point current{field<float>(other.geometry,0x10),field<float>(other.geometry,0x14),field<float>(other.geometry,0x18)};
+                const bool player=other.type>=1 && other.type<=3 && distanceXZ(current,s.player)<6 && std::abs(current.y-s.player.y)<6;
+                if(player) {e.zone=playerEntryRegion(w.geometry,0x20,true);e.zone.worker=w.global;}
+                break;
+            }
+        }
         if(w.type==6 && !e.zone.valid) e.inactive=true;
         if(!e.pushControl || e.pushControl>2) competitors(e,s,context.rows);pedestalZone(e,s,w,context.rows,script);butterflyStarter(e,s,w,row,course);
+        // Djose W6 upper pedestal socket: talk block 255b runs only while the
+        // player is south of z 72 (pedestal z 75). Live, Enter from the north
+        // west side did nothing and from 7.3,69.0 inserted the sphere. Approach
+        // the south face and route around the pedestal body.
+        if(!e.pushControl && index==6 && script.name=="djyt0600" && e.zone.valid && e.zone.talk) {
+            e.zone.approach={0,0,-1};
+            const double body=w.actor>=0?radius(s.actors[w.actor])+radius(s.actors[s.playerIndex]):0;
+            e.zone.obstacle=e.zone.center;e.zone.obstacleRadius=std::max(std::isfinite(body)?body:0.0,3.0);e.ownKeepOut=true;
+        }
         if(e.category==L"Exit" && room!=-2) {if(room<0) room=scanWorker(script,index,&activeEntries).room;e.name=navigationExitName(script,index,room,e.name,context.areas);}
         if(e.pushControl>=2 && e.pushControl<=4) {
             Entity recess=e;recess.name=L"Pedestal sphere recess";recess.pushControl=recess.pushLocal=0;recess.usefulEntries=EntryMask{1u<<2};

@@ -3,6 +3,8 @@
 // route retirement and Auto walk below link their production implementations.
 #include "../navigation_scene.hpp"
 #include "../navigation_observations.hpp"
+#include "../butterfly_navigation.hpp"
+#include "../floor_panels.hpp"
 #define FFX_NAV_CUES_INTEGRATION_TEST
 #define main autoWalkComponentFixtureEntry
 #include "auto_walk_fixture.cpp"
@@ -46,6 +48,159 @@ int main() {
         check(speech.empty() && !autoWalkActive(),"clearNavRoute then updateAutoWalk before explicit stop stays silent");
         stopAutoWalk();
     }
+    // Retained W69 center and W66 destination with synthetic floor, pose and stride.
+    // Exercise the real route, published leg, start cue, keyboard and input ramps.
+    begin();stopAutoWalk();player={-45,5,35};mesh.planeY=5;
+    auto& panels=mesh.panels;panels.required=panels.ready=true;panels.radius=2;panels.chunk=1;
+    panels.epoch=epoch;panels.serial=1;panels.active=(1u<<9)|(1u<<12);panels.revision=floorPanelRevision.load();
+    panels.rows[9]={{-5,5,75},1,0,2,2,9};panels.rows[12]={{-25,5,55},1,0,2,2,12};
+    Entity panel;panel.worker=9;panel.panelLocal=66;panel.name=L"Floor panel 11";panel.position=panels.rows[9].center;
+    speechq::Header panelHeader{};panelHeader.generation=epoch;
+    auto observePanels=[&] {
+        nativeOwner=false;observation.player=player;panels.capturedAt=GetTickCount64();
+        updateOwnedNavAudio(observation,mesh,{},panelHeader,L"");
+    };
+    observePanels();const auto detour=navigationRouteOwned(mesh,player,panel,{});
+    check(detour.size()>2,"shared planner detours around the intervening floor panel");
+    routeNavAudio(detour,panel,true);nativeOwner=true;speech.clear();
+    static bool refusalLogged=false;
+    logCaptureHandler.store([](const LogCapture& p) noexcept {
+        if(!std::strcmp(p.format.data(),"floor panel walk refused: start announcement unavailable")) refusalLogged=true;
+    });
+    refuseTextPlan=true;startAutoWalk();refuseTextPlan=false;
+    logCaptureHandler.store(nullptr);
+    check(refusalLogged && !autoWalkActive() && speech.size()==1 && speech.front()==noSafePanelRoute && !lastInterrupt,
+        "rejected start announcement is logged and gives a non-interrupting refusal");
+    speech.clear();startAutoWalk();
+    check(autoWalkActive() && !speech.empty() && speech.front()==L"Auto walking to Floor panel 11","named panel cue at walk start");
+    const auto walkPanels=[&](auto sample) {
+        std::array<double,4> ramp{};unsigned queued=0;
+        for(unsigned frame=0;frame<12000 && autoWalkActive();++frame) {
+            observePanels();nativeOwner=true;clockValue+=16;updateAutoWalk();
+            auto keys=keyboard();const unsigned bits=(keys[0xc8]?1:0)|(keys[0xcb]?2:0)|(keys[0xd0]?4:0)|(keys[0xcd]?8:0);
+            for(unsigned i=0;i<4;++i) ramp[i]=std::clamp(ramp[i]+(queued&(1u<<i)?32:-32),0.0,256.0);
+            queued=bits;
+            const double x=ramp[3]-ramp[1],z=ramp[0]-ramp[2],length=std::hypot(x,z);
+            if(length>=48) {const double step=std::min(1.0,length/256);player.x+=x/length*step;player.z+=z/length*step;}
+            sample();
+        }
+    };
+    bool panelTouched=false;
+    walkPanels([&] {
+        check(std::abs(player.x+25)>4 || std::abs(player.z-55)>4,"steered motion preserves W69 player-radius clearance");
+        if(!panelTouched && std::abs(player.x+5)<2 && std::abs(player.z-75)<2) {
+            panelTouched=true;panels.active&=~(1u<<9);++panels.pattern[4];
+            panels.revision=++floorPanelRevision;
+        }
+    });
+    check(panelTouched && !autoWalkActive() && speech.size()==2 && speech.back()==L"Floor panel 11: route destination reached",
+        "W66 touch produces normal arrival without route loss");
+    panels.active|=1u<<9;
+    player={-5,5,65};observePanels();routeNavAudio({player,panel.position},panel,true);
+    nativeOwner=true;speech.clear();startAutoWalk();
+    player.z=73;observePanels();nativeOwner=true;updateAutoWalk();
+    check(autoWalkActive() && speech.size()==1,"touching only the rectangle boundary keeps the walking cue");
+    player.z=73.25;observePanels();nativeOwner=true;updateAutoWalk();
+    check(!autoWalkActive() && speech.size()==2 && speech.back()==L"Floor panel 11: route destination reached",
+        "strict entry before the target bit clears also arrives");
+    for(bool anotherPanelChanges:{true,false}) {
+        player={-5,5,65};observePanels();routeNavAudio({player,panel.position},panel,true);
+        nativeOwner=true;speech.clear();startAutoWalk();
+        check(autoWalkActive() && speech.size()==1,"panel clear fixture starts the real walker");
+        if(anotherPanelChanges) player.z=72; // Body overlaps W66, but its center is outside.
+        panels.active&=~(1u<<9);
+        if(anotherPanelChanges) panels.active&=~(1u<<12);
+        panels.revision=++floorPanelRevision;
+        observePanels();nativeOwner=true;updateAutoWalk();
+        check(!autoWalkActive() && speech.size()==2 &&
+            speech.back()==L"Route lost: floor panel state changed or unavailable. Walk manually.",
+            anotherPanelChanges?"clearing W66 and W69 together loses the route without arrival":
+                "clearing W66 with the player ten units away loses the route without arrival");
+        panels.active|=(1u<<9)|(1u<<12);
+    }
+    // Parallel to W69, only .125 outside the player-radius margin.
+    player={-29.125,5,35};Entity parallel;parallel.name=L"Parallel";parallel.position={player.x,5,75};
+    observePanels();routeNavAudio({player,parallel.position},parallel,true);nativeOwner=true;
+    speech.clear();startAutoWalk();check(autoWalkActive(),"tight corridor reaches production pulse control");
+    bool injected=false;
+    for(unsigned frame=0;frame<20 && autoWalkActive();++frame) {
+        clockValue+=16;updateAutoWalk();auto keys=keyboard();
+        injected|=std::any_of(keys.begin(),keys.end(),[](uint8_t k){return k!=0;});
+    }
+    check(!injected && !autoWalkActive() && !speech.empty() && speech.back().find(L"panel too close")!=std::wstring::npos,
+        "cold pulse stops with speech before injecting any key");
+    for(bool stale:{false,true}) {
+        player={-45,5,35};observePanels();routeNavAudio(detour,panel,true);
+        nativeOwner=true;speech.clear();startAutoWalk();
+        bool moving=false;
+        for(unsigned i=0;i<30 && !moving;++i) {
+            clockValue+=16;updateAutoWalk();const auto keys=keyboard();
+            moving=keys[0xc8] || keys[0xcd];
+        }
+        check(moving,"guarded walk has live synthetic input before invalidation");
+        if(stale) {
+            panels.capturedAt=GetTickCount64()-251;nativeOwner=false;
+            updateOwnedNavAudio(observation,mesh,{},panelHeader,L"");nativeOwner=true;
+        } else floorPanelRevision.fetch_add(1); // Native mutation before a worker gets to replan.
+        const auto keys=keyboard();pad::State pad{};autoWalkController(pad);
+        check(!keys[0xc8] && !keys[0xcd] && !pad.lx && !pad.ly,"pending input cannot outlive panel facts");
+        if(!stale) {
+            panels.revision=floorPanelRevision.load();
+            panels.active&=~(1u<<9);panels.active|=1;panels.rows[0]={{-40,5,40},1,0,2,2,0};
+            observePanels();nativeOwner=true;
+            panels.active&=~1u;panels.active|=1u<<9;
+        }
+        updateAutoWalk();check(!autoWalkActive() && speech.back()==L"Route lost: floor panel state changed or unavailable. Walk manually.",
+            "panel changes and stale facts stop the real walker with speech");
+        panels.revision=floorPanelRevision.load();
+    }
+    std::puts("PASS: guarded W69 detour reaches W66 on the input ramp model; activation and stale facts retire keyboard/controller movement.");
+    // W75:0 and W69:0 pass these centers to 0057 and (2,2) to 0058.
+    // Exercise a nonzero stored angle at geometry+34 on the retained squares.
+    const std::array<Point,2> centers={Point{-95,5,45},Point{-25,5,55}};
+    constexpr float storedAngle=.4f;
+    panels.radius=5;panels.active=(1u<<18)|(1u<<12);
+    for(unsigned i=0;i<centers.size();++i) {
+        std::array<uint8_t,0x4c> raw{};
+        const auto put=[&](unsigned offset,float v){std::memcpy(raw.data()+offset,&v,sizeof(v));};
+        const int16_t ref=-1;std::memcpy(raw.data()+0x28,&ref,sizeof(ref));
+        put(0,float(centers[i].x));put(4,5);put(8,float(centers[i].z));
+        put(0x30,2);put(0x34,storedAngle);put(0x38,2);
+        const auto shape=playerEntryRegion(raw,0x20);
+        check(shape.valid && shape.angle==-storedAngle,"stored type-6 angle is negated");
+        const int row=i?12:18;
+        panels.rows[row]={shape.center,std::cos(shape.angle),std::sin(shape.angle),shape.width,shape.depth,row};
+    }
+    player={-130,5,40};Entity across;across.name=L"Across both panels";across.position={10,5,60};
+    observePanels();routeNavAudio(navigationRouteOwned(mesh,player,across,{}),across,true);
+    nativeOwner=true;speech.clear();startAutoWalk();check(autoWalkActive(),"two-panel detour starts");
+    const auto clearance=[&](Point p,double allowance) {
+        for(auto c:centers) {
+            const double x=p.x-c.x,z=p.z-c.z;
+            const double u=x*std::cos(storedAngle)+z*std::sin(storedAngle);
+            const double v=z*std::cos(storedAngle)-x*std::sin(storedAngle);
+            check(std::hypot(std::max(0.,std::abs(u)-2),std::max(0.,std::abs(v)-2))>panels.radius+allowance,
+                "published leg and player clear both rotated forbidden panels");
+        }
+    };
+    walkPanels([&] {
+        NavLeg current;check(navLeg(current),"two-panel walk publishes a leg");
+        const auto length=distanceXZ(current.start,current.goal);
+        const int steps=std::max(1,int(std::ceil(length)));
+        // Distance to a closed rectangle changes by at most distance walked.
+        // Half the spacing covers every point between consecutive samples.
+        for(int j=0;j<=steps;++j) {
+            const double t=double(j)/steps;
+            clearance({current.start.x+t*(current.goal.x-current.start.x),5,current.start.z+t*(current.goal.z-current.start.z)},length/(2*steps));
+        }
+        clearance(player,0);
+    });
+    if(distanceXZ(player,across.position)>1.5)
+        std::fprintf(stderr,"Two-panel walk ended at %.3f, %.3f: %ls\n",player.x,player.z,speech.back().c_str());
+    check(!autoWalkActive() && distanceXZ(player,across.position)<=1.5 && speech.back()==L"Across both panels: route destination reached",
+        "two-panel detour reaches far side");
+    std::puts("PASS: every published leg and sampled position clears rotated W75 and W69 through arrival.");
+    mesh.panels={};mesh.planeY=0;clearNavRoute();
     // Real route geometry, waypoint advancement and input steering, with only
     // movement/collision supplied by this synthetic host. No native push replay.
     for(unsigned scenario:{0u,1u,2u,3u})
@@ -198,6 +353,31 @@ int main() {
         longestArrival=std::max(longestArrival,clockValue-began);++arrivalCases;
     }
     std::printf("PASS: %u ordinary arrival ramp cases, cold/warm, 17/33ms, one/two-frame pipeline and blocked recovery; longest simulated recovery %llums, longest success %llums.\n",arrivalCases,static_cast<unsigned long long>(longestArrival),static_cast<unsigned long long>(longestSuccessfulArrival));
+    // Live Djose step 14: correction around the pedestal keep-out settled
+    // 0.39 units from its corner waypoint and stopped on no progress.
+    {
+        begin();stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+        target={};target.worker=36;target.name=L"Pedestal";target.position={0,0,24};
+        target.zone.valid=target.zone.talk=true;target.zone.shape=1;target.zone.center=target.position;target.zone.range=10;target.zone.height=5;
+        target.zone.approach={1,0,0};target.zone.obstacle=target.position;target.zone.obstacleRadius=6;
+        observation.epoch=epoch;observation.allowed=true;observation.collisionSerial=navCollisionSerial();
+        observation.audioContext=navAudioContextSerial();observation.cameraValid=true;observation.forward={0,0,1};
+        speechq::Header header{};header.generation=epoch;
+        const auto publish=[&] {nativeOwner=false;observation.player=player;updateOwnedNavAudio(observation,mesh,{target},header,L"");nativeOwner=true;};
+        player={14,0,24};publish();nativeOwner=false;routeNavAudio({player,{8.5,0,24}},target,true);nativeOwner=true;
+        speech.clear();player={8.6,0,24};publish();
+        player={-2,0,32.5};publish();NavLeg current;
+        check(navLeg(current) && current.arrived && distanceXZ(current.goal,current.arrivalInside)>.01,
+            "pedestal correction from the north face routes through a corner");
+        const auto corner=current.goal;
+        // Settle 0.39 units short of the corner, as observed live.
+        const double x=corner.x-player.x,z=corner.z-player.z,length=std::hypot(x,z);
+        player={corner.x-.39*x/length,0,corner.z-.39*z/length};publish();
+        check(navLeg(current) && distanceXZ(current.goal,corner)>.01,
+            "a settled correction 0.39 units from a clear corner advances to the next correction point");
+        std::printf("PASS: pedestal correction corner %.2f,%.2f advances at 0.39 units; next %.2f,%.2f.\n",corner.x,corner.z,current.goal.x,current.goal.z);
+        stopAutoWalk();nativeOwner=false;clearNavRoute();nativeOwner=true;
+    }
     logCaptureHandler.store(nullptr);
     // A remote keep-out permits correction; a pedestal across the correction
     // segment must still stop it. Transient entry was on the far side.

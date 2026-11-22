@@ -1,10 +1,11 @@
+#include "../puzzle_jump_data.hpp"
 // Cloister route guide fixtures. Each walk replays the trial script variables
 // in the order the original event scripts write them, then asks for the
 // expected step (Shift+F11). A stage expecting 0 proves the guide reports an
 // unidentified step instead of guessing past an unchecked action.
 namespace {
-struct GuideWrite {unsigned low;int value;unsigned element=0;unsigned high=1;};
-struct GuideStage {const char* action;std::vector<GuideWrite> writes;int expected;};
+using GuideWrite=ffx::PuzzleJumpWrite;
+using GuideStage=ffx::PuzzleJumpStage;
 const PuzzleRoute& guideRoute(const char* script) {
     for(const auto& route:puzzleRoutes) if(!std::strcmp(route.script,script)) return route;
     check(false,"guide route exists");std::abort();
@@ -13,6 +14,7 @@ void loadGuideRoute(const char* script,const std::vector<GuideStage>& stages) {
     const auto trial=std::find_if(std::begin(trialUtilities),std::end(trialUtilities),[&](const TrialUtility& t){return !std::strcmp(t.script,script);});
     check(trial!=std::end(trialUtilities),"guide trial exists");
     load(*trial,trial->collect);resetOwnedPuzzleGuide();
+    if(!std::strcmp(script,"dome0700")) for(const auto& binding:nav::guide_dome0700) declaration(binding.low,binding.high);
     for(const auto& step:guideRoute(script).steps) if(step.check && step.done.low) {
         declaration(step.done.low,step.done.high);
         if(step.also.low) declaration(step.also.low,step.also.high);
@@ -37,56 +39,8 @@ void walkGuideRoute(const char* script,const std::vector<GuideStage>& stages) {
     resetOwnedPuzzleGuide();
 }
 void djoseGuideRouteFixture() {
-    // djyt0600: 0x94 carried sphere (1 Djose, 3 charged, 10 Destruction);
-    // 0x95/0x96 entry, 0x97/0x98 door, 0x99/0x9a charging, 0x9b charged
-    // door (worker 54) and 0x9c left circuit (worker 55) recess sockets;
-    // 0x9d/0x9e pedestal sockets (east face toward the charging wall, west
-    // face toward the reset tile); 0x9f Destruction Sphere recess (worker 62);
-    // 0x28e door opened; 0xa1 charger (1 powered, 2 sticky once the pedestal
-    // sphere is charged); 0xd9 pedestal in gap, cleared by reset tile 67 only
-    // while 0x9b is not 3; 0xda gap switch; 0xdb lift circuit; 0xe5 hidden
-    // glyph (1 revealed, 2 touched); 0xde-0xe1 upper pedestals; 0xe3 all five
-    // pushed (1) then sphere set (2). The entry state is the script's own
-    // initial values, and every stage writes only what the original action
-    // writes: no stage fakes a flag to reach the next step.
-    walkGuideRoute("djyt0600",{
-        {"entry",{{0x0c000095,1},{0x0c000096,1},{0x0c00009b,1},{0x0c00009c,1},{0x0c00009d,1},{0x0c00009f,10}},1},
-        {"take entry sphere 1",{{0x0c000094,1},{0x0c000095,0}},2},
-        {"insert door recess 1",{{0x0c000097,1},{0x0c000094,0}},3},
-        {"take entry sphere 2",{{0x0c000094,1},{0x0c000096,0}},4},
-        {"insert door recess 2 opens door",{{0x0c000098,1},{0x0c000094,0},{0x0000028e,1}},5},
-        {"take charged-door recess sphere",{{0x0c000094,1},{0x0c00009b,0}},6},
-        {"insert charging recess 1",{{0x0c000099,1},{0x0c000094,0}},7},
-        {"take left circuit sphere",{{0x0c000094,1},{0x0c00009c,0}},8},
-        {"insert charging recess 2 powers charger",{{0x0c00009a,1},{0x0c000094,0},{0x0c0000a1,1}},9},
-        {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},0},
-        // Reset tile 67 writes only 0xd9=0, which is already 0 here, so the
-        // guide cannot see steps 10 and 11. The charged door recess (0x9b=3)
-        // stays set until step 19 and recovers the route.
-        {"reset tile returns pedestal",{{0x0c0000d9,0}},0},
-        {"take charged sphere from east face",{{0x0c000094,3},{0x0c00009d,0}},0},
-        {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},13},
-        {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
-        {"insert west pedestal socket",{{0x0c00009e,1},{0x0c000094,0}},15},
-        {"take charging recess 2",{{0x0c000094,1},{0x0c00009a,0}},16},
-        {"insert east pedestal socket",{{0x0c00009d,1},{0x0c000094,0}},17},
-        {"push pedestal into gap",{{0x0c0000d9,1}},18},
-        {"press gap switch",{{0x0c0000da,1}},19},
-        {"take charged door sphere",{{0x0c000094,3},{0x0c00009b,0}},20},
-        {"insert left circuit",{{0x0c00009c,3},{0x0c000094,0}},21},
-        {"reset tile clears gap once door recess is empty",{{0x0c0000d9,0}},22},
-        {"take east pedestal sphere",{{0x0c000094,1},{0x0c00009d,0}},23},
-        {"insert entry recess 1",{{0x0c000095,1},{0x0c000094,0}},24},
-        {"take west pedestal sphere",{{0x0c000094,1},{0x0c00009e,0}},25},
-        {"insert entry recess 2 completes lift circuit",{{0x0c000096,1},{0x0c000094,0},{0x0c0000db,1},{0x0c0000e5,1}},26},
-        {"touch hidden glyph",{{0x0c0000e5,2}},27},
-        {"take Destruction Sphere",{{0x0c000094,10},{0x0c00009f,0}},0},
-        {"push upper pedestal 1",{{0x0c0000de,1}},30},
-        {"push upper pedestals 2 to 4",{{0x0c0000df,1},{0x0c0000e0,1},{0x0c0000e1,1}},33},
-        {"push upper pedestal 5",{{0x0c0000e3,1}},34},
-        {"insert Destruction Sphere",{{0x0c000094,0},{0x0c0000e3,2}},35},
-        {"open Destruction treasure",{{0x01000a70,4}},36},
-    });
+    // Stages and their variable comments: ../puzzle_jump_data.hpp.
+    walkGuideRoute("djyt0600",djoseJumpStages);
     // Durable checkpoints recover the route when the guide starts late.
     walkGuideRoute("djyt0600",{{"late start after hidden glyph",{{0x0000028e,1},{0x0c000095,1},{0x0c000096,1},{0x0c00009c,3},{0x0c00009f,10},
         {0x0c0000a1,2},{0x0c0000da,1},{0x0c0000db,1},{0x0c0000e5,2}},27}});
@@ -209,6 +163,7 @@ void guideSelectionFixture() {
     fixtureGuidePedestal={};
     guideSays(OwnedGuideAction::Expected,L"does not identify an exact puzzle step","guide reaches the unseen reset tile after the push");
     guideSays(OwnedGuideAction::Next,L"Step 11 of","manual next from the unseen reset tile");
+    guideSays(OwnedGuideAction::Expected,L"Step 11 stays selected","expected step keeps a manual selection the trial state cannot identify");
     Entity pedestal;configurePedestalTarget(pedestal,"djyt0600",1);
     const auto text=guidePedestalStep(pedestal);
     if(text.find(L"Guide step 11: Stand centred on the east face")!=0) std::fprintf(stderr,"pedestal arrival: %ls\n",text.c_str());
@@ -293,7 +248,7 @@ void kilikaGuideRouteFixture() {
         {"take fire chamber sphere",{{0x0c00005b,2},{0x0c00005f,0}},11},
         {"insert pedestal",{{0x0c00005a,2},{0x0c00005b,0}},12},
         {"retrieve Glyph Sphere",{{0x0c00005b,4},{0x0c00005c,0}},13},
-        {"insert Glyph in fire chamber recess",{{0x0c00005f,4},{0x0c00005b,0}},0},
+        {"insert Glyph in fire chamber recess",{{0x0c00005f,4},{0x0c00005b,0}},14},
         {"push pedestal onto depression",{{0x0c000064,1}},16},
         {"take lower recess sphere",{{0x0c00005b,3},{0x0c000061,0}},17},
         {"insert antechamber door recess",{{0x0c000062,3},{0x0c00005b,0}},18},
@@ -333,7 +288,7 @@ void kilikaGuideRouteFixture() {
         const std::vector<GuideStage> loaded={
             {"insert pedestal",{{0x0c00005a,2},{0x0c00005b,0}},12},
             {"retrieve Glyph Sphere",{{0x0c00005b,4},{0x0c00005c,0}},13},
-            {"insert Glyph in fire chamber recess",{{0x0c00005f,4},{0x0c00005b,0}},0}};
+            {"insert Glyph in fire chamber recess",{{0x0c00005f,4},{0x0c00005b,0}},14}};
         for(const auto& stage:loaded) {for(const auto& w:stage.writes) setValue(w.low,w.high,w.value,w.element);expectGuide("klyt1000",stage.action,stage.expected);}
         guideSays(OwnedGuideAction::Next,L"Step 15 of","manual next to the Kilika push step");
         check(!guidePedestalRecess(pedestal),"Kilika push step keeps the push position");
@@ -383,7 +338,7 @@ void macalaniaGuideRouteFixture() {
         {"insert ramp recess",{{0x0c000096,4},{0x0c000094,0}},20},
         {"push down restored ramp",{{0x0c0000a3,3}},21},
         {"take Destruction Sphere",{{0x0c000094,10},{0x0c000097,0}},22},
-        {"insert lower treasure recess",{{0x0c000099,10},{0x0c000094,0},{0x0c0000cd,1}},23},
+        {"insert lower treasure recess",{{0x0c000099,10},{0x0c000094,0}},23},
         {"open Destruction treasure",{{0x01000a70,8}},24},
         {"take Destruction back",{{0x0c000094,10},{0x0c000099,0}},25},
         {"put Destruction in pedestal",{{0x0c000097,10},{0x0c000094,0}},26},
@@ -478,7 +433,7 @@ void bevelleGuideRouteFixture() {
         {"take Destruction Sphere",{bevelleSphere(5,9,0),bevelleSphere(5,1,1)},9},
         {"insert Destruction Sphere in former Glyph recess",{bevelleSphere(5,1,0),bevelleSphere(5,7,1),{0x0c000026,1}},10},
         {"retrieve lower power recess sphere",{bevelleSphere(3,8,0),bevelleSphere(3,1,1)},11},
-        {"open Destruction treasure",{{0x01000a70,16}},12},
+        {"open Destruction treasure",{{0x0c000008,64},{0x0c000009,14},{0x01000a70,16}},12},
         // w54 (the chest edge) turns on w53. Stepping into w53 calls the
         // pedestal (1cd48 0x09=15) before any push. w38 entry 16 then puts
         // the push zone beside it at z 263.1 for 0x09 14 or 15.
@@ -498,7 +453,7 @@ void bevelleGuideRouteFixture() {
     // The treasure flag is permanent save data, but the room resets on each
     // entry. A collected treasure must not skip the room steps.
     walkGuideRoute("bvyt1100",{{"room reset after treasure",{bevelleSphere(1,2,1),bevelleSphere(2,4,1),bevelleSphere(3,6,1),bevelleSphere(4,7,1),bevelleSphere(5,9,1),{0x01000a70,16}},1}});
-    walkGuideRoute("bvyt1100",{{"late start after treasure",{{0x0c000025,1},bevelleSphere(4,11,1),{0x0c000026,1},{0x01000a70,16}},12}});
+    walkGuideRoute("bvyt1100",{{"late start after treasure",{{0x0c000025,1},bevelleSphere(4,11,1),{0x0c000026,1},{0x0c000008,64},{0x0c000009,14},{0x01000a70,16}},12}});
     // A Bevelle Sphere put back in its source place asks for the pickup again.
     walkGuideRoute("bvyt1100",{
         {"entry",{bevelleSphere(1,2,1),bevelleSphere(2,4,1),bevelleSphere(3,6,1),bevelleSphere(4,7,1),bevelleSphere(5,9,1)},1},
@@ -545,18 +500,19 @@ void zanarkandGuideRouteFixture() {
     // 0x5c000008 carried sphere (1 Kilika, 2 Besaid, 3 Destruction);
     // sockets 0x5c000010 Besaid source, 0x5c00000c Kilika source,
     // 0x5c000018 Besaid recess, 0x5c00001c Kilika recess.
+    // dome0700 ATEL W38:19 writes 0x0c000022=6 after the first floor; W38:23/24/22/25 test 0x0c000024 at 6/7/9/7.
     const std::vector<GuideWrite> firstVisit={{0x20000a00,2768},{0x5c000004,0},{0x0c000020,0},{0x0c000021,0},{0x0c000022,0},{0x0c000023,0},
         {0x0c000024,0},{0x0c000025,0},{0x0c000027,0},{0x0c000029,0},{0x5c000008,0},{0x5c000010,2},{0x5c00000c,1},{0x5c000018,0},{0x5c00001c,0}};
     walkGuideRoute("dome0700",{
         {"entry",firstVisit,0},
         {"step on activation tile",{{0x0c000022,0},{0x0c000023,0}},0},
         {"partial floor pattern",{{0x0c000022,3}},0},
+        {"wrong active panel resets the initial pattern",{{0x0c000022,0}},0},
         {"complete floor pattern",{{0x0c000022,6},{0x0c000023,0}},3},
         {"activate pedestal 1",{{0x5c000004,1},{0x0c000021,1}},3},
-        {"complete pedestal 1 pattern",{{0x0c000024,9},{0x0c000020,1}},4},
-        {"reset floor counter by stepping a pattern-0 panel twice",{{0x0c000022,0}},4},
-        {"complete pedestal 2 pattern",{{0x5c000004,2},{0x0c000021,2},{0x0c000024,6},{0x0c000020,2}},5},
-        {"complete pedestal 3 pattern",{{0x5c000004,3},{0x0c000021,3},{0x0c000024,7},{0x0c000020,3}},6},
+        {"complete pedestal 1 pattern",{{0x0c000024,6},{0x0c000020,1}},4},
+        {"complete pedestal 2 pattern",{{0x5c000004,2},{0x0c000021,2},{0x0c000024,7},{0x0c000020,2}},5},
+        {"complete pedestal 3 pattern",{{0x5c000004,3},{0x0c000021,3},{0x0c000024,9},{0x0c000020,3}},6},
         {"complete pedestal 4 pattern",{{0x5c000004,4},{0x0c000021,4},{0x0c000024,7},{0x0c000020,4}},7},
         {"take Kilika Sphere out of order",{{0x5c00000c,0},{0x5c000008,1}},7},
         {"return Kilika Sphere",{{0x5c00000c,1},{0x5c000008,0}},7},
@@ -574,7 +530,15 @@ void zanarkandGuideRouteFixture() {
         loadGuideRoute("dome0700",{{"entry",firstVisit,0}});
         for(const auto& w:firstVisit) setValue(w.low,w.high,w.value,w.element);
         guideSays(OwnedGuideAction::Step,L"press F10 for the next step","Zanarkand step 1 sends the player to step 2");
-        const auto tileText=fixturePuzzleGuideSync(OwnedGuideAction::Next);
+        check(fixturePuzzleGuideSync(OwnedGuideAction::Next).find(L"No active permitted floor panel")!=std::wstring::npos,
+            "missing floor panel observations do not create a guide target");
+        std::vector<const PuzzleTile*> order;
+        for(const auto& tile:puzzleTiles) if(tile.stage==0) order.push_back(&tile);
+        std::sort(order.begin(),order.end(),[](const PuzzleTile* a,const PuzzleTile* b) {return std::hypot(a->point.x,a->point.z)<std::hypot(b->point.x,b->point.z);});
+        check(order.size()>=2,"Zanarkand stage zero contains multiple permitted panels");
+        const auto readFloorStep=[&] {resetOwnedPuzzleGuide();fixturePuzzleGuideSync(OwnedGuideAction::Step);return fixturePuzzleGuideSync(OwnedGuideAction::Next);};
+        for(const auto* tile:order) fixtureGuideWorkers.push_back({tile->worker,0x20});
+        const auto tileText=readFloorStep();
         check(tileText.find(L"Next permitted floor panel")!=std::wstring::npos,"Zanarkand step 2 names the next floor panel");
         check(tileText.find(L"Press F10 for its path")==std::wstring::npos,"Zanarkand tile text does not send F10 for a path");
         if(tileText.find(L"Read path to current step")==std::wstring::npos) std::fprintf(stderr,"tile text: %ls\n",tileText.c_str());
@@ -583,38 +547,38 @@ void zanarkandGuideRouteFixture() {
         // setCollisionShapeActive(0)), so stepping on it again does nothing.
         // A guide that lost its session record (reset mid-pattern) must not
         // name it again; the live scene shows it with no interaction channel.
-        std::vector<const PuzzleTile*> order;
-        for(const auto& tile:puzzleTiles) if(tile.stage==0) order.push_back(&tile);
-        std::sort(order.begin(),order.end(),[](const PuzzleTile* a,const PuzzleTile* b) {return std::hypot(a->point.x,a->point.z)<std::hypot(b->point.x,b->point.z);});
-        check(order.size()>=2 && tileText.find(zanarkandGlyphLabel(order[0]->worker))!=std::wstring::npos,"Zanarkand names the nearest unlit panel");
-        resetOwnedPuzzleGuide();
-        for(const auto* tile:order) fixtureGuideWorkers.push_back({tile->worker,tile==order[0]?0u:0x20u});
-        fixturePuzzleGuideSync(OwnedGuideAction::Step);
-        const auto liveText=fixturePuzzleGuideSync(OwnedGuideAction::Next);fixtureGuideWorkers.clear();
         const auto litLabel=std::wstring(zanarkandGlyphLabel(order[0]->worker)),nextLabel=std::wstring(zanarkandGlyphLabel(order[1]->worker));
-        if(litLabel!=nextLabel) {
-            if(liveText.find(nextLabel)==std::wstring::npos) std::fprintf(stderr,"live tile text: %ls\n",liveText.c_str());
-            check(liveText.find(nextLabel)!=std::wstring::npos,"Zanarkand skips a panel the scene shows as already lit");
-        }
-        // If the scene shows every panel with no channel (a transient read),
-        // the guide still names a panel instead of giving up.
-        for(const auto* tile:order) fixtureGuideWorkers.push_back({tile->worker,0u});
-        resetOwnedPuzzleGuide();fixturePuzzleGuideSync(OwnedGuideAction::Step);
-        const auto allText=fixturePuzzleGuideSync(OwnedGuideAction::Next);fixtureGuideWorkers.clear();
-        check(allText.find(L"Next permitted floor panel")!=std::wstring::npos,"Zanarkand ignores an all-dark scene read");
+        check(tileText.find(litLabel)!=std::wstring::npos,"Zanarkand names the nearest unlit panel");
+        fixtureGuideWorkers.front().channels=0;
+        check(readFloorStep().find(nextLabel)!=std::wstring::npos,"Zanarkand skips a panel the scene shows as already lit");
+        fixtureGuideWorkers.front().channels=0x20;fixtureGuideWorkers.front().entry=1;
+        check(readFloorStep().find(nextLabel)!=std::wstring::npos,"Zanarkand skips a floor worker with a mismatched entry");
+        for(auto& worker:fixtureGuideWorkers) worker.channels=0;
+        check(readFloorStep().find(L"No active permitted floor panel")!=std::wstring::npos,"Zanarkand withholds directions when all panel callbacks are inactive");
+        fixtureGuideWorkers.clear();
+        resetOwnedPuzzleGuide();
+    }
+    // Pedestal steps wait for the floor pattern. The floor step that is read
+    // stays selected, so F9 and the spoken step agree.
+    {
+        loadGuideRoute("dome0700",{{"entry",firstVisit,0}});
+        for(const auto& w:firstVisit) setValue(w.low,w.high,w.value,w.element);
+        fixturePuzzleGuideSync(OwnedGuideAction::Step);fixturePuzzleGuideSync(OwnedGuideAction::Next);
+        guideSays(OwnedGuideAction::Next,L"Step 2 of","Zanarkand next to a waiting pedestal reads the floor step");
+        guideSays(OwnedGuideAction::Previous,L"Step 1 of","Zanarkand selection follows the floor step it read");
         resetOwnedPuzzleGuide();
     }
     // A sphere put back in its source recess asks for the pickup again.
-    auto allPedestals=firstVisit;allPedestals.insert(allPedestals.end(),{{0x5c000004,4},{0x0c000020,4}});
+    auto allPedestals=firstVisit;allPedestals.insert(allPedestals.end(),{{0x5c000004,4},{0x0c000020,4},{0x0c000022,6}});
     walkGuideRoute("dome0700",{
         {"after four pedestal patterns",allPedestals,7},
         {"take Besaid Sphere",{{0x5c000010,0},{0x5c000008,2}},8},
         {"put Besaid Sphere back",{{0x5c000010,2},{0x5c000008,0}},7},
         {"take Besaid Sphere again",{{0x5c000010,0},{0x5c000008,2}},8},
     });
-    auto lateStart=firstVisit;lateStart.push_back({0x0c000020,3});
+    auto lateStart=firstVisit;lateStart.insert(lateStart.end(),{{0x5c000004,3},{0x0c000020,3},{0x0c000022,6}});
     walkGuideRoute("dome0700",{{"late start after three pedestals",lateStart,6}});
-    lateStart=firstVisit;lateStart.insert(lateStart.end(),{{0x0c000020,5},{0x5c000010,0},{0x5c000018,2}});
+    lateStart=firstVisit;lateStart.insert(lateStart.end(),{{0x5c000004,4},{0x0c000020,5},{0x0c000022,6},{0x5c000010,0},{0x5c000018,2}});
     walkGuideRoute("dome0700",{{"late start after Besaid recess",lateStart,9}});
     const std::vector<GuideWrite> returnVisit={{0x20000a00,2875},{0x5c000004,5},{0x0c000020,7},{0x0c000022,0},{0x0c000023,0},{0x0c000024,0},
         {0x0c000025,0},{0x0c000027,0},{0x0c000029,0},{0x5c000008,0},{0x5c000014,3},{0x5c00000c,0},{0x5c000018,0},{0x5c00001c,0}};
@@ -634,6 +598,45 @@ void zanarkandGuideRouteFixture() {
     walkGuideRoute("dome0700",{{"return entry after treasure",returnCollected,1}});
 }
 }
+#ifdef FFX_DEV_UTILITIES
+// `puzzle jump <n>` writes the same stage variables the route walk replays,
+// then selects step n. Every feasible Djose start is checked from a fresh room.
+void djoseJumpFixture() {
+    const auto jump=[](unsigned n) {
+        loadGuideRoute("djyt0600",djoseJumpStages);
+        const auto count=replies.size();const auto text=renderUtilityText(puzzleJumpCommand(std::to_wstring(n)));
+        const auto selected=L"Step "+std::to_wstring(n)+L" of";
+        const bool spoken=replies.size()==count+1 && replies.back().find(selected)!=std::wstring::npos;
+        if(!spoken || text.find(L"Jumped to step "+std::to_wstring(n))!=0) std::fprintf(stderr,"jump %u: %ls / %ls\n",n,text.c_str(),replies.size()>count?replies.back().c_str():L"(no guide reply)");
+        check(spoken,"puzzle jump selects the step in the guide");
+        check(text.find(L"Jumped to step "+std::to_wstring(n))==0,"puzzle jump replies with the step");
+        // Where the route identifies the step, the guide's own reading agrees.
+        int identified=0;for(const auto& stage:djoseJumpStages) if(puzzleJumpNext(stage)==n) identified=stage.expected;
+        if(identified) {
+            const auto expected=fixturePuzzleGuideSync(OwnedGuideAction::Expected);
+            if(expected.find(selected)==std::wstring::npos) std::fprintf(stderr,"jump %u expected: %ls\n",n,expected.c_str());
+            check(expected.find(selected)!=std::wstring::npos,"guide expected step agrees after puzzle jump");
+        }
+        resetOwnedPuzzleGuide();
+    };
+    for(unsigned n=1;n<=36;++n) if(!djoseJumpRefusal(n)) jump(n);
+    for(const unsigned n:{10u,18u,19u,21u,30u,33u,0u,37u}) {
+        loadGuideRoute("djyt0600",djoseJumpStages);const auto before=writes;
+        const auto text=renderUtilityText(puzzleJumpCommand(std::to_wstring(n)));
+        check(writes==before && text.find(L"Jumped")==std::wstring::npos,"infeasible puzzle jump refused before writes");
+    }
+    loadGuideRoute("djyt0600",djoseJumpStages);
+    check(renderUtilityText(puzzleJumpCommand(L"x")).find(L"step number")!=std::wstring::npos,"puzzle jump needs a number");
+    battle=true;check(renderUtilityText(puzzleJumpCommand(L"5")).find(L"field")!=std::wstring::npos,"puzzle jump refused in battle");battle=false;
+    // The treasure flag is shared save data: the jump adds Djose's bit only.
+    setValue(0x01000a70,1,1);puzzleJumpCommand(L"36");
+    check(utilityValue(utilityScript(),0x01000a70,1)==5,"puzzle jump keeps other treasure bits");
+    resetOwnedPuzzleGuide();
+    loadGuideRoute("bsyt0100",{});
+    check(renderUtilityText(puzzleJumpCommand(L"3")).find(L"Djose")!=std::wstring::npos,"puzzle jump supports Djose only");
+    resetOwnedPuzzleGuide();
+}
+#endif
 void puzzleGuideRouteFixtures() {
     djoseGuideRouteFixture();
     guideSelectionFixture();
@@ -643,4 +646,7 @@ void puzzleGuideRouteFixtures() {
     bevelleGuideRouteFixture();
     zanarkandGuideRouteFixture();
     guideTargetNameFixture();
+#ifdef FFX_DEV_UTILITIES
+    djoseJumpFixture();
+#endif
 }

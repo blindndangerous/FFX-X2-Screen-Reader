@@ -109,6 +109,13 @@ void contactPedestalFixtures(const Mesh& room) {
     avoidContactPedestals(list);
     check(list[1].zone.obstacleRadius==0 && list[2].zone.obstacleRadius==0,
         "disabled pedestal contact retires previously copied keep-outs on both recess targets");
+    {
+        // Djose upper pedestal (W6): the scan's own-body keep-out survives.
+        auto own=list;own[1].zone.obstacle=own[1].zone.center;own[1].zone.obstacleRadius=4;own[1].ownKeepOut=true;
+        avoidContactPedestals(own);
+        check(own[1].zone.obstacleRadius==4 && distanceXZ(own[1].zone.obstacle,own[1].zone.center)<.001 && own[2].zone.obstacleRadius==0,
+            "a talk control's own-body keep-out survives the contact pedestal refresh");
+    }
     const auto afterPush=interactionRoute(room,{60,0,42},list[2].zone);
     check(!afterPush.empty() && inInteractionZone(list[2].zone,afterPush.back()),
         "a player beside a completed pedestal can leave for another recess without a radial escape");
@@ -188,6 +195,10 @@ void zoneFixtures() {
     check(!inInteractionZone(face,{50,0,45}),"socket face zone refuses a side face");
     const auto east=interactionRoute(room,{20,0,40},face);
     check(!east.empty() && inInteractionZone(face,east.back()) && east.back().x>53,"socket face route ends on the named face");
+    // Live Djose: range 10, the socket answered at 9.3 but not at 9.7.
+    face.range=10;
+    check(!inInteractionZone(face,{59.7,0,40}) && inInteractionZone(face,{58.9,0,40}),"socket face arrival keeps a 1-unit reach margin");
+    face.range=6;
     pedestal.competing[0].viewAngle=.05;
     check(inInteractionZone(pedestal,{50,0,30}),"native facing cone excludes a competing control outside the facing direction");
     pedestal.competing[0].center=pedestal.center; pedestal.competing[0].range=100;
