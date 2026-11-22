@@ -235,6 +235,12 @@ enum class Ffx2Only : unsigned {
     FieldTextOpen,    // begins a new active window lifetime
     FieldTextPage,    // selected page preparation callback (+0x128)
     FieldTextChoice,  // ordinary choice callback (+0x130); numeric input is separate
+    ConfigInput,      // Config submenu input phase, installed at [obj+0xc] by 0x388a30
+    ConfigCursor,     // dword Config row cursor 0..8
+    ConfigTable,      // pointer to the active Config record pointer table
+    ConfigCount,      // byte Config row count (9 in the main story)
+    ConfigMainTable,  // main-story Config record pointer table (9 entries)
+    MenuTextSpaces,   // 12-byte text space entries: byte busy +0, table pointer +8
 };
 struct Ffx2OnlyRva { Ffx2Only name; unsigned rva; };
 inline constexpr Ffx2OnlyRva ffx2OnlyAddresses[] = {
@@ -250,6 +256,12 @@ inline constexpr Ffx2OnlyRva ffx2OnlyAddresses[] = {
     {Ffx2Only::FieldTextOpen, 0x396280},
     {Ffx2Only::FieldTextPage, 0x39b9f0},
     {Ffx2Only::FieldTextChoice, 0x3926e0},
+    {Ffx2Only::ConfigInput, 0x388c40},
+    {Ffx2Only::ConfigCursor, 0x12d5f38},
+    {Ffx2Only::ConfigTable, 0x12d5f40},
+    {Ffx2Only::ConfigCount, 0x12d5f48},
+    {Ffx2Only::ConfigMainTable, 0x9638b4},
+    {Ffx2Only::MenuTextSpaces, 0xa103a8},
 };
 inline unsigned ffx2Rva(Ffx2Only name) {
     if(nativeProfile!=NativeProfile::Ffx2) throw std::out_of_range("FFX-2-only address outside the FFX-2 profile");

@@ -4,6 +4,7 @@
 // map load scopes and the top-level menu; see Docs/ffx2-addresses.md and
 // Docs/gameArchitecture.md (FFX-2 status).
 // Field page/choice capture additionally requires FFX2_EXPERIMENTAL_FIELD_TEXT=1.
+// The Config submenu reader additionally requires FFX2_EXPERIMENTAL_CONFIG=1.
 #include "x2_boot.hpp"
 #include "runtime.hpp"
 #include "events.hpp"
@@ -11,6 +12,7 @@
 #include "mod_menu.hpp"
 #include "text_plan.hpp"
 #include "ffx2_field_text.hpp"
+#include "ffx2_config.hpp"
 #include <MinHook.h>
 namespace ffx {
 void announceFfx2Boot() {
@@ -27,9 +29,11 @@ bool startFfx2Input(bool& initializedHooks) {
     installFfx2LoadBoundaries();
     const bool topMenu=installFfx2TopMenu();
     const bool fieldText=installFfx2FieldText();
+    const bool config=installFfx2Config();
     if(!enableHooks()) { recordLog("FFX-2 input hooks failed to enable"); return false; }
     recordLog("FFX-2 input enabled: PInput::Update probe, DirectInput keyboard/pad, window messages; hotkeys F8 and F11; map load scopes; top menu %s",topMenu?"read":"not hooked");
     recordLog("FFX-2 experimental field text %s",fieldText?"enabled; static-only, unverified in game":"disabled");
+    recordLog("FFX-2 experimental Config reader %s",config?"enabled; static-only, unverified in game":"disabled");
     return true;
 }
 }

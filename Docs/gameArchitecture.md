@@ -9,8 +9,12 @@ the observation. No worker reads a native text pointer.
 
 Items/Abilities and Config have offline selection parsers. Separate legacy panel
 parsers cover Grid nodes and the Dressphere parent/list binding. Config uses nine
-main-story label/value records; its per-row arrays hold animation state. Separate
-Config help and node-only Grid help refresh still need producer evidence.
+main-story label/value records; its per-row arrays hold animation state. Config
+help is the selected value's help (input phase 0x388c40 sets it through 0x379150
+and 0x3638a0). November 21: a default-off Config reader
+(`FFX2_EXPERIMENTAL_CONFIG=1`) speaks label, value and that help on row or value
+changes; the worker decodes owned bytes. Node-only Grid help refresh still needs
+producer evidence.
 The worker-only battle-ready design emits the displayed character name once per
 native ready edge, with no sound; native ready/name sources remain unresolved.
 No new submenu or battle hook exists. Every FFX-2 address/offset is UNVERIFIED in

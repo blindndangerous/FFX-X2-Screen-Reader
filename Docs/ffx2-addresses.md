@@ -481,12 +481,41 @@ synthetic parser test does not verify which live controller owns those bytes.
   with space 1 (`e8 c1 46 ea ff` at `0x37917a`). Unlike `0x21d7c0`,
   this resolver returns the name offset, word `+0` of the kernel record:
   `0x21d881`, `0f b7 00`. Selection speech must use that distinction.
-- Help line: no separate ready help-string producer is confirmed for native
-  Config. The nine main-story setting records name Spherechanges, ATB Mode,
-  ATB Speed, Cursor, Battle Help, Vibration, Subtitles, Subtitle Names and
-  Guide Map. Their `menu_txt.bin` help fields contain the literal `UNUSED`.
-  That placeholder and the previous top-menu Config help are not submenu help.
-  Visible-help absence still needs gameplay confirmation; no address is invented.
+- Help line (correction, November 21): the help Config shows is the help of
+  the selected **value**, not of the setting label. The nine main-story setting
+  records name Spherechanges, ATB Mode, ATB Speed, Cursor, Battle Help,
+  Vibration, Subtitles, Subtitle Names and Guide Map; their label help fields
+  contain the literal `UNUSED`, but each value record has real help. In the
+  input phase, `0x3891b4..0x3891cc` loads the row record from `[VA 0x16d5f40]`
+  and the cursor, reads signed word `+0xc` (`0f bf 41 0c`), takes the value ID
+  at `+6+value*2`, calls `0x379150` (which is `0x21d7c0` with space 1, the
+  help word `+4`), then passes the string to the shared-help setter
+  `0x3638a0` (stores RVA `0x12bd97c`). Example values from the English
+  `menu_txt.bin`: Subtitles ON `Display subtitles.`, OFF `Hide subtitles.`;
+  ATB Mode Active `Set Active Time Battle mode to Active.` (the word Active is
+  wrapped in colour control `0x0a`, one parameter byte).
+- Input phase: RVA `0x388c40` (VA `0x788c40`), prologue
+  `55 8b ec 83 ec 1c e8`. `0x388a30` installs it as the module callback at
+  `[obj+0xc]` (`movl $0x788c40,0xc(%eax)` at `0x388a3c`). The phase dword is
+  `[arg+0x28]` (`8b 48 28` at `0x388ca2`, bound `0xe`, jump table VA
+  `0x7892f4`); phase 3 is interactive input. Up (`0x1000`) and Down
+  (`0x4000`) move the cursor; Left (`0x8000`) and Right (`0x2000`) change
+  record `+0xc`; confirm and cancel go to phases 8 and `0xa`.
+- Menu text space table: RVA `0xa103a8` (VA `0xe103a8`), 12-byte entries.
+  `0x21d7c0`/`0x21d840` refuse a space whose byte `+0` is not zero and read
+  the table pointer at `+8`. Range lookup `0x21e3a0`: dword count at `+0`,
+  20-byte ranges from `+0xc` (`first,last,stride,strings,records`); the record
+  is `table+records+(id-first)*stride`; strings are at
+  `table+strings+records`. An unknown ID falls back to the first range; the
+  mod refuses it instead. English `menu_txt.bin` has one range `0..0x13a`,
+  stride 8, strings `0x9d8`, records `0x20`; IDs are masked to 12 bits.
+- Experimental reader: `src/native/ffx2_config_reader.cpp`, compiled out
+  unless `FFX2_EXPERIMENTAL_CONFIG=1`. It hooks `0x388c40` before/after and
+  speaks only on a row or value change in phase 3, with story mode zero, the
+  main table `0x9638b4` active and nine rows. The hook copies the encoded
+  label, value name and value help from the space-1 table plus the charset;
+  the worker decodes. It computes help from the table because the shared help
+  pointer updates on a later frame. UNVERIFIED in game.
 - Correction to the initial descriptor hypothesis: the 16-byte arrays at
   RVAs `0x12d5f50`, `0x12d6000`, `0x12d60b0` are animation state,
   not label/value/help text objects. Their consumer `0x372eb0` decrements

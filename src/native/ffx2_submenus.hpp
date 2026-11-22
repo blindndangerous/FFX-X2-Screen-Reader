@@ -20,4 +20,6 @@ struct ConfigRecordSelection {unsigned index=0,labelId=0,valueId=0,valueIndex=0,
 // First 16 bytes of the selected main-story setting record, excluding callbacks.
 // The 16-byte arrays at 16D5F50/16D6000/16D60B0 are animation, not text.
 bool parseConfigRecord(int cursor,const std::vector<std::uint8_t>& selectedRecord,ConfigRecordSelection&);
+// Same parse on a caller-owned prefix; no allocation, so a hook may call it.
+bool parseConfigRecord(int cursor,const std::uint8_t* selectedRecord,std::size_t size,ConfigRecordSelection&);
 }

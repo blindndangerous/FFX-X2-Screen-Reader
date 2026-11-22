@@ -80,7 +80,10 @@ int main() {
         {ffx::Ffx2Only::TopMenuUpdate,0x373170u},{ffx::Ffx2Only::TopMenuCursor,0x12bef0cu},
         {ffx::Ffx2Only::TopMenuItems,0x12befe0u},{ffx::Ffx2Only::TopMenuCount,0x12bf040u},
         {ffx::Ffx2Only::HelpText,0x12bd97cu},{ffx::Ffx2Only::Charset,0x9eade0u},
-        {ffx::Ffx2Only::StoryMode,0x12ef654u}};
+        {ffx::Ffx2Only::StoryMode,0x12ef654u},
+        {ffx::Ffx2Only::ConfigInput,0x388c40u},{ffx::Ffx2Only::ConfigCursor,0x12d5f38u},
+        {ffx::Ffx2Only::ConfigTable,0x12d5f40u},{ffx::Ffx2Only::ConfigCount,0x12d5f48u},
+        {ffx::Ffx2Only::ConfigMainTable,0x9638b4u},{ffx::Ffx2Only::MenuTextSpaces,0xa103a8u}};
     for(const auto& entry:only) {
         unsigned resolved=0;
         try { resolved=ffx::ffx2Rva(entry.name); } catch(const std::out_of_range&) {}

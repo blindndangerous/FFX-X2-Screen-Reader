@@ -117,8 +117,9 @@ Do not infer a pass from a log or a normal game sound.
 23. Config boundary. Enter native Config, move between options and cancel
     without changing settings. Expected new mod speech inside native Config:
     none. Its nine main-story label/value records have offline selection tests.
-    The 16-byte per-row arrays are animation state. A separate ready help line
-    is not confirmed; the archive's help fields contain `UNUSED`.
+    The 16-byte per-row arrays are animation state. Static evidence says the
+    help window shows the selected value's help (for Subtitles ON,
+    `Display subtitles.`); a sighted helper confirms that text once.
 
 24. Battle-ready boundary. Reach an ordinary story battle through normal play.
     Expected character-ready mod speech in this build: none. No ready hook or
@@ -131,6 +132,56 @@ Do not infer a pass from a log or a normal game sound.
 25. Final handback. After the menu and battle checks, open and close F8 once.
     Expected speech: `Accessibility mod menu. Speech: On`, then
     `Mod menu closed`. Native game keys must continue working after release.
+
+## Experimental Config build (`FFX2_EXPERIMENTAL_CONFIG=1`)
+
+Run these only with a test build compiled with that flag; the ordinary build
+must keep item 23 (no Config speech). Build it by adding
+`/DFFX2_EXPERIMENTAL_CONFIG=1` to the DLL compile line. Use the main story, English text, and
+restore every setting you change before leaving Config. Speech interrupts the
+previous menu line. Entering Config speaks nothing until the first move; that
+is a known gap, not a failure.
+
+26. Config row moves. Open Config from the top menu (top-menu speech
+    `Config. Configure gameplay settings.`, as item 16). Press Down one row
+    at a time from Spherechanges to Guide Map, then Up back to the top. Each
+    move speaks exactly `Label: Value. Help` for the value shown on screen.
+    Rows in order, with every value and its exact help:
+    - Spherechanges: `Normal. Display full spherechange sequences.`,
+      `Short. Display shortened spherechange sequences.`, `OFF. Skip spherechange sequences.`
+    - ATB Mode: `Active. Set Active Time Battle mode to Active.`,
+      `Wait. Set Active Time Battle mode to Wait.`
+    - ATB Speed: `Slow. Set Active Time Battle gauge to charge slowly.`,
+      `Normal. Set Active Time Battle gauge to charge normally.`,
+      `Fast. Set Active Time Battle gauge to charge quickly.`
+    - Cursor: `Memory. Remember previous cursor position in battle menus.`,
+      `Default. Keep default cursor position in battle menus.`
+    - Battle Help: `ON. Display help window during battle.`, `OFF. Hide help window during battle.`
+    - Vibration: `ON. Turn vibration function on.`, `OFF. Turn vibration function off.`
+    - Subtitles: `ON. Display subtitles.`, `OFF. Hide subtitles.`
+    - Subtitle Names: `ON. Display speaker’s name in subtitles.`,
+      `OFF. Hide speaker’s name in subtitles.`
+    - Guide Map: `ON. Display on-screen map.`, `OFF. Hide on-screen map.`
+    Example with Subtitles ON: `Subtitles: ON. Display subtitles.` Record the
+    first row's value. The value word must match the one on screen.
+
+27. Config value changes. On Subtitles, press Right once. Expected:
+    `OFF. Hide subtitles.` Press Left once. Expected: `ON. Display subtitles.`
+    On Spherechanges press Right twice: `Short. Display shortened spherechange sequences.`,
+    then `OFF. Skip spherechange sequences.`; press Left twice back to Normal.
+    Pressing Left at the first value or Right at the last value must stay
+    silent (the game does not change the value).
+
+28. Config idle and edges. Hold no key for five seconds: no speech. Press Up
+    on Spherechanges and Down on Guide Map: silent (cursor does not move).
+    Cancel out of Config without changing settings and return to the top
+    menu. Cancel and confirm themselves are silent in this reader. Top-menu
+    speech resumes on the next top-menu move, with no Config line repeated.
+
+29. Config help mirrors the screen. For three rows, a sighted helper compares
+    the spoken help with the help window. Any mismatch (for example the help
+    still showing the previous row) is a failure to report with the row name.
+    Report whether the game shows help for the label row itself.
 
 Offline limits and static instruction evidence:
 [addresses](ffx2-addresses.md). Battle design and missing integration evidence:
