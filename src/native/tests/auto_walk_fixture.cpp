@@ -183,6 +183,12 @@ int main() {
     corner=keyboard();
     check(autoWalkActive() && corner[0xc8] && !corner[0xcd] && !corner[0xcb],
         "a stalled pedestal detour replans without an unchecked sideways move");
+    begin();leg.target.zone.obstacle={-8,0,0};leg.target.zone.obstacleRadius=7;leg.goal={0,0,4};
+    player={0,0,4};clockValue+=100;updateAutoWalk();corner=keyboard();
+    check(autoWalkActive() && !corner[0xc8] && !corner[0xd0] && !corner[0xcb] && !corner[0xcd],
+        "a reached keep-out detour waypoint holds still until the worker publishes the next leg");
+    clockValue+=600;updateAutoWalk();corner=keyboard();
+    check(autoWalkActive() && corner[0xc8],"a detour waypoint hold resumes steering after 500 ms");
     begin();speech.clear();Event stopEvent;hooks.at(0x4b8980)(stopEvent);updateAutoWalk();
     check(speech.size()==1 && speech.back()==L"Auto walk stopped: dialogue" && !lastInterrupt,"dialogue stop speaks its reason once without interrupting");
     begin();speech.clear();player={100,0,0};updateAutoWalk();updateAutoWalk();

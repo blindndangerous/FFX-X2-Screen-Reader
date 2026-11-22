@@ -554,6 +554,22 @@ void updateAutoWalk() {
                 return;
             }
         }
+    } else if(pedestalRoute && !leg.target.pushControl) {
+        // Live Djose upper pedestal (2026-11-21): the keep-out detour has
+        // 4-unit legs. At running speed the walker crossed a waypoint between
+        // worker observations, circled back to it, and once flew through the
+        // talk zone before the arrival reached this thread. Stop on a reached
+        // waypoint (the worker's own rule) or inside the zone until the worker
+        // publishes the next leg or the arrival; resume steering after 500 ms.
+        if(waypointReached && distanceXZ(reachedWaypoint,leg.goal)>.01) waypointReached=false;
+        const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length=std::hypot(x,z);
+        const auto dx=player.x-leg.goal.x,dz=player.z-leg.goal.z;
+        const bool finalLeg=distanceXZ(leg.goal,leg.final)<=.01;
+        const bool passed=length>.001 && dx*x+dz*z>=0 && std::abs(dx*z-dz*x)/length<=1;
+        const bool reached=finalLeg?leg.arrivalSerial && inInteractionZone(leg.target.zone,player):
+            (distanceXZ(player,leg.goal)<=1 || passed) && std::abs(player.y-leg.goal.y)<=8;
+        if(reached && !waypointReached) {waypointReached=true;reachedWaypoint=leg.goal;waypointAt=now;}
+        if(waypointReached && now-waypointAt<500) {mask=0;stamp=now;return;}
     } else waypointReached=false;
     if(!leg.target.swimDepth && now-movingSince>1800 && now>=unstickUntil) {
         if(leg.panelRevision) {stop("floor panel route stalled",L"safe floor panel route blocked. Walk manually.",true);return;}
