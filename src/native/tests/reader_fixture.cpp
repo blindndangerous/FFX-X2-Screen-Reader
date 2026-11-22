@@ -771,7 +771,11 @@ int main(int argc, char** argv) {
     setSetting(Setting::UnavailableCue,0);
     protectSpeech(false);
     set<uint16_t>(0xf3c91c,0x2002);
-    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview");
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,2);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17","panel without a drawn maximum speaks current MP only");
+    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,0);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17","HP panel mode never adds the MP maximum");
+    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,1);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview keeps the maximum the MP panel draws");
     check(said.back().second,"target movement interrupts after deliberate input, including held menu navigation");
     battleTargetPreviewFixtures();
     {

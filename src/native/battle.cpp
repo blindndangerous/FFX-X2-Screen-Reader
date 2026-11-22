@@ -300,8 +300,7 @@ TextRef wheelMechanic(TextPlan& p,const SeymourWheels& s,unsigned id) {
     if(!s.key || id<20 || id>24)return 0;
     if(id!=20) return planConcat(p,planLiteral(p,L"Energizing "),
         planConcat(p,planEncoded(p,s.actors+0x540,40),planConcat(p,planLiteral(p,L" with "),
-        planConcat(p,planLiteral(p,elements[s.element[id-21]]),
-            planLiteral(p,L". Physical attacks turn left; magic turns right.")))));
+        planLiteral(p,elements[s.element[id-21]]))));
     std::array<unsigned,4> counts{};for(const auto element:s.element)++counts[element];
     TextRef mix=0;
     for(unsigned i=0;i<4;++i)if(counts[i])mix=planJoin(p,mix,
@@ -417,6 +416,10 @@ void targets(Event& e) {
         names=planJoin(p,names,target);
     }
     const auto array=read<uintptr_t>(address(0xd334cc));
+    // The party panel draws a maximum only in mode F3D742 0 (HP) or 1 (MP);
+    // otherwise speak the current value alone, as the H key does.
+    const auto panelMode=read<uint8_t>(address(0xf3d742),255);
+    const unsigned partyKind=previewMp?(panelMode==1?2:4):(panelMode==0?1:3);
     std::array<uint16_t,3> hudActors{};
     const bool partyStatus=players && copy(address(0xf3f76c),hudActors.data(),sizeof(hudActors));
     for(unsigned bit=0;bit<18;++bit) if((players&(1u<<bit)) && array) {
@@ -424,7 +427,7 @@ void targets(Event& e) {
         const bool hudRow=partyStatus && std::find(hudActors.begin(),hudActors.end(),bit)!=hudActors.end();
         const auto ailments=ailmentText.plan(p,hudRow?targetAilments(chr,true):0,displayedDoomTurns(chr));
         names=planJoin(p,names,planBattleTarget(p,planBattleName(p,bit),
-            read<int>(chr+(previewMp?0x5d4:0x5d0)),read<int>(chr+(previewMp?0x598:0x594)),previewMp?2:1,ailments));
+            read<int>(chr+(previewMp?0x5d4:0x5d0)),read<int>(chr+(previewMp?0x598:0x594)),partyKind,ailments));
     }
     p.headline=names;commitTextPlan(p); previousPlayers = players; previousMonsters = monsters;
     previousTargetWindow=win;previousTargetOwner=owner;previousTargetCommand=command;previousSelectedTarget=selected;
