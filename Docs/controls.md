@@ -512,8 +512,12 @@ them, such as **7 north, bear left, 4 north**.
 Once in range,
 Backslash says which way to face, such as **Face west**.
 North means ahead relative to the camera. With Auto walk off, turn and confirm
-manually. Inactive trial controls are identified as inactive. Several inactive
-rows with the same name at the same spot are listed once.
+manually. The list leaves out what you could not see on screen: trigger
+zones with no visible object (Event rows) and hidden secrets such as a hidden
+sphere recess or hidden glyph, unless the puzzle guide's current step targets
+one. Controls the game has not enabled yet are listed and identified as
+inactive. Several inactive rows with the same name at the same
+spot are listed once.
 During an active route, a camera cut of more than 45 degrees re-announces the
 next leg using the new camera direction. Slow camera pans do not repeat guidance.
 

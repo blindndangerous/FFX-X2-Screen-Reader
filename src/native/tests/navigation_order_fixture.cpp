@@ -285,6 +285,28 @@ int main() {
         check(!guideStepRow(3,7,true,3,7,false) && guideStepRow(3,7,true,3,7,true),"a push row matches only a push step");
     }
     {
+        // "If we can't see it, we can't use it": the list leaves out actor-less
+        // trigger zones and authored secrets. Rows the game has not enabled stay,
+        // read as currently inactive. The guide's current target is always listed.
+        using ffx::nav::hiddenUntilRevealed;
+        ffx::Entity seal;seal.name=L"Seal";seal.category=L"Object";seal.inactive=true;seal.authoredTrialControl=true;
+        ffx::Entity pedestal;pedestal.name=L"Pedestal";pedestal.category=L"Object";pedestal.pushControl=1;pedestal.actor=4;pedestal.inactive=true;
+        ffx::Entity trigger;trigger.name=L"Event";trigger.category=L"Event";
+        ffx::Entity drawnEvent=trigger;drawnEvent.actor=7;
+        ffx::Entity recess;recess.name=L"Hidden sphere recess";recess.category=L"Object";recess.authoredTrialControl=true;
+        ffx::Entity glyph;glyph.name=L"Hidden glyph";glyph.category=L"Object";glyph.authoredTrialControl=true;
+        ffx::Entity exit;exit.name=L"Exit";exit.category=L"Exit";
+        ffx::Entity story=trigger;story.name=L"Tidus talks to Wakka";
+        ffx::Entity active=pedestal;active.inactive=false;
+        ffx::Entity closed=exit;closed.inactive=true;
+        check(!hiddenUntilRevealed(seal,false) && !hiddenUntilRevealed(pedestal,false) && !hiddenUntilRevealed(closed,false),"inactive seals, pedestals and exits stay listed as currently inactive");
+        check(hiddenUntilRevealed(trigger,false) && !hiddenUntilRevealed(drawnEvent,false),"an Event row without a drawn actor is hidden; one with an actor stays");
+        check(hiddenUntilRevealed(recess,false) && hiddenUntilRevealed(glyph,false),"hidden recesses and glyphs are not listed");
+        check(!hiddenUntilRevealed(exit,false) && !hiddenUntilRevealed(active,false) && !hiddenUntilRevealed(story,false),"exits, enabled controls and named story events stay listed");
+        check(!hiddenUntilRevealed(trigger,true) && !hiddenUntilRevealed(recess,true) && !hiddenUntilRevealed(glyph,true),
+            "the puzzle guide's current target is listed even when hidden");
+    }
+    {
         // Room state is the trial's script values (sphere inserted, wall destroyed). Verdicts from
         // before a change are not carried onto the new scan; rows show until checked again.
         struct Row {unsigned binding=0;int value=0;unsigned high=1,element=0;};

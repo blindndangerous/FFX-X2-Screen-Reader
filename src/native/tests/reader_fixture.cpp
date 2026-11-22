@@ -121,7 +121,8 @@ bool nativeReaderResourcesReady() noexcept {return true;}
 unsigned autoWalkInputRevision() {return 0;}
 unsigned pedestalConfirmMask() {return 0x20;}
 PedestalNavigationState capturePedestalNavigationState() {return {};}
-void armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {}
+bool armPedestalOwned(const NativeRouteTarget&,const UtilityScript&,const PedestalPlan&,bool) {return true;}
+bool pedestalEntranceCrossing() {return false;}
 void updatePedestalOwnedTarget(const NativeRouteTarget&) {}
 bool testBlitzMirror=false;
 BlitzSnapshot captureBlitzSnapshot(bool,bool) {BlitzSnapshot s;s.epoch=generation();s.valid=s.lobby=testBlitzMirror;return s;}
@@ -135,6 +136,7 @@ void refreshNavCollision() {}
 bool navRouteKnown() { return false; }
 void loseNavRoute(const wchar_t*) {fixtureRoute=false;}
 void captureNavCamera() {}
+void noteNavCameraTarget(const Entity&) {}
 unsigned navUpdates=0,targetUpdates=0,workerReads=0;
 void updateOwnedNavAudio(const nav::Scene&,const Mesh&,const std::vector<Entity>&,const speechq::Header&,const std::wstring&) {++navUpdates;}
 void updateNavAudio(Point,bool) { ++navUpdates; }
@@ -707,14 +709,7 @@ int main(int argc, char** argv) {
     keys['T'](false); expect(L"Tidus","turn hotkey");
     set<unsigned>(0x21205d0,100);set<unsigned>(0x21206e4,100); set<unsigned>(0x2120594,200);
     set<unsigned>(0x21205d4,17);set<unsigned>(0x21206e8,17); set<unsigned>(0x2120598,30);
-    setSetting(Setting::ShowMaximumHp,0);
-    setSetting(Setting::ShowMaximumMp,0);
-    keys['H'](false); expect(L"Tidus HP 100 (50%) MP 17. Status: None","H defaults to current MP displayed by the battle panel");
-    setSetting(Setting::ShowMaximumMp,1);
-    keys['H'](false); expect(L"Tidus HP 100 (50%) MP 17/30. Status: None","maximum MP is independently opt-in");
-    setSetting(Setting::ShowMaximumMp,0); setSetting(Setting::ShowMaximumHp,1);
-    keys['H'](false); expect(L"Tidus HP 100/200 MP 17. Status: None","maximum HP does not enable maximum MP");
-    setSetting(Setting::ShowMaximumHp,0);
+    keys['H'](false); expect(L"Tidus HP 100 MP 17. Status: None","H reads the current HP and MP drawn by the battle panel, without maximum or percentage");
     activeBattleFixtures(); battleHudFixtures(); battleSwitchFixtures(); battleOutcomesFixtures(); statusAnimationFixtures();battleAmountFixtures();seymourFixtures();overdriveLearnFixtures();battleHpFixtures();
     set<uintptr_t>(0xf3c930,address(0x2211400)); set<unsigned>(0xf3c934,2); set<unsigned>(0xf3c954,1);
     set<uint16_t>(0x2211400,1); set<uint16_t>(0x2211402,2); set<uint16_t>(0xf3c92e,1);
@@ -740,7 +735,11 @@ int main(int argc, char** argv) {
     set<uint16_t>(0xf3c916,0); event(0x49c870,address(0xf3c910),[]{set<uint8_t>(0xf3c952,1);}); expect(L"Ether","main battle command bar is not indexed");
     setSetting(Setting::MenuIndex,0);
     protectSpeech(false);
-    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview");
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,2);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17","panel without a drawn maximum speaks current MP only");
+    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,0);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17","HP panel mode never adds the MP maximum");
+    event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});
+    event(0x49d300,address(0xf3c910),[]{set<uint8_t>(0xf3d742,1);set<uint16_t>(0xf3c9e8,1);}); expect(L"Tidus: MP 17/30","party MP target preview keeps the maximum the MP panel draws");
     event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,0);});
     event(0x49d300,address(0xf3c910),[]{set<uint16_t>(0xf3c9e8,1);set<uint16_t>(0x2120606,8);set<uint8_t>(0x212060a,2);set<uint8_t>(0x2120613,3);});
     expect(L"Tidus: MP 17/30, poison, darkness","target names visible ailments but not buffs");

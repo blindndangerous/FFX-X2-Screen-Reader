@@ -41,6 +41,14 @@ int main() {
     check(target(1u<<3|1u<<5,1u<<2|1u<<12,0,0)==L"Kimahri: HP 340/340, poison, magic break, darkness, slow","table order");
     check(target(0,1u<<3|1u<<4|1u<<11,1u<<0|1u<<9,0)==L"Kimahri: HP 340/340","shell, protect, haste, scan and auto-life are not ailments");
     check(target(0,0,1u<<10|1u<<14,2)==L"Kimahri: HP 340/340, curse, doom, 2 turns","curse and doom counter");
+    const auto vitals=[](int current,int maximum,unsigned kind) {
+        ffx::TextPlan p;ffx::prepareTextPlan(p,"battle-target");
+        return ffx::renderTextPlan(p,ffx::planBattleTarget(p,ffx::planLiteral(p,L"Kimahri"),current,maximum,kind),{});
+    };
+    check(vitals(340,340,0)==L"Kimahri","kind 0 is name only");
+    check(vitals(120,340,3)==L"Kimahri: HP 120","kind 3 is current HP without the undrawn maximum");
+    check(vitals(9,18,4)==L"Kimahri: MP 9","kind 4 is current MP without the undrawn maximum");
+    check(vitals(9,18,2)==L"Kimahri: MP 9/18","kind 2 keeps the drawn MP maximum");
     ffx::TextPlan none;ffx::prepareTextPlan(none,"battle-target");
     check(!ffx::planBattleAilments(none,0,1u<<11,0,0) && none.count==0,"no ailment copies no node");
     std::printf("PASS: battle target ailment names, order, positive-status exclusion and Doom counter.\n");

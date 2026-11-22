@@ -34,6 +34,15 @@ template<class Key> void keepVerdicts(std::vector<Entity>& found,const std::vect
 inline bool interactionRow(const Entity& e) {return e.pushControl || e.authoredTrialControl || e.category==L"Treasure Chest" || e.category==L"Save Sphere";}
 // The puzzle guide's current target is never hidden either: the guide sends the player there.
 inline bool hiddenAsUnreachable(const Entity& e,bool hideUnreachable,bool guideTarget=false) {return hideUnreachable && e.unreachable && !guideTarget && !interactionRow(e);}
+// The default list names only what a sighted player can see. It leaves out
+// trigger zones with no drawn body ("Event" rows without an actor) and
+// authored secrets ("Hidden sphere recess", "Hidden glyph"). Rows the game has
+// not enabled yet (exits, seals, pedestals, chests) stay listed as "currently
+// inactive", and named story events ("Tidus talks to Wakka") stay, because a
+// sighted player sees them or the story sends them there. The puzzle guide's
+// current target is listed even when hidden, so its step is found by name.
+inline bool secretRow(const Entity& e) {return e.name.rfind(L"Hidden ",0)==0;}
+inline bool hiddenUntilRevealed(const Entity& e,bool guideTarget) {return !guideTarget && (secretRow(e) || (e.category==L"Event" && e.actor<0 && e.name==L"Event"));}
 // A row is the guide step's target when it comes from the step's worker in the guide's script
 // part, and is a push row exactly when the step pushes (the guide's own target lookup rule).
 inline bool guideStepRow(unsigned part,unsigned local,bool pushRow,unsigned stepPart,unsigned stepLocal,bool pushStep) {return part==stepPart && local==stepLocal && pushRow==pushStep;}
