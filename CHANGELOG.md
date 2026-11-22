@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- HP and MP speech now follows what each screen draws. H, Change and Summon read current HP and MP, such as **Tidus HP 100 MP 17**. Out-of-battle item and spell targets read current and maximum HP or MP, such as **HP 75/300**. Enemy targets without Sensor read the name only, because the game shows no enemy HP there. The Show maximum HP and Speak maximum MP settings were removed; old saved values are ignored. Gameplay confirmation is pending.
 - Kilika pedestal staging and contact approaches brake before correcting direction, accounting for native input acceleration and deceleration. Short approach pulses stop on camera changes and cancellation. Temporary bounded diagnostics record emitted controls and camera bearings. Push legs and speech remain unchanged; gameplay confirmation is pending.
 - Kilika pedestal approaches finish staging along the push axis and hand off to contact in the same native frame, releasing movement at arrival. Missed waypoints and stopped approaches replan instead of holding indefinitely. Progress diagnostics follow the actual steering target; native push legs, contact guards and speech remain unchanged. Gameplay confirmation is pending.
 - Pedestal approaches stop within 30 seconds across retries, or after 15 seconds without progress toward their steering target. Live collision and target centres stay paired, and delayed staging observations cannot overwrite a contact walk. Once-per-second diagnostics record timing, live positions, alignment and contact radius. Gameplay confirmation remains pending.
