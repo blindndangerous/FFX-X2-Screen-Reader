@@ -189,6 +189,19 @@ int main() {
         "a reached keep-out detour waypoint holds still until the worker publishes the next leg");
     clockValue+=600;updateAutoWalk();corner=keyboard();
     check(autoWalkActive() && corner[0xc8],"a detour waypoint hold resumes steering after 500 ms");
+    begin({6,0,6});leg.target.pushControl=3;leg.target.zone.valid=true;leg.target.zone.shape=3;
+    leg.target.zone.center={0,0,10};leg.target.zone.width=leg.target.zone.depth=.4;
+    leg.target.zone.obstacle={0,0,16};leg.target.zone.obstacleRadius=6;
+    {
+        unsigned held=0,idle=0;bool side=false;
+        for(unsigned i=0;i<15;++i) {
+            clockValue+=100;updateAutoWalk();corner=keyboard();
+            if(corner[0xcb] || corner[0xcd]) side=true;
+            if(corner[0xc8]) ++held; else ++idle;
+        }
+        check(autoWalkActive() && held && idle && !side,
+            "a push stand's last leg pulses toward the box centre instead of running at its corner");
+    }
     begin();speech.clear();Event stopEvent;hooks.at(0x4b8980)(stopEvent);updateAutoWalk();
     check(speech.size()==1 && speech.back()==L"Auto walk stopped: dialogue" && !lastInterrupt,"dialogue stop speaks its reason once without interrupting");
     begin();speech.clear();player={100,0,0};updateAutoWalk();updateAutoWalk();

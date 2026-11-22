@@ -590,7 +590,15 @@ void updateAutoWalk() {
     const bool finalPushSide=leg.target.pushControl>=1 && leg.target.pushControl<=2 && zone.valid && !zone.talk &&
         distanceXZ(side,{})>.9 && distanceXZ(leg.goal,leg.final)<.01 && along>0 && goalAlong>0 && std::abs(goalAcross)<=1;
     const auto x=leg.goal.x-leg.start.x,z=leg.goal.z-leg.start.z,length2=x*x+z*z;
-    if(finalPushSide) {
+    // Live Djose step 9 (2026-11-22): the west push stand is a 0.8-unit box
+    // whose reachable part is a strip against the pedestal, and the route ends
+    // on its corner. Full-speed steering overshot it by 6 units each way for
+    // 15 s. Aim the last leg at the box centre, so the pedestal stops the push
+    // axis, and pulse like an arrival correction.
+    const bool pushStandFinal=leg.target.pushControl>2 && zone.valid && zone.shape==3 && !zone.talk &&
+        distanceXZ(leg.goal,leg.final)<=.01;
+    if(pushStandFinal) steer={zone.center.x,player.y,zone.center.z};
+    else if(finalPushSide) {
         // Only the last radial leg may enter clearance. Centre first, then walk
         // straight in; the detour's line-rejoin lead can touch an off-side corner.
         // Match staging's one-unit band; .65 can be skipped by a digital stride.
@@ -666,6 +674,7 @@ void updateAutoWalk() {
         }
         --panelPulse;mask=panelBits;stamp=now;return;
     }
+    if(pushStandFinal) {auto aimed=leg;aimed.goal=steer;mask=precisionInput(octMasks[desired],aimed,player,true);stamp=now;return;}
     mask=precisionInput(octMasks[desired] | (leg.target.swimDepth?16u:0u),leg,player); stamp=now;
 }
 void autoWalkReaderModifier(bool held) {readerModifier=held;}
