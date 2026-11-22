@@ -1,4 +1,6 @@
 #pragma once
+#include "ffx2_menu_snapshot.hpp"
+#include <cstdint>
 namespace ffx {
 // FFX-2 boot: the hash matched Steam FFX-2.exe. Logs and queues one startup
 // line on the bootstrap worker. Installs no hook and reads no game memory.
@@ -13,4 +15,9 @@ void installFfx2LoadBoundaries();
 // ffx2_menu_reader.cpp: hooks the top-level menu update and speaks the
 // focused item on cursor moves. False when the hook was not installed.
 bool installFfx2TopMenu();
+// ffx2_menu_reader.cpp: native-owner copies shared by the FFX-2 menu readers.
+// Bounded terminated encoded text; 0 when unreadable or longer than capacity.
+unsigned captureFfx2Encoded(uintptr_t source,std::uint8_t* bytes,unsigned capacity);
+// The loaded English charset file (exact known extent); 0 when absent.
+unsigned captureFfx2Charset(std::array<std::uint8_t,ffx2menu::EnglishCharsetBytes>& bytes);
 }

@@ -40,10 +40,14 @@ bool parseGridSelection(const std::vector<std::uint8_t>& panel,
     const unsigned id=nodes[grid*32+node];result={grid,node,id,id!=0};return true;
 }
 bool parseConfigRecord(int cursor,const std::vector<std::uint8_t>& record,ConfigRecordSelection& result) {
+    return parseConfigRecord(cursor,record.data(),record.size(),result);
+}
+bool parseConfigRecord(int cursor,const std::uint8_t* record,std::size_t size,ConfigRecordSelection& result) {
     result={};
-    if(cursor<0 || cursor>=9 || record.size()<16) return false;
-    const unsigned count=word(record,4),value=word(record,12);
+    if(!record || cursor<0 || cursor>=9 || size<16) return false;
+    const auto at=[record](std::size_t offset){return record[offset]|(unsigned{record[offset+1]}<<8);};
+    const unsigned count=at(4),value=at(12);
     if(!count || count>3 || value>=count) return false;
-    result={static_cast<unsigned>(cursor),word(record,2),word(record,6+value*2),value,count};return true;
+    result={static_cast<unsigned>(cursor),at(2),at(6+value*2),value,count};return true;
 }
 }

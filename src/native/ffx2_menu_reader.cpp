@@ -15,6 +15,38 @@
 #include <cstring>
 
 namespace ffx {
+// Copy a terminated encoded string without reading past its terminator. Control
+// parameters may contain NUL; this copies their widths without decoding text.
+unsigned captureFfx2Encoded(uintptr_t source,std::uint8_t* bytes,unsigned capacity) {
+    if(!source || !bytes || source>UINTPTR_MAX-capacity) return 0;
+    unsigned at=0;
+    while(at<capacity) {
+        std::uint8_t byte=0;
+        if(!copy(source+at,&byte,1)) return 0;
+        bytes[at++]=byte;
+        if(!byte) return at;
+        unsigned parameters=byte>=6 && byte<=0x2f?1u:0u;
+        if(byte==4) {
+            if(at==capacity || !copy(source+at,&byte,1)) return 0;
+            bytes[at++]=byte;parameters=byte<=0x2f?1u:0u;
+        }
+        if(parameters) {
+            if(at==capacity || !copy(source+at,bytes+at,1)) return 0;
+            ++at;
+        }
+    }
+    return 0; // Refuse an incomplete string; retain the known item label.
+}
+
+// The loaded ffx2sjistbl_us.bin. Copy on its native owner; parse only the
+// owned snapshot on preparation. Same-address reloads cannot retain old glyphs.
+unsigned captureFfx2Charset(std::array<std::uint8_t,ffx2menu::EnglishCharsetBytes>& bytes) {
+    const auto source=read<uintptr_t>(address(0)+ffx2Rva(Ffx2Only::Charset),0);
+    // The buffer is the file rounded up to 16 bytes plus one NUL. Capture
+    // only the known file extent, never its uninitialised padding or neighbours.
+    return source && copy(source,bytes.data(),bytes.size())?static_cast<unsigned>(bytes.size()):0u;
+}
+
 namespace {
 using ffx2menu::TopMenuState;
 
@@ -30,39 +62,10 @@ bool readState(TopMenuState& state) {
     return true;
 }
 
-// Copy a terminated encoded string without reading past its terminator. Control
-// parameters may contain NUL; this copies their widths without decoding text.
-unsigned captureHelp(uintptr_t source,std::array<std::uint8_t,256>& bytes) {
-    if(!source || source>UINTPTR_MAX-bytes.size()) return 0;
-    unsigned at=0;
-    while(at<bytes.size()) {
-        std::uint8_t byte=0;
-        if(!copy(source+at,&byte,1)) return 0;
-        bytes[at++]=byte;
-        if(!byte) return at;
-        unsigned parameters=byte>=6 && byte<=0x2f?1u:0u;
-        if(byte==4) {
-            if(at==bytes.size() || !copy(source+at,&byte,1)) return 0;
-            bytes[at++]=byte;parameters=byte<=0x2f?1u:0u;
-        }
-        if(parameters) {
-            if(at==bytes.size() || !copy(source+at,bytes.data()+at,1)) return 0;
-            ++at;
-        }
-    }
-    return 0; // Refuse an incomplete string; retain the known item label.
-}
-
-// The loaded ffx2sjistbl_us.bin. Copy on its native owner; parse only the
-// owned snapshot on preparation. Same-address reloads cannot retain old glyphs.
 void captureText(ffx2menu::MenuSnapshot& snapshot) {
-    const auto source=read<uintptr_t>(ffx2Address(Ffx2Only::Charset),0);
-    // The buffer is the file rounded up to 16 bytes plus one NUL. Capture
-    // only the known file extent, never its uninitialised padding or neighbours.
-    if(source && copy(source,snapshot.charset.data(),snapshot.charset.size()))
-        snapshot.charsetBytes=static_cast<unsigned>(snapshot.charset.size());
+    snapshot.charsetBytes=captureFfx2Charset(snapshot.charset);
     const auto text=read<uintptr_t>(ffx2Address(Ffx2Only::HelpText),0);
-    snapshot.helpBytes=captureHelp(text,snapshot.help);
+    snapshot.helpBytes=captureFfx2Encoded(text,snapshot.help.data(),static_cast<unsigned>(snapshot.help.size()));
 }
 
 void prepareMenu(const speechq::Header& header,const std::wstring& owned) {

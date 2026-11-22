@@ -8,8 +8,14 @@ measured 310-byte English charset extent and terminated help copies. Pure
 submenu parsers and a [name-only battle-ready state machine](Docs/ffx2-battle-ready.md)
 have no new live hook. Grid nodes, Dressphere parent/list/help and nine Config
 label/value records have static bindings. Config's 16-byte arrays are animation,
-not text. Separate Config help and node-only Grid help refresh remain unresolved;
-every FFX-2 address/offset remains UNVERIFIED in game.
+not text. Node-only Grid help refresh remains unresolved; every FFX-2
+address/offset remains UNVERIFIED in game.
+November 21 (`feat/ffx2-next` worktree, uncommitted): Config help is the selected
+value's help (0x3891b4..0x3891cc: value ID, 0x379150, setter 0x3638a0). A
+default-off reader (`FFX2_EXPERIMENTAL_CONFIG=1`, `ffx2_config_reader.cpp`) hooks
+input phase 0x388c40 and speaks `Label: Value. Help` on row moves and
+`Value. Help` on choice changes. Gap list and live checks:
+`.local/ffx2-status-2026-11-21.md` and checklist items 26-29.
 The native reader links, but the full suite stops at missing external replay
 input `native/hudTextureClipBody.bin`; a complete green suite is not claimed.
 Use the single [in-game checklist](Docs/ffx2-ingame-checklist.md) after the current
