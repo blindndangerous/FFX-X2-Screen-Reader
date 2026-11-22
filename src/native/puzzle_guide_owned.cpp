@@ -46,8 +46,23 @@ bool bevelleFinalLanding(const nav::Scene& observation,const State& state) {
     const int pedestal=value(observation,state,0x0c000009);
     return (node==64 && (pedestal==14 || pedestal==15)) || (pedestal==16 && node>=64 && node<=69) || (pedestal==17 && node==69);
 }
+// djyt0600 has no flag for step 10 (reset tile 67 writes only 0xd9=0, which
+// is already 0 there) or step 28 (the central lift). Native witnesses: the
+// lower pedestal W1 away from the charger (the step 9 push leaves it at
+// x 70, pedestal_rules; the reset returns it to x 0, and later it only moves
+// along x 0 into the gap or up with the lift), and the player on the upper
+// floor (y -65; the lower floor is -18), which only the lift reaches. Without
+// them the guide stayed on those steps and F10 was needed (live 2026-11-21).
+bool djoseWitness(const nav::Scene& observation,const State& state,const PuzzleStep& step) {
+    if(step.worker==63) return observation.player.y<-40;
+    if(step.worker!=67) return false;
+    for(unsigned i=0;i<observation.count;++i) {const auto& worker=observation.workers[i];
+        if(worker.valid && worker.part==state.part && worker.local==1) return worker.position.x<35;}
+    return false;
+}
 bool done(const nav::Scene& observation,const State& state,const PuzzleStep& step) {if(!step.check) return false;
     if(!step.done.low) {
+        if(!std::strcmp(state.route->script,"djyt0600")) return djoseWitness(observation,state,step);
         if(std::strcmp(state.route->script,"klyt1000") || step.worker!=41) return false;
         for(unsigned i=0;i<observation.count;++i) {const auto& worker=observation.workers[i];
             if(worker.valid && worker.part==state.part && worker.local==6) return kilikaResetReached(worker.position);}

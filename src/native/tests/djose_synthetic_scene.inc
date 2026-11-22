@@ -31,6 +31,7 @@ public:
         mesh();player({0,-18,20});
     }
     void player(Point p) {scene->player=p;scene->capturedAt=GetTickCount64();}
+    void pedestal(Point p) {auto& w=scene->workers[index(1)];w.position=p;scene->capturedAt=GetTickCount64();}
     void set(unsigned low,int value) {
         for(auto& row:scene->parts[0].bindings.rows) if(row.binding==low) {row.value=value;return;}
         unexpected("binding absent from guide_djyt0600");

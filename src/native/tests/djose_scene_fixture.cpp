@@ -175,6 +175,27 @@ void centralLift(DjoseSyntheticScene& djose) {
     require(!routed && contains(text,L"not positioned yet"),"without the lift circuit there is no lift target");
 }
 
+// Steps 10 and 28 have no trial flag. The guide follows them from native
+// position: the pedestal leaving the charger (x 70) and the player on the
+// upper floor (live 2026-11-21: F10 was needed after both).
+void unflaggedSteps(DjoseSyntheticScene& djose) {
+    djose.pedestal({70,-18,24});selectStep(djose,10,10);djose.player({-70,-10,24});
+    auto text=guide(*djose.scene,djose.entities,OwnedGuideAction::Expected);
+    if(spokenStep(text)!=10) show(text);
+    require(spokenStep(text)==10,"pedestal under the charger: the guide expects the reset tile");
+    djose.pedestal({0,-18,24});text=guide(*djose.scene,djose.entities,OwnedGuideAction::Expected);
+    if(spokenStep(text)!=11) show(text);
+    require(spokenStep(text)==11,"pedestal back in the middle: the guide moves on to step 11");
+    resetOwnedPuzzleGuide();djose.applyJump(28);djose.pedestal({0,-18,117});djose.player({0,-18,20});
+    text=guide(*djose.scene,djose.entities,OwnedGuideAction::Expected);
+    if(spokenStep(text)!=28) show(text);
+    require(spokenStep(text)==28,"a fresh guide passes step 10 with the pedestal in the gap and waits at the lift");
+    djose.player({0,-65,60});text=guide(*djose.scene,djose.entities,OwnedGuideAction::Expected);
+    if(spokenStep(text)!=29) show(text);
+    require(spokenStep(text)==29,"on the upper floor the guide moves on to step 29");
+    djose.pedestal({0,-18,50});djose.player({0,-18,20});
+}
+
 void snapshotChecks(DjoseSyntheticScene& djose) {
     const auto file=(std::filesystem::current_path()/L"djose_synthetic.ffxscene").wstring();
     require(writeSceneSnapshot(file,*djose.scene,"djyt0600",identity.checksum),"synthetic scene snapshot writes");
@@ -231,7 +252,7 @@ int main(int argc,char** argv) {
     ffx_fixture::initializeRuntime();
     if(argc>1 && !std::strcmp(argv[1],"--snapshots")) return snapshots();
     DjoseSyntheticScene djose;
-    meshChecks(*djose.scene);gapJump(djose);centralLift(djose);snapshotChecks(djose);
+    meshChecks(*djose.scene);gapJump(djose);centralLift(djose);unflaggedSteps(djose);snapshotChecks(djose);
     std::printf("%s: synthetic Djose scene: gap jump, central lift, snapshot round trip, %u checks.\n",failures?"FAIL":"PASS",checks);
     return failures?1:0;
 }
