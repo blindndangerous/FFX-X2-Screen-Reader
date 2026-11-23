@@ -31,6 +31,9 @@
 #include "../puzzle_guide_data.hpp"
 #include "../mod_menu.hpp"
 #include "../zanarkand_patterns.hpp"
+#include "../exit_destinations_data.hpp"
+#include "../room_areas.hpp"
+#include "../utility_warps_data.hpp"
 #include "../settings.hpp"
 #include "../via_purifico.hpp"
 #include "../via_purifico_data.hpp"
@@ -488,7 +491,9 @@ int main() try { ffx_fixture::initializeRuntime();std::setvbuf(stdout,nullptr,_I
     setValue(0x5c0000ec,1,1);
     check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"Step 1 of")!=std::wstring::npos,"reading selected step does not auto-advance");
     check(fixturePuzzleGuideSync(OwnedGuideAction::Expected).find(L"Step 2 of")!=std::wstring::npos,"expected read follows committed native checkpoint");
-    check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"Step 1 of")!=std::wstring::npos,"expected read cannot move manual selection");
+    // e0c700c: manual selection starts from the exact step the guide found.
+    check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"Step 2 of")!=std::wstring::npos,"expected read moves manual selection to the identified step");
+    check(fixturePuzzleGuideSync(OwnedGuideAction::Previous).find(L"Step 1 of")!=std::wstring::npos,"manual previous leaves the identified step");
     check(fixturePuzzleGuideSync(OwnedGuideAction::Next).find(L"Step 2 of")!=std::wstring::npos,"manual next increments one step");
     fixturePuzzleGuideSync(OwnedGuideAction::Completed);
     check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"Step 2 of")!=std::wstring::npos,"native completion leaves manual selection unchanged");

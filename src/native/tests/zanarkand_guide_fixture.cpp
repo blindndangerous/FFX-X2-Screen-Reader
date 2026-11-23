@@ -253,7 +253,7 @@ int main(int argc,char** argv) {
     if(!test || test==14) {
         setup(0);set(0x20000a00,2775);
         const auto exit=query();
-        check(exit.find(L"Exit to the trial encounter")!=std::wstring::npos && exit.find(manualWarning)==std::wstring::npos,
+        check(exit.find(L"Exit 3 to Dome - Cloister of Trials")!=std::wstring::npos && exit.find(manualWarning)==std::wstring::npos,
             "encounter exit instruction omits the floor warning");
         qualifyFloor();query(OwnedGuideAction::Path);
         check(starts==1,"encounter exit retains its walking route");
@@ -305,7 +305,7 @@ int main(int argc,char** argv) {
     };
     if(!test || test==17) {
         setup(2);plannedRoute={{-25,5,55}}; // Active wrong W69 is between player and later targets.
-        for(const auto* name:{L"Besaid Sphere source",L"Exit to the trial encounter"}) {
+        for(const auto* name:{L"Besaid Sphere source",L"Exit 3 to Dome - Cloister of Trials"}) {
             routeFixture=false;select(name);
             const auto step=query(OwnedGuideAction::Step);
             check(step.find(name)!=std::wstring::npos && step.find(manualWarning)==std::wstring::npos,

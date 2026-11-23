@@ -78,7 +78,7 @@ inline const PuzzleRoute puzzleRoutes[] = {
         {L"Target: Upper pedestal 5. Push the fifth upper pedestal into its wall.", 60, {-30.0, -67.0, 117.0}, {0x0c0000e3, 0x1, 1, 0}, true, true, true, L"Upper pedestal 5"},
         {L"Target: Upper pedestal. Insert the carried Destruction Sphere into the newly revealed upper pedestal.", 6, {0.0, -65.0, 75.0}, {0x0c0000e3, 0x1, 2, 0}, true, false, true, L"Upper pedestal"},
         {L"Target: Destruction Sphere treasure. Open the Destruction Sphere chest.", 24, {30.5, -65.0, 49.5}, {0x1000a70, 0x1, 4, 0}, true, false, true, L"Destruction Sphere treasure", {0x0c0000e3, 0x1, 2, 0}},
-        {L"Target: Exit to the antechamber. Take the route to the antechamber.", 66, {-48.803890228271484, -79.81478500366211, 53.26986885070801}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit to the antechamber"},
+        {L"Target: Exit 2 to Djose - Antechamber. Take the route to the antechamber.", 66, {-48.803890228271484, -79.81478500366211, 53.26986885070801}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit 2 to Djose - Antechamber"},
     }, 0},
     {"mcyt0500", {
         {L"Target: Pedestal. Push the pedestal into the first ice mound.", 1, {34.0, 39.0, 12.0}, {0xc0000a3, 0x1, 1, 0}, true, true, false, L"Pedestal"},
@@ -118,7 +118,7 @@ inline const PuzzleRoute puzzleRoutes[] = {
         {L"Target: Pedestal. Push the pedestal back onto the lower bridge support.", 1, {34.0, 39.0, 12.0}, {0xc0000a3, 0x1, 4, 0}, true, true, false, L"Pedestal"},
         {L"Target: Ramp Macalania Sphere recess. Take the sphere from the ramp Macalania Sphere recess.", 38, {-88.0, 40.0, 62.0}, {0xc000094, 0x1, 4, 0}, true, false, false, L"Ramp Macalania Sphere recess", {0x0c000096, 0x1, 0, 0}},
         {L"Target: Central Glyph Sphere recess. Insert it into the central Glyph Sphere recess to restore the final bridge.", 39, {0.0, 40.0, 4.0}, {0xc000098, 0x1, 4, 0}, true, false, false, L"Central Glyph Sphere recess"},
-        {L"Target: Exit to the antechamber. Cross the restored bridge to the antechamber.", 45, {11.62649154663086, 0.0, -154.8310089111328}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit to the antechamber"},
+        {L"Target: Exit 2 to Macalania - Antechamber. Cross the restored bridge to the antechamber.", 45, {11.62649154663086, 0.0, -154.8310089111328}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit 2 to Macalania - Antechamber"},
     }, 0},
     {"bvyt1100", {
         {L"Target: Rail pedestal. Push the rail pedestal onto the entrance track. Confirm when prompted to start riding.", 13, {-20.260332107543945, -460.01617431640625, -36.25043869018555}, {0xc000008, 0x1, 1, 0}, true, true, false, L"Rail pedestal"},
@@ -135,7 +135,7 @@ inline const PuzzleRoute puzzleRoutes[] = {
         {L"Target: Upper platform sphere recess. For the separate optional chest, insert the remaining Bevelle Sphere into the upper platform sphere recess.", 37, {-50.20000076293945, -453.17724609375, 263.1000061035156}, {0xc000029, 0x1, 1, 0}, true, false, true, L"Upper platform sphere recess"},
         {L"Target: Rail pedestal call point. Call the empty rail pedestal to the upper platform, then board it to reach the optional chest.", 13, {-20.260332107543945, -460.01617431640625, -36.25043869018555}, {0xc000009, 0x1, 16, 0}, true, false, false, L"Rail pedestal call point"},
         {L"Target: Second treasure chest. Stay on the pedestal. The ride opens the optional chest when it arrives.", 17, {-19.3751220703125, -454.6579895019531, 118.5524673461914}, {0xc00002a, 0x1, 1, 0}, true, false, true, L"Second treasure chest"},
-        {L"Target: Exit to the antechamber. Leave for the antechamber.", 56, {-18.67501735687256, -453.1286926269531, 383.51300048828125}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit to the antechamber"},
+        {L"Target: Exit 2 to Bevelle - Antechamber. Leave for the antechamber.", 56, {-18.67501735687256, -453.1286926269531, 383.51300048828125}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit 2 to Bevelle - Antechamber"},
     }, 0},
     {"dome0700", {
         {L"Target: Trial floor activation tile. Step onto the first floor control to activate the displayed pattern, then press F10 for the next step, which names each permitted floor panel.", 56, {105.0, 0.0, -57.0}, {0x0, 0x1, 0, 0}, false, false, false, L"Trial floor activation tile"},
@@ -148,7 +148,7 @@ inline const PuzzleRoute puzzleRoutes[] = {
         {L"Target: Besaid pedestal recess. Insert it into the Besaid pedestal recess in the first room.", 51, {69.5, 0.0, 0.0}, {0x5c000018, 0x1, 2, 0}, true, false, true, L"Besaid pedestal recess"},
         {L"Target: Kilika Sphere source and treasure recess. Take the Kilika Sphere from the other source beside the large-room monitor.", 49, {-67.4000015258789, 0.0, 127.30000305175781}, {0x5c000008, 0x1, 1, 0}, true, false, false, L"Kilika Sphere source and treasure recess", {0x5c00000c, 0x1, 0, 0}},
         {L"Target: Kilika pedestal recess. Insert it into the Kilika pedestal recess in the first room.", 52, {140.0, 0.0, 0.0}, {0x5c00001c, 0x1, 1, 0}, true, false, true, L"Kilika pedestal recess"},
-        {L"Target: Exit to the trial encounter. After the normal trial gate opens, leave the trials, re-enter them, then use the exit labelled Cloister of Trials to continue to the trial encounter. The Destruction Sphere puzzle unlocks on a later return.", 42, {79.91357803344727, 0.0, 56.25969886779785}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit to the trial encounter"},
+        {L"Target: Exit 3 to Dome - Cloister of Trials. After the normal trial gate opens, leave the trials, re-enter them, then use the exit labelled Cloister of Trials to continue to the trial encounter. The Destruction Sphere puzzle unlocks on a later return.", 42, {79.91357803344727, 0.0, 56.25969886779785}, {0x0, 0x1, 0, 0}, false, false, false, L"Exit 3 to Dome - Cloister of Trials"},
         {L"Target: Trial floor activation tile. On the revisit, activate the alternate floor objective and complete the permitted tiles in both sections.", 56, {105.0, 0.0, -57.0}, {0x0c000029, 0x1, 8, 0}, true, false, false, L"Trial floor activation tile"},
         {L"Target: Destruction Sphere. Take the revealed Destruction Sphere.", 50, {105.0, 0.0, 55.0}, {0x5c000008, 0x1, 3, 0}, true, false, false, L"Destruction Sphere", {0x5c000014, 0x1, 0, 0}},
         {L"Target: Kilika Sphere source and treasure recess. Insert the Destruction Sphere into the recess that previously held the Kilika Sphere.", 49, {-67.4000015258789, 0.0, 127.30000305175781}, {0x5c00000c, 0x1, 3, 0}, true, false, true, L"Kilika Sphere source and treasure recess"},

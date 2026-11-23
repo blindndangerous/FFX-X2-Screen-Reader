@@ -406,8 +406,8 @@ void bevelleRide() {
     r.positioned(17,{-19.375,-454.658,118.552});
     r.run({"optional ride launched",{{0x0c000009,16}}, {},finalPlatform,Floor::FinalPlatform,{14,L"Target: Second treasure chest",17}});
     r.positioned(56,{-18.675,-453.129,383.513});
-    r.run({"ride grants optional reward",{{0x0c000008,66},{0x0c00002a,1},{0x0c000009,17}}, {},finalPlatform,Floor::FinalPlatform,{15,L"Target: Exit to the antechamber",56}});
-    r.run({"completed repeat",{}, {},finalPlatform,Floor::FinalPlatform,{15,L"Target: Exit to the antechamber",56}});
+    r.run({"ride grants optional reward",{{0x0c000008,66},{0x0c00002a,1},{0x0c000009,17}}, {},finalPlatform,Floor::FinalPlatform,{15,L"Target: Exit 2 to Bevelle - Antechamber",56}});
+    r.run({"completed repeat",{}, {},finalPlatform,Floor::FinalPlatform,{15,L"Target: Exit 2 to Bevelle - Antechamber",56}});
 }
 
 // Coordinates are literal dome0700 worker positions, independently checked from

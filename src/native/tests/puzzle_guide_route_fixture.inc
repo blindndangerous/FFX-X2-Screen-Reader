@@ -61,8 +61,10 @@ void djoseGuideRouteFixture() {
         {"insert charging recess 1",{{0x0c000099,1},{0x0c000094,0}},7},
         {"take left circuit sphere",{{0x0c000094,1},{0x0c00009c,0}},8},
         {"insert charging recess 2 powers charger",{{0x0c00009a,1},{0x0c000094,0},{0x0c0000a1,1}},9},
-        {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},0},
-        {"take charged sphere",{{0x0c000094,3},{0x0c00009d,0}},0},
+        // 879e0e5: step 10 (reset tile) is checked by the lower pedestal
+        // position; this fixture has no pedestal worker, so it stays on 10.
+        {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},10},
+        {"take charged sphere",{{0x0c000094,3},{0x0c00009d,0}},10},
         {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},13},
         {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
         {"put it back in charging recess 1",{{0x0c000099,1},{0x0c000094,0}},14},
@@ -76,8 +78,9 @@ void djoseGuideRouteFixture() {
     // Upper pedestal 1 (0xde) is never cleared, so it is a checkpoint after the
     // unseen lift ride. Pedestals pushed out of order do not skip the first one.
     walkGuideRoute("djyt0600",{
-        {"carry the Destruction Sphere upstairs",{{0x0000028e,1},{0x0c0000db,1},{0x0c0000e5,2},{0x0c000094,10},{0x0c00009f,0}},0},
-        {"push upper pedestal 3 first",{{0x0c0000e0,1}},0},
+        // 879e0e5: the player is still below, so the central lift (28) shows.
+        {"carry the Destruction Sphere upstairs",{{0x0000028e,1},{0x0c0000db,1},{0x0c0000e5,2},{0x0c000094,10},{0x0c00009f,0}},28},
+        {"push upper pedestal 3 first",{{0x0c0000e0,1}},28},
         {"push upper pedestal 1",{{0x0c0000de,1}},30},
         {"push upper pedestal 2",{{0x0c0000df,1}},32},
     });
@@ -161,9 +164,10 @@ void guideSelectionFixture() {
     setValue(0x0c0000a1,1,2);
     guideSays(OwnedGuideAction::Expected,L"Step 9 of","guide holds the push step while the push is held");
     fixtureGuidePedestal={};
-    guideSays(OwnedGuideAction::Expected,L"does not identify an exact puzzle step","guide reaches the unseen reset tile after the push");
-    guideSays(OwnedGuideAction::Next,L"Step 11 of","manual next from the unseen reset tile");
-    guideSays(OwnedGuideAction::Expected,L"Step 11 stays selected","expected step keeps a manual selection the trial state cannot identify");
+    // djoseWitness tracks the reset tile by the lower pedestal's position; with no
+    // pedestal worker in this scene the guide stays on the reset tile.
+    guideSays(OwnedGuideAction::Expected,L"Step 10 of","guide reaches the reset tile after the push");
+    guideSays(OwnedGuideAction::Next,L"Step 11 of","manual next from the reset tile");
     Entity pedestal;configurePedestalTarget(pedestal,"djyt0600",1);
     const auto text=guidePedestalStep(pedestal);
     if(text.find(L"Guide step 11: Stand centred on the east face")!=0) std::fprintf(stderr,"pedestal arrival: %ls\n",text.c_str());
@@ -485,7 +489,18 @@ void guideTargetNameFixture() {
             const auto name=text.substr(8,text.find(L'.')-8);
             const auto target=navigationTarget(catalog,step.worker);
             check(target && target->label,"guide target worker has a navigation row");
-            const std::wstring row=target->category==4?navigationChestName(target):target->label;
+            std::wstring row=target->category==4?navigationChestName(target):target->label;
+            // The list renames a catalogued exit "Exit [n] to <area>" (exit_labels.cpp).
+            if(target->category==1) for(const auto& exit:exitDestinations)
+                if(exit.checksum==catalog->checksum && !std::strcmp(exit.script,route.script) && exit.worker==step.worker) {
+                    std::wstring area;
+                    for(const auto& warp:warpLocations) if(areaIndex(static_cast<int>(warp.room))==static_cast<int>(exit.areas[0])) {area=warp.name;break;}
+                    check(!area.empty() && !exit.areas[1],"guide exit has one named destination");
+                    row=L"Exit"+(exit.total>1?L" "+std::to_wstring(exit.number):std::wstring{})+L" to "+area;
+                }
+            // Bevelle's call step walks to the synthetic W53 row (navigation_scene.cpp
+            // callPointTarget), not the pedestal's own row (puzzle_guide_owned.cpp).
+            if(!std::strcmp(route.script,"bvyt1100") && step.worker==13 && name==L"Rail pedestal call point") row=L"Rail pedestal call point";
             if(row!=name || name!=step.label)
                 std::printf("%s worker %u: guide target \"%ls\", label \"%ls\", list row \"%ls\"\n",route.script,step.worker,name.c_str(),step.label,row.c_str());
             check(row==name && name==step.label,"guide target name equals its navigation list row");
@@ -610,8 +625,8 @@ void djoseJumpFixture() {
         if(!spoken || text.find(L"Jumped to step "+std::to_wstring(n))!=0) std::fprintf(stderr,"jump %u: %ls / %ls\n",n,text.c_str(),replies.size()>count?replies.back().c_str():L"(no guide reply)");
         check(spoken,"puzzle jump selects the step in the guide");
         check(text.find(L"Jumped to step "+std::to_wstring(n))==0,"puzzle jump replies with the step");
-        // Where the route identifies the step, the guide's own reading agrees.
-        int identified=0;for(const auto& stage:djoseJumpStages) if(puzzleJumpNext(stage)==n) identified=stage.expected;
+        // Where the route identifies step n, the guide's own reading agrees.
+        int identified=0;for(const auto& stage:djoseJumpStages) if(puzzleJumpNext(stage)==n && stage.expected==static_cast<int>(n)) identified=stage.expected;
         if(identified) {
             const auto expected=fixturePuzzleGuideSync(OwnedGuideAction::Expected);
             if(expected.find(selected)==std::wstring::npos) std::fprintf(stderr,"jump %u expected: %ls\n",n,expected.c_str());
