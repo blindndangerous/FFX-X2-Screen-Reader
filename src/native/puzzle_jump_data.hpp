@@ -32,12 +32,14 @@ inline const std::vector<PuzzleJumpStage> djoseJumpStages={
     {"insert charging recess 1",{{0x0c000099,1},{0x0c000094,0}},7},
     {"take left circuit sphere",{{0x0c000094,1},{0x0c00009c,0}},8},
     {"insert charging recess 2 powers charger",{{0x0c00009a,1},{0x0c000094,0},{0x0c0000a1,1}},9},
-    {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},0,10},
-    // Reset tile 67 writes only 0xd9=0, which is already 0 here, so the
-    // guide cannot see steps 10 and 11. The charged door recess (0x9b=3)
-    // stays set until step 19 and recovers the route.
-    {"reset tile returns pedestal",{{0x0c0000d9,0}},0,11},
-    {"take charged sphere from east face",{{0x0c000094,3},{0x0c00009d,0}},0,12},
+    {"push loaded pedestal under charger",{{0x0c00009d,3},{0x0c0000a1,2}},10},
+    // Reset tile 67 writes only 0xd9=0, which is already 0 here. Step 10 is
+    // checked by the lower pedestal position (puzzle_guide_owned.cpp
+    // djoseWitness), which these variable-only stages cannot move, so the
+    // guide stays on step 10. The charged door recess (0x9b=3) stays set
+    // until step 19 and recovers the route.
+    {"reset tile returns pedestal",{{0x0c0000d9,0}},10,11},
+    {"take charged sphere from east face",{{0x0c000094,3},{0x0c00009d,0}},10,12},
     {"insert charged door recess",{{0x0c00009b,3},{0x0c000094,0}},13},
     {"take charging recess 1",{{0x0c000094,1},{0x0c000099,0}},14},
     {"insert west pedestal socket",{{0x0c00009e,1},{0x0c000094,0}},15},
@@ -53,7 +55,9 @@ inline const std::vector<PuzzleJumpStage> djoseJumpStages={
     {"take west pedestal sphere",{{0x0c000094,1},{0x0c00009e,0}},25},
     {"insert entry recess 2 completes lift circuit",{{0x0c000096,1},{0x0c000094,0},{0x0c0000db,1},{0x0c0000e5,1}},26},
     {"touch hidden glyph",{{0x0c0000e5,2}},27},
-    {"take Destruction Sphere",{{0x0c000094,10},{0x0c00009f,0}},0,28},
+    // Step 28 (central lift) is checked by the player on the upper floor
+    // (djoseWitness); variable-only stages keep the player below, so 28 shows.
+    {"take Destruction Sphere",{{0x0c000094,10},{0x0c00009f,0}},28},
     {"push upper pedestal 1",{{0x0c0000de,1}},30},
     {"push upper pedestals 2 to 4",{{0x0c0000df,1},{0x0c0000e0,1},{0x0c0000e1,1}},33},
     {"push upper pedestal 5",{{0x0c0000e3,1}},34},

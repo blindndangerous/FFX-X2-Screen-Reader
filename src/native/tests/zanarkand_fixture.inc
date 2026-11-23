@@ -38,6 +38,8 @@ void zanarkandFixtures() {
     }
     loadSolver(t,c,i);setValue(0x20000a00,1,2768);resetOwnedPuzzleGuide();
     check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"First-visit trial. Step 1 of 11")!=std::wstring::npos,"first-visit guide contains only normal trial");
+    // Steps 3-6 wait for the first floor pattern (0x0c000022==6); finish it to page through.
+    setValue(0x0c000022,1,6);
     for(unsigned n=0;n<30;++n)fixturePuzzleGuideSync(OwnedGuideAction::Next);
     check(fixturePuzzleGuideSync(OwnedGuideAction::Step).find(L"Step 11 of 11")!=std::wstring::npos,"first-visit guide cannot advance into locked return instructions");
     setValue(0x20000a00,1,2775);

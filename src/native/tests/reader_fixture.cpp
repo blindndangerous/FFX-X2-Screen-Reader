@@ -230,6 +230,7 @@ int canUseResult=0,canUseActor=-1;
 int __cdecl canUse(int actor,int) { canUseActor=actor; return canUseResult; }
 uintptr_t __cdecl navigationWorker(int) { ++workerReads; return address(0x2251000); }
 unsigned __cdecl language() { return 0; }
+int __cdecl noMessageMode() { return 0; }
 uintptr_t __cdecl names(int id) { return address(id==1 ? 0x2100020 : id==8 ? 0x2100040 : 0x2100000); }
 uintptr_t __cdecl record(unsigned id, uintptr_t* base) {
     id&=0xfff;
@@ -466,6 +467,10 @@ int main(int argc, char** argv) {
     stub(0x4c1c00,requirementsTable); stub(0x4c1b50,requirementsTable); stub(0x4cd2f0,increase);
     stub(0x4c1ad0,shopTable); stub(0x4db390,price); stub(0x4db3e0,price);
     stub(0x2414a0,loc); stub(0x394030,character);
+    // Navigation observations call the message-mode getter (46C840) every scan. An
+    // unstubbed getter runs zeroed fixture memory: the reference profile reads 0xffff
+    // (Auto walk then refuses to start) and the installed profile faults.
+    stub(0x46c840,reinterpret_cast<void*>(noMessageMode));
     followupStubs(); navigationIdentityFixtures(); airshipPassageFixtures();
     polishTextFixtures();
     setSetting(Setting::MenuIndex,1);
@@ -807,6 +812,10 @@ int main(int argc, char** argv) {
     prepareInteractionFixture(worker,ctrl);fixturePhysicalPart(chunk,0x1000);
     set<unsigned>(0x1fc44e0,3); set<uint16_t>(npc+0x880,0xf117); set<uint16_t>(npc+0x882,1);
     set<float>(npc+0x88c,60);
+    // A key pressed while field data loads speaks the waiting message, and list
+    // totals ("1 of 1") wait until the scanned count has held for 1500 ms
+    // (navigation_order.hpp ListSettleMs). Prime one scan and let the room settle.
+    keys[VK_OEM_3](false);navigationFixturePump();Sleep(1600);
     count=said.size(); keys[VK_OEM_3](false);navigationFixturePump();
     check(said.size()==count+2 && said[count].first==L"1 All","navigation scan count queues before selection");
     expect(L"Villager, 10.8 steps unknown, 1 of 1","navigation native name and distance");
