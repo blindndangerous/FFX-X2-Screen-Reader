@@ -48,6 +48,7 @@ void stopAutoWalk() {++manualInputRevision;}
 void suspendAutoWalk() {stopAutoWalk();}
 void releaseAutoWalk() {stopAutoWalk();}
 bool autoWalkResumePending() {return false;}
+bool autoWalkActive() {return false;}
 bool toggleAutoWalkOff(void(*)()) {return false;}
 void setAutoWalkResume(bool(*resume)(const NativeRouteTarget&)) {resumeWalk=resume;}
 bool utilityBusy() {return false;}

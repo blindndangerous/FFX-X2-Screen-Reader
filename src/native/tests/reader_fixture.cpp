@@ -106,6 +106,8 @@ void prepareNavRetirement() {}
 void resetNavAudio() {fixtureRoute=false;}
 void clearNavRoute() {fixtureRoute=false;}
 void stopAutoWalk() {}
+bool fixtureAutoWalk=false;
+bool autoWalkActive() {return fixtureAutoWalk;}
 bool toggleAutoWalkOff(void (*)()) {return false;}
 void suspendAutoWalk() {}
 void setAutoWalkResume(AutoWalkResume) {}
@@ -847,6 +849,10 @@ int main(int argc, char** argv) {
     event(0x43d3b0,0,[=]{set<float>(actors+0xc,2);});
     event(0x43d3b0,0); expect(L"Movement blocked","new collision refusal after movement is spoken again");
     set<float>(actors+0xc,0);
+    // Auto walk arrival homing walks into its target until the collision stops it.
+    event(0x43d3b0,0,[=]{set<float>(actors+0xc,2);});fixtureAutoWalk=true;
+    count=said.size(); event(0x43d3b0,0); check(said.size()==count,"Auto walk arrival against its target is not Movement blocked");
+    fixtureAutoWalk=false;set<float>(actors+0xc,0);
     keys[VK_OEM_4](true); expect(L"category: Object, 0","previous category wrap");
     keys[VK_OEM_4](true); expect(L"Villager, 10.8 steps unknown, 1 of 1","NPC category selection");
     event(0x425010,0,{},address(npc));

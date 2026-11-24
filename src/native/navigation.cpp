@@ -601,7 +601,8 @@ void movementBefore(Event& e) {
 void movementAfter(Event& e) {
     if(inBattle() || scene || airshipNavigationUiActive() || !e.before[0] || static_cast<uintptr_t>(e.before[0])!=playerActor()) return;
     const auto player=playerPosition();const double requested=std::hypot(e.values[3],e.values[4]),accepted=distanceXZ(player,{e.values[0],e.values[1],e.values[2]});
-    const bool obstructed=e.before[1] && requested>.05 && accepted<std::min(.05,requested*.02);if(obstructed && !blocked) output(L"Movement blocked",false,"navigation-blocked");blocked=obstructed;
+    // Auto walk arrival homing walks into its target until the collision stops it.
+    const bool obstructed=e.before[1] && requested>.05 && accepted<std::min(.05,requested*.02);if(obstructed && !blocked && !autoWalkActive()) output(L"Movement blocked",false,"navigation-blocked");blocked=obstructed;
     if(observationNeeded()) nav::requestNavigationScene();captureWallCues();
 }
 void wallBefore(Event& e) {if(e.args[0]>64) return;using Getter=unsigned(__cdecl*)(unsigned);e.before[0]=reinterpret_cast<Getter>(address(0x43e960))(static_cast<unsigned>(e.args[0]));e.before[1]=1;}
