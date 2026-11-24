@@ -1,6 +1,6 @@
 #include "navigation_scene.hpp"
 #include "dev_focus.hpp"
-#include "floor_panels.hpp"
+#include "floor_panel_watch.hpp"
 #include "field_controls.hpp"
 #include "airship_map.hpp"
 #include "navigation_targets.hpp"
@@ -26,6 +26,7 @@
 #include <cmath>
 namespace ffx::nav {
 namespace {
+FloorPanelWatch panelWatch;
 constexpr unsigned AtelShowMessage=0x4589f0;
 struct RailPromptSource {unsigned worker=0,serial=0,epoch=0;};
 struct RailPromptText {RailPromptSource source;uintptr_t window=0,text=0;};
@@ -174,10 +175,15 @@ void prepareNavigationSceneStorage() {
     hook(0x4b8980,nullptr,railPromptInstalled);
     hook(0x4b8510,nullptr,railPromptClosed);
 }
+bool panelScriptInvalidatesCapture(uintptr_t chunk,bool knownOwner) {
+    // An invalidated or expired observation already refuses every input.
+    return panelFactsFresh(panelWatch.revision,panelWatch.capturedAt,GetTickCount64()) &&
+        (!knownOwner || !panelWatch.matches(chunk));
+}
 bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
     if(!nativeGameThread()) return false;
     s.panelSample=floorPanelChunk.load()?floorPanelSample.fetch_add(1)+1:floorPanelSample.load();
-    s.panelRevision=floorPanelRevision.load();s.capturedAt=GetTickCount64();s.audioContext=navAudioContextSerial();s.collisionSerial=navCollisionSerial();
+    s.panelRevision=floorPanelScriptActive.load()?0:floorPanelRevision.load();s.capturedAt=GetTickCount64();s.audioContext=navAudioContextSerial();s.collisionSerial=navCollisionSerial();
     s.epoch=generation();s.revision=revision;s.count=s.actorCount=s.partCount=s.areaNameCount=0;s.playerIndex=-1;s.geometryValid=s.surfaceReady=false;
     s.baajFactsReady=false;s.baajTreasureFlags=s.baajActivatedCount=-1;
     s.controller=read<uintptr_t>(address(0xf26ae8));const auto count=read<uint16_t>(s.controller+0xc);
@@ -233,10 +239,11 @@ bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
         fact.interactions=captureNativeInteractionFacts(worker,EntryMask{},span);fact.valid=validNativePoint(fact.position);
         if(fact.valid) captureBaajFacts(s,fact,worker,span);
     }
+    unsigned panelPart=s.partCount;
     for(unsigned part=0;part<s.partCount;++part) {
         auto& facts=s.parts[part];
         captureBindings(facts,s.controller,workerZeros[part]);facts.butterflyExiting=butterflyNavigationLeaving(facts.span);
-        if(facts.span.chunk==s.primary) floorPanelChunk.store(facts.panelMap?s.primary:0,std::memory_order_release);
+        if(facts.span.chunk==s.primary && facts.panelMap) panelPart=part;
         if(facts.span.chunk==s.primary) s.bevelleRailPromptWorker=visibleRailPromptWorker(visibleSlots,facts.span,s.epoch);
     }
     if(needGeometry && captureNativeGeometry(s.geometry,revision,false)) {
@@ -245,6 +252,19 @@ bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
             (!g.vertexCount || copyReadyRegion(g.vertices,s.vertices.data(),g.vertexCount*8,g.vertexCount*8));
     }
     s.geometry.roomState=roomStateToken(s.parts,s.partCount);
+    const auto chunk=panelPart<s.partCount?s.primary:0;
+    if(chunk!=floorPanelChunk.exchange(chunk)) {
+        panelWatch.revision=0;
+        const auto revisionAfterChange=floorPanelRevision.fetch_add(1)+1;
+        if(s.panelRevision) s.panelRevision=revisionAfterChange;
+    }
+    if(chunk && s.panelRevision) {
+        if(panelWatch.revision==s.panelRevision && !panelWatch.matches(s.primary))
+            s.panelRevision=floorPanelRevision.fetch_add(1)+1;
+        if(!panelWatch.capture(s,panelPart,player)) {
+            panelWatch.revision=0;s.panelRevision=0;floorPanelRevision.fetch_add(1);
+        }
+    }
     return s.epoch==generation();
 }
 void captureNavigationAreaNames(Scene& s,const AreaNameDemand& demand) {

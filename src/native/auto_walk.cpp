@@ -260,7 +260,7 @@ unsigned command() {
     if(const auto reason=unsafeReason())
         if(!bandSteerSince || now-bandSteerSince>BandSteerMs || std::wcscmp(reason,ControlDisabled)!=0 || nativeVisibleMessageText()) return 0;
     const auto panelRevision=maskPanelRevision.load();
-    if(panelRevision && (maskPanelSample.load()!=floorPanelSample.load() || !panelFactsFresh(panelRevision,maskPanelAt.load(),GetTickCount64()))) return 0;
+    if(panelRevision && (maskPanelSample.load()!=floorPanelSample.load() || !panelMovementFresh(panelRevision,maskPanelAt.load(),GetTickCount64()))) return 0;
     return mask.load();
 }
 void textOpened(Event& e) {
@@ -318,7 +318,7 @@ void startAutoWalk(bool announce) {
     if(leg.target.swimDepth && ((nativeInputUsesController() && diveButton<0) || (!nativeInputUsesController() && !diveScan))) {
         output(L"Auto walk unavailable: Dive has no configured control",false,"auto-walk"); return;
     }
-    if(leg.panelRevision && !panelFactsFresh(leg.panelRevision,leg.panelCapturedAt,GetTickCount64())) {
+    if(leg.panelRevision && !panelMovementFresh(leg.panelRevision,leg.panelCapturedAt,GetTickCount64())) {
         recordLog("floor panel walk refused: stale panel facts (age-ms=%llu)",GetTickCount64()-leg.panelCapturedAt);
         output(noSafePanelRoute,false,"auto-walk");return;
     }
@@ -393,6 +393,7 @@ void updateAutoWalk() {
          GetTickCount64()-leg.panelCapturedAt>250))) {
         stop("floor panel facts expired",L"floor panel state changed or unavailable. Walk manually.",true);return;
     }
+    if(leg.panelRevision && floorPanelScriptActive.load()) {mask=0;panelPulse=0;panelDrain=PedestalDrainFrames;return;}
     if(leg.panelRevision && leg.arrived) {stop("arrived");return;}
     if(leg.panelRevision && (leg.panelSample!=floorPanelSample.load() || leg.panelRevision!=floorPanelRevision.load())) {
         if(mask.exchange(0)) {panelPulse=0;panelDrain=PedestalDrainFrames;}

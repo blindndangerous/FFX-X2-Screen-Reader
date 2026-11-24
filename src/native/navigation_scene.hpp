@@ -57,6 +57,7 @@ struct Scene {
 };
 static_assert(std::is_trivially_copyable_v<Scene> && std::is_trivially_destructible_v<Scene>);
 bool captureNavigationScene(Scene&,unsigned revision,bool geometry);
+bool panelScriptInvalidatesCapture(uintptr_t chunk,bool knownOwner); // Native owner, inside a panel interpreter call.
 void prepareNavigationSceneStorage(); // Bootstrap, fixed Native title-cache storage.
 void captureNavigationAreaNames(Scene&,const AreaNameDemand&);
 // Native title/name getters are supplied separately as copied encoded facts.

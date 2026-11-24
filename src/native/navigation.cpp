@@ -532,7 +532,7 @@ void receiveScene(const speechq::Header& header,const nav::SceneObservation& cap
 }
 // Only the worker formats the diagnostic. Cumulative counters survive late
 // scene delivery, including a walk that stops before the next report.
-std::array<std::atomic<unsigned>,28> panelOpcodeBumps{};
+std::array<std::atomic<unsigned>,29> panelOpcodeBumps{};
 void reportPanelBumps() {
     if(!floorPanelChunk.load(std::memory_order_acquire)) return;
     static ULONGLONG last=0;
@@ -546,9 +546,10 @@ void reportPanelBumps() {
     if(counts==lastCounts && sample==lastSample) return;
     last=now;lastCounts=counts;lastSample=sample;
     std::string line;
-    for(unsigned i=0;i<counts.size();++i) {
+    for(unsigned i=0;i<28;++i) {
         line+=" W"+std::to_string(i?56+i:38)+"="+std::to_string(counts[i]);
     }
+    line+=" other="+std::to_string(counts.back());
     recordLog("floor panel opcode bumps (cumulative), sample %u:%s",sample,line.c_str());
 }
 void maintenance() {
@@ -615,22 +616,32 @@ void collisionChanged(Event&) {
     navCollisionRevision.fetch_add(1,std::memory_order_acq_rel);pauseNavRouteAudio();refreshNavCollision();
 }
 void wallAfter(Event& e) {if(!e.before[1] || inBattle()) return;using Getter=unsigned(__cdecl*)(unsigned);if(static_cast<unsigned>(e.before[0])!=reinterpret_cast<Getter>(address(0x43e960))(static_cast<unsigned>(e.args[0]))) collisionChanged(e);}
+void invalidatePanelScript(unsigned local) {
+    floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);
+    const unsigned slot=local==38?0:(local>=57 && local<=83?local-56:28);
+    panelOpcodeBumps[slot].fetch_add(1,std::memory_order_relaxed);
+}
 void panelScriptBefore(Event& e) {
+    // The first Dome scene can be captured inside a call that began before
+    // its chunk was known. Mark the scope even then, without reading a worker.
+    e.before[0]=1;e.before[1]=floorPanelScriptActive.exchange(true);
     const auto chunk=floorPanelChunk.load(std::memory_order_acquire);
     if(!chunk) return;
     uintptr_t owner=0;uint16_t local=0;
-    if(!copy(e.args[0]+4,&owner,sizeof(owner)) ||
-        (owner==chunk && !copy(e.args[0]+0x2e,&local,sizeof(local)))) {
-        floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);return;
-    }
-    if(owner!=chunk) return;
-    // W38 dispatches the group activation/reset writes. Each panel initializes
-    // its own geometry and handles touch. Fence these scripts before execution,
-    // including an ABA change between two otherwise identical observations.
-    if(local==38 || (local>=57 && local<=83)) {
-        floorPanelRevision.fetch_add(1,std::memory_order_acq_rel);
-        panelOpcodeBumps[local==38?0:local-56].fetch_add(1,std::memory_order_relaxed);
-    }
+    const bool known=copy(e.args[0]+4,&owner,sizeof(owner)) && owner &&
+        (owner!=chunk || copy(e.args[0]+0x2e,&local,sizeof(local)));
+    // The worker number is diagnostic only. Other callers, including the
+    // pedestal scripts, can change the same pattern bindings.
+    e.before[2]=chunk;e.before[3]=known;e.before[4]=local;
+    // A nested run can restore a change made by its caller. Retire the old
+    // observation before the nested run can hide that intermediate state.
+    if(e.before[1] && nav::panelScriptInvalidatesCapture(chunk,known)) invalidatePanelScript(local);
+}
+void panelScriptAfter(Event& e) {
+    if(!e.before[0]) return;
+    const auto chunk=static_cast<uintptr_t>(e.before[2]);
+    if(chunk && nav::panelScriptInvalidatesCapture(chunk,e.before[3]!=0)) invalidatePanelScript(static_cast<unsigned>(e.before[4]));
+    floorPanelScriptActive.store(e.before[1]!=0,std::memory_order_release);
 }
 void interactionBefore(Event& e) {e.before[0]=read<uint8_t>(e.args[0]+0xab);}
 void interactionAfter(Event& e) {if(observationNeeded() && e.before[0]!=read<uint8_t>(e.args[0]+0xab)) {
@@ -658,7 +669,7 @@ bool devNavigationDump(const wchar_t* name) {
 void refreshSelectedBeacon() {enqueue(nav::Query::Beacon);}
 bool requestNavigationAssistRoute() {return nav::submitNavigationQuery(nav::Query::AssistRoute);}
 void requestNavigationAssistInstruction() {enqueue(nav::Query::AssistInstruction);}
-void resetNavigation() {if(floorPanelChunk.exchange(0)) floorPanelRevision.fetch_add(1);nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
+void resetNavigation() {if(floorPanelChunk.exchange(0)) floorPanelRevision.fetch_add(1);floorPanelScriptActive=false;nav::invalidateNavigationIntents();nav::resetNavigationObservations();resetReachability();cancelPedestal();suspendAutoWalk();resetNavigationScripts();resetNavAudio();interested=false;}
 void prepareNavigationScriptRetirement();void prepareNavRetirement();
 void installNavigation() {
     storage.prepare();startPuzzleGuideTargets();prepareNavigationScriptRetirement();prepareNavRetirement();installReachability();installAutoWalk();setAutoWalkResume(resumeAutoWalk);installPedestal();nav::startNavigationIntents();
@@ -668,7 +679,7 @@ void installNavigation() {
     for(unsigned rva:{0x425010u,0x42b500u,0x426770u}) hook(rva,nullptr,actorEvent);
     hook(0x382730,nullptr,[](Event&) {setFieldAudioAllowed(!inBattle() && !airshipNavigationUiActive());resetBattle();if(interested.load()) nav::requestNavigationScene();});
     hook(0x43e9e0,wallBefore,wallAfter);hook(0x43d3b0,movementBefore,movementAfter);hook(0x45bf70,interactionBefore,interactionAfter);hook(0x45c140,interactionBefore,interactionAfter);
-    hook(0x43ea00,nullptr,collisionChanged);hook(0x464180,panelScriptBefore,nullptr);
+    hook(0x43ea00,nullptr,collisionChanged);hook(0x464180,panelScriptBefore,panelScriptAfter);
     hotkey(VK_OEM_3,[](bool shift) {enqueue(nav::Query::Scan,shift,true);});hotkey(VK_OEM_6,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Next,shift,true);});hotkey(VK_OEM_4,[](bool shift) {if(!inBattle()) enqueue(nav::Query::Previous,shift,true);});
     hotkey('P',[](bool shift) {if(!inBattle()) enqueue(nav::Query::Distance,shift);});hotkey(VK_OEM_5,[](bool shift) {if(sphereGridOpen()) spherePathKey(shift);else pathKey(shift);});
 }

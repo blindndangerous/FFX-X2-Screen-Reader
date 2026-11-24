@@ -3,9 +3,11 @@
 November 17, step 4. Zanarkand guide Path can submit a requested walk around
 qualified active floor rectangles. A changed or unavailable panel observation
 stops steering. Touching only the chosen panel counts as arrival. From rest,
-steering checks clearance for a two-frame pulse. The worker logs per-panel
-opcode counts for the field check. The detached worktree has offline coverage. Gameplay remains
-pending. See the [cloister record](Docs/features/puzzles/index.md#cloisters).
+steering checks clearance for a two-frame pulse. For ffx-s4, unchanged W38 and
+W57–W83 script runs preserve the captured panel revision. Native movement stays
+fenced during each run. Diagnostics count W38 and each panel separately and group
+other callers. The first-visit walk remains pending. See the
+[cloister record](Docs/features/puzzles/index.md#cloisters).
 
 November 17 r28 follow-up. Guide Path describes the Bevelle entrance. Backslash
 with Auto walk enabled starts the cued crossing. A repeat reports progress.

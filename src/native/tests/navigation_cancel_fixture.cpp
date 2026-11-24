@@ -138,6 +138,11 @@ int main() {
             moving=keys[0xc8] || keys[0xcd];
         }
         check(moving,"guarded walk has live synthetic input before invalidation");
+        floorPanelScriptActive=true;
+        const auto heldKeys=keyboard();pad::State heldPad{};autoWalkController(heldPad);
+        check(!heldKeys[0xc8] && !heldKeys[0xcd] && !heldPad.lx && !heldPad.ly,
+            "keyboard and controller withhold the live mask inside a panel script");
+        floorPanelScriptActive=false;
         if(stale) {
             panels.capturedAt=GetTickCount64()-251;nativeOwner=false;
             updateOwnedNavAudio(observation,mesh,{},panelHeader,L"");nativeOwner=true;

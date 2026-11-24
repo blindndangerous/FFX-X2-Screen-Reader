@@ -45,7 +45,9 @@ uintptr_t __cdecl areaNameGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignR
 uintptr_t __cdecl personGetter(unsigned) {if(!nativeOwner) ++foreignReads;return reinterpret_cast<uintptr_t>(personBytes.data());}
 uint8_t __cdecl priorityGetter(unsigned,unsigned) {if(!nativeOwner) ++foreignReads;return 0;}
 int __cdecl messageModeGetter() {if(!nativeOwner) ++foreignReads;check(nativeOwner,"message mode stays on native owner");return messageMode;}
-uint16_t __cdecl interactionGetter(unsigned,unsigned channel,uintptr_t) {if(!nativeOwner) ++foreignReads;++nativeEntries;return static_cast<uint16_t>(huntFixture && channel==2?4:channel+1);}
+uint16_t __cdecl interactionGetter(unsigned type,unsigned channel,uintptr_t) {if(!nativeOwner) ++foreignReads;++nativeEntries;
+    if(type==6 && channel==5 && word<uint16_t>(reinterpret_cast<uintptr_t>(savedData.data()))==320) return 2;
+    return static_cast<uint16_t>(huntFixture && channel==2?4:channel+1);}
 void setScene() {
     actorsPointer=reinterpret_cast<uintptr_t>(actorBodies.data());controlledPointer=actorsPointer;put(controller.data()+0x48,chunk);
     put(controller.data()+0x2c,reinterpret_cast<uintptr_t>(savedData.data()+0x1ec));put(controller.data(),static_cast<uint8_t>(2));

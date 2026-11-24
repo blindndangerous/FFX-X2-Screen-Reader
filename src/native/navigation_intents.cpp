@@ -36,6 +36,7 @@ std::array<std::atomic<unsigned>,Slots> tickets{};
 async::TryCaptureQueue<unsigned,Slots> pending;
 std::atomic<unsigned> revision{1},nextTicket{0};
 void release(unsigned slot,unsigned token) {if(slot<Slots) tickets[slot].compare_exchange_strong(token,0,std::memory_order_release,std::memory_order_relaxed);}
+bool startsWalk(Intent kind) {return kind==Intent::Start || kind==Intent::AssistStart || kind==Intent::ArmAndStart;}
 bool scriptFor(const Frame& f,UtilityScript& script) {
     using Getter=uintptr_t(__cdecl*)(int);const auto worker=reinterpret_cast<Getter>(address(0x46a7c0))(static_cast<int>(f.zeroGlobal));
     if(!worker || read<uintptr_t>(worker+4)!=f.span.chunk || read<uint16_t>(worker+0x2e,0xffff)!=0 || read<uintptr_t>(worker)!=f.span.chunk+f.zeroHeader) return false;
@@ -101,11 +102,11 @@ bool qualify(unsigned slot,unsigned token) {
         const auto active=capturePedestalNavigationState();
         if(!active.armed || !active.held || active.epoch!=f.epoch || active.worker!=f.target.worker || active.id!=f.target.id || active.control!=f.target.pushControl || active.local!=f.target.pushLocal) return rejected("pedestal assistance");
     }
-    if(f.kind==Intent::Start || f.kind==Intent::AssistStart || f.kind==Intent::ArmAndStart) {
+    if(startsWalk(f.kind)) {
         // A callback may change after worker preparation but before native
         // movement starts. Never start a route against obsolete ledge facts.
         if(f.collisionSerial!=navCollisionSerial() || !f.events.ready || !sameRouteEvents(f.events,captureRouteEvents(controller))) return rejected("collision serial or route events",f.collisionSerial,navCollisionSerial());
-        if(f.panelRevision && !panelFactsFresh(f.panelRevision,f.capturedAt,now)) return rejected("floor panel state");
+        if(f.panelRevision && !panelMovementFresh(f.panelRevision,f.capturedAt,now)) return rejected("floor panel state");
         NavLeg leg;if(!navLeg(leg) || leg.pendingCollision || leg.panelRevision!=f.panelRevision || (f.panelRevision && leg.panelSample!=floorPanelSample.load()) || leg.target.panelLocal!=f.target.panelLocal || leg.target.worker!=f.target.worker || leg.target.id!=f.target.id || leg.target.pushControl!=f.target.pushControl || leg.target.pushLocal!=f.target.pushLocal) return rejected("route leg");
         if(f.pointOnly && distanceXZ(leg.final,f.target.position)>.1) return rejected("route end");
     }
@@ -143,14 +144,17 @@ bool submitNavigationIntent(const Scene& observation,const Entity& target,Intent
     if(worker) {if(!worker->valid || worker->part>=observation.partCount) return false;part=worker->part;}
     else for(unsigned i=0;i<observation.partCount;++i) if(observation.parts[i].span.chunk==observation.primary) {part=i;break;}
     if(part>=observation.partCount) return false;
+    bool requiresPanels=observation.room==320 || target.panelLocal;
+    for(unsigned i=0;i<observation.partCount && !requiresPanels;++i)
+        requiresPanels=observation.parts[i].span.chunk==observation.primary && observation.parts[i].panelMap;
+    // Zero is also the ordinary route's "no panels" marker. An unqualified
+    // Dome observation must never take that path to native movement.
+    if(requiresPanels && !observation.panelRevision && startsWalk(kind)) return false;
     unsigned slot=Slots,token=(nextTicket.fetch_add(1)+1)&~(Writing|Held);if(!token) token=(nextTicket.fetch_add(1)+1)&~(Writing|Held);
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire)) {slot=i;break;}}
     if(slot==Slots) return false;auto& f=frames.get()[slot];OwnedNavTarget captured;
     if(!captureOwnedNavTarget(target,captured)) {release(slot,token|Writing);return false;}f.target=captured.native;
-    f.panelRevision=0;
-    if(observation.room==320 || target.panelLocal) f.panelRevision=observation.panelRevision;
-    else for(unsigned i=0;i<observation.partCount;++i)
-        if(observation.parts[i].span.chunk==observation.primary && observation.parts[i].panelMap) f.panelRevision=observation.panelRevision;
+    f.panelRevision=requiresPanels?observation.panelRevision:0;
     f.span=observation.parts[part].span;f.controller=observation.controller;f.primary=observation.primary;f.epoch=observation.epoch;f.revision=wantedRevision;f.manual=manual;f.pointOnly=pointOnly;f.player=observation.player;f.events=observation.geometry.events;f.collisionSerial=observation.collisionSerial;
     if(worker) {f.global=worker->global;f.local=worker->local;f.header=worker->header;f.type=worker->type;f.geometry=worker->geometry;}f.saved=observation.saved;f.kind=kind;f.capturedAt=observation.capturedAt;
     f.announce=announce;

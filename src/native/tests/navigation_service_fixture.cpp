@@ -83,15 +83,36 @@ int main() {try {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     using namespace ffx;check(startAtelResources(),"pipeline resource bootstrap");installAtelResources();installNavigation();
     {
-        std::array<uint8_t,0x30> worker{};
-        floorPanelChunk=1;put(worker.data()+4,uintptr_t(1));
-        Event opcode{};opcode.args[0]=reinterpret_cast<uintptr_t>(worker.data());
-        constexpr uint16_t locals[]={38,69,69,75,84};
-        const auto bump=[&](uint16_t local) {
-            put(worker.data()+0x2e,local);
-            for(const auto& listener:navigationListeners.at(0x464180)) if(listener.before) listener.before(opcode);
+        prepare("dome0700");setScene();put(savedData.data(),uint16_t{320});
+        for(unsigned local=57;local<=83;++local) {
+            auto* geometry=workers[local].data()+0x284;
+            put(geometry+0x28,int16_t{-1});put(geometry+0x30,2.f);put(geometry+0x38,2.f);
+        }
+        const auto capturePanels=[&] {
+            check(nav::captureNavigationScene(sceneCapture,1,true),"captures first-visit panel scene");
+            return readFloorPanels(sceneCapture);
         };
-        for(auto local:locals) bump(local);
+        FloorPanels panels;
+        // Reproduce the reported age of zero independently of host scheduling.
+        const auto freshPanels=[&] {return !panelFactsGap(panels,panels.capturedAt);};
+        const auto& script=navigationListeners.at(0x464180).front();
+        const auto run=[&](unsigned local,auto body) {
+            Event e{};e.epoch=generation();e.args[0]=workerGetter(local);
+            script.before(e);body();if(script.after) script.after(e);
+        };
+        run(38,[&] {panels=capturePanels();});
+        check(!freshPanels(),"first Dome capture inside an already running script stays unavailable");
+        nativeOwner=false;
+        Entity point;point.position=sceneCapture.player;
+        check(!nav::submitNavigationIntent(sceneCapture,point,nav::Intent::Start,autoWalkInputRevision(),nav::navigationIntentRevision()),
+            "an unverified Dome capture cannot queue a walk as an ordinary point route");
+        nativeOwner=true;
+        panels=capturePanels();
+        check(freshPanels(),"all 27 panels and pattern bindings qualify on the first settled capture");
+        for(unsigned local:{38u,69u,69u,75u}) {
+            run(local,[&] {++scalar;});panels=capturePanels();
+        }
+        run(56,[] {});
         static unsigned reports=0;
         static char line[512]{};
         logCaptureHandler.store([](const LogCapture& packet) noexcept {
@@ -100,21 +121,71 @@ int main() {try {
                 check(!nativeOwner,"panel bump reporting stays on the worker");
             }
         });
+        const auto loggedSample=[&] {
+            const auto text="sample "+std::to_string(floorPanelSample.load())+":";
+            return std::strstr(line,text.c_str())!=nullptr;
+        };
         work();work();
-        check(reports==1 && std::strstr(line,"sample 0:") && std::strstr(line,"W38=1 ") &&
-            std::strstr(line,"W69=2 ") && std::strstr(line,"W75=1 ") && std::strstr(line,"W83=0"),
-            "worker log counts each fenced panel opcode");
+        check(reports==1 && loggedSample() && std::strstr(line,"W38=1 ") && std::strstr(line,"W69=2 ") &&
+            std::strstr(line,"W75=1 ") && std::strstr(line,"W83=0"),"worker log counts panel invalidations");
         Sleep(5000);work();
         check(reports==1,"idle panel bump report stays quiet past the five-second limit");
-        bump(69);work();
-        check(reports==2 && std::strstr(line,"sample 0:") && std::strstr(line,"W69=3 "),
-            "a counter change alone emits a panel bump report");
-        ++floorPanelSample;work();
-        check(reports==2,"a changed sample still respects the five-second limit");
+        panels=capturePanels();work();
+        check(reports==2 && loggedSample() && std::strstr(line,"W69=2 "),"a sample change alone emits a panel bump report");
+        run(69,[&] {++scalar;});work();
+        check(reports==2,"a changed counter still respects the five-second limit");
         Sleep(5000);work();
-        check(reports==3 && std::strstr(line,"sample 1:") && std::strstr(line,"W69=3 "),
-            "a sample change alone emits a panel bump report");
-        floorPanelChunk=0;logCaptureHandler.store(nullptr);
+        check(reports==3 && loggedSample() && std::strstr(line,"W69=3 "),"a counter change alone emits a panel bump report");
+        logCaptureHandler.store(nullptr);
+        panels=capturePanels();
+        const auto burstStart=std::chrono::steady_clock::now();
+        for(unsigned frame=0;frame<30;++frame) {
+            for(unsigned i=0;i<workers.size();++i) run(i,[] {});
+        }
+        const auto burstTime=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-burstStart);
+        std::printf("METRIC 30 batches of all %u Dome workers, all panels active: %.3f ms total.\n",
+            static_cast<unsigned>(workers.size()),burstTime.count());
+        check(freshPanels(),"periodic no-op W38 and W57-W83 runs keep the captured route fresh");
+        panels=capturePanels();
+        run(38,[&] {workers[69][0xab]^=0x20;});
+        const auto invalidated=floorPanelRevision.load();
+        run(75,[] {});
+        check(floorPanelRevision.load()==invalidated,"an idle tick cannot repeatedly invalidate the same observation");
+        run(38,[&] {workers[69][0xab]^=0x20;});
+        check(!freshPanels(),"group activation followed by reset still invalidates the old route");
+        panels=capturePanels();check(freshPanels(),"settled panel recapture permits routing");
+        run(69,[&] {put(workers[75].data()+0x284+0x34,.4f);});
+        check(!freshPanels(),"another panel's geometry change invalidates the route");
+        panels=capturePanels();run(69,[] {});
+        check(freshPanels(),"settled geometry survives the next scheduler tick");
+        run(38,[&] {++scalar;});
+        check(!freshPanels(),"changed pattern bindings invalidate the route");
+        panels=capturePanels();check(freshPanels(),"settled pattern qualifies");
+        // The retained W44:2 pedestal entry writes stage binding 0x5c000004.
+        run(44,[&] {++scalar;});
+        check(!freshPanels(),"a pedestal script changing the pattern also retires the panel route");
+        panels=capturePanels();
+        run(38,[&] {
+            ++scalar;run(69,[&] {--scalar;});
+        });
+        check(!freshPanels(),"a nested script restoring the old pattern cannot revive the route");
+        panels=capturePanels();
+        run(69,[&] {
+            check(!panelMovementFresh(panels.revision,panels.capturedAt,GetTickCount64()),"native movement refuses while a panel script is executing");
+            run(75,[] {});
+            check(!panelMovementFresh(panels.revision,panels.capturedAt,GetTickCount64()),"returning from a nested script keeps the outer fence");
+            panels=capturePanels();
+        });
+        check(!freshPanels(),"an observation captured inside a script cannot later authorize movement");
+        panels=capturePanels();check(freshPanels(),"first complete observation after script return qualifies");
+        run(38,[&] {put(workers[83].data()+4,uintptr_t{0});});
+        check(!freshPanels(),"lost panel worker ownership invalidates the route");
+        panels=capturePanels();check(!freshPanels(),"incomplete recapture keeps the route refused");
+        put(workers[83].data()+4,chunk);panels=capturePanels();
+        check(freshPanels(),"restored worker identity qualifies on a complete recapture");
+        Event unknown{};unknown.epoch=generation();script.before(unknown);script.after(unknown);
+        check(!freshPanels(),"unreadable interpreter owner invalidates the capture");
+        std::puts("PASS: periodic no-op panel scripts keep facts fresh; state changes and incomplete observations fence movement until settled.");
     }
     // Native encoded title getter: all requested IDs share a controlled ready
     // game-format string; exact getter bounds, copying and decoder are real.

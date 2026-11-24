@@ -18,6 +18,16 @@ Failing a hash/owner/context check refuses intervention and leaves native behavi
 
 ## Cloisters
 
+In the first-visit Zanarkand floor trial, W38 and W57–W83 receive periodic
+interpreter calls while the panel layout is stable. Other workers can also
+change the route. The pedestal entry 2 of W44–W47 writes the stage binding
+0x5c000004. For ffx-s4, native panel input pauses during any interpreter
+call. On return, the mod checks the captured script
+allocation, player radius, ten pattern values and all 27 panel workers. Changed
+or unreadable routing facts invalidate the observation. A new complete scene
+can authorize movement again. Snapshots taken inside a call cannot do so.
+The existing 250 ms age limit still applies.
+
 November 17 r27 guide and collection behavior
 
 - Bevelle entrance assistance uses the armed crossing plan through W39:6,
@@ -411,10 +421,12 @@ Prioritized later nonvisual check, after separately authorized deployment:
    upper-platform recess filled; its chest checkpoint advances to Step 15 even
    when node 16 was not observed. Unrelated dialogue/windows still block.
 5. In Besaid, close the sphere insertion message once and request Path first.
-   Expect the Destruction Sphere. In Zanarkand, ask for Path with an active
+   Expect the Destruction Sphere. On a first visit to Zanarkand, ask for Path with an active
    wrong panel between you and a permitted one. With Auto walk off, expect
    directions and a stationary player. Turn it on and request Path again.
-   Listen for the named walking cue before movement. Expect only the chosen
+   Leave the controls idle for several seconds first so the periodic panel
+   scripts run. Listen for the named walking cue before movement. Repeated
+   stale-facts refusals on a clear detour are a failure. Expect only the chosen
    panel to count and its arrival to be spoken once. Route loss on that touch
    is a failure. From rest beside an active wrong panel, insufficient clearance
    should give a spoken stop before movement. A reset, a different panel counting
