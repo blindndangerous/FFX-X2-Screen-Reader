@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <string>
 // Spoken outcome of a navigation action whose native checks failed. Kept
 // separate from navigation_intents.cpp so the wording is testable alone.
@@ -36,6 +37,19 @@ inline const wchar_t* routeStartRefusal(bool autoWalk,bool fieldOpen,bool contro
 // route at once. Say so instead of reading the route and then doing nothing.
 inline std::wstring inactiveRouteText(const std::wstring& name,const std::wstring& directions) {
     std::wstring text=L"Auto walk unavailable: "+name+L" is currently inactive.";
+    if(!directions.empty()) text+=L" Route: "+directions;
+    return text;
+}
+// The native start rejects a destination actor that moved after the route was read.
+// Two recent copies of the same actor at different positions mean it is walking now.
+template<class Point> bool destinationMoving(unsigned beforeModel,const Point& before,unsigned long long beforeAt,
+    unsigned nowModel,const Point& now,unsigned long long nowAt) {
+    return beforeModel && beforeModel==nowModel && nowAt>=beforeAt && nowAt-beforeAt<=1000 &&
+        (std::abs(before.x-now.x)>.01 || std::abs(before.y-now.y)>.01 || std::abs(before.z-now.z)>.01);
+}
+// A moving destination would be canceled after its route was read. Refuse it first.
+inline std::wstring movingRouteText(const std::wstring& name,const std::wstring& directions) {
+    std::wstring text=L"Auto walk unavailable: "+name+L" is moving.";
     if(!directions.empty()) text+=L" Route: "+directions;
     return text;
 }

@@ -97,6 +97,7 @@ struct Owned {
     std::map<int,std::wstring> areas;nav::AreaNameDemand names;
     nav::ListStability list;EntityKey selection;unsigned epoch=0,revision=0,requested=0,category=0,selected=0;int step=1;bool ready=false,haveMesh=false;
     nav::NativeGeometryContext meshContext;
+    std::array<bool,nav::SceneActors> moving{};
     bool unavailable=false,announceReady=false;
 };
 ProcessStorage<Owned> storage;
@@ -298,7 +299,12 @@ void pathfind(const Pending& event,bool assist=false) {
         recordLog("route-diagnostic request=%u epoch=%u collision=%u data-age-ms=%llu",event.query.serial,s.observation.epoch,s.observation.collisionSerial,GetTickCount64()-s.observation.capturedAt);
         for(const auto& row:diagnostic) recordLog("%s",row.c_str());
     }
-    routeNavAudio(points,target,setting(Setting::AutoWalk) && !target.inactive);
+    const bool moving=!assist && target.actor>=0 && static_cast<unsigned>(target.actor)<nav::SceneActors && s.moving[target.actor];
+    routeNavAudio(points,target,setting(Setting::AutoWalk) && !target.inactive && !moving);
+    if(moving && setting(Setting::AutoWalk)) {
+        recordLog("auto walk refused: destination moving worker=%d id=%u",target.worker,target.id);
+        emit(event,nav::movingRouteText(label(target),routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0)),"navigation-action-refused");return;
+    }
     if(!assist && target.inactive && setting(Setting::AutoWalk)) {
         recordLog("auto walk refused: destination inactive worker=%d id=%u",target.worker,target.id);
         emit(event,nav::inactiveRouteText(label(target),routeDirectionsText(points,UnitsPerStep,setting(Setting::PartialSteps)!=0)),"navigation-action-refused");return;
@@ -450,11 +456,17 @@ void receiveQuery(const speechq::Header& header,const nav::QueryObservation& que
     if(query.query==nav::Query::GuideTarget) {event.direct.emplace();if(!takePuzzleGuideTarget(query.local,query.resourceSerial,*event.direct)) {speechq::emitOwned(L"Navigation action is unavailable or retired. Request the route again.",header,"utility-reply",false,false);return;}}
     s.pending.push_back(std::move(event));processPending();if(s.unavailable) reportWaiting();
 }
+unsigned actorModel(const nav::Scene& scene,unsigned actor) {uint16_t model=0;std::memcpy(&model,scene.actors[actor].bytes.data(),sizeof(model));return model;}
+Point actorPoint(const nav::Scene& scene,unsigned actor) {float p[3]{};std::memcpy(p,scene.actors[actor].bytes.data()+0xc,sizeof(p));return {p[0],p[1],p[2]};}
 void receiveScene(const speechq::Header& header,const nav::SceneObservation& captured) {
     auto& s=owned();const auto& observation=captured.scene;
     if((s.revision && s.revision!=observation.revision) || (s.epoch && s.epoch!=observation.epoch)) resetOwned(observation.epoch);
     if(!captured.available) {s.epoch=observation.epoch;s.revision=observation.revision;s.ready=false;reportWaiting();return;}
     if(observation.collisionSerial!=navCollisionSerial()) {nav::requestNavigationScene();return;}
+    const bool sameField=s.observation.epoch==observation.epoch && s.observation.revision==observation.revision;
+    for(unsigned i=0;i<nav::SceneActors;++i)
+        s.moving[i]=sameField && i<observation.actorCount && i<s.observation.actorCount &&
+            nav::destinationMoving(actorModel(s.observation,i),actorPoint(s.observation,i),s.observation.capturedAt,actorModel(observation,i),actorPoint(observation,i),observation.capturedAt);
     s.header=header;s.observation=observation;s.epoch=observation.epoch;s.revision=observation.revision;s.requested=captured.requested;s.ready=false;
     for(unsigned part=0;part<observation.partCount;++part) {
         const auto& fact=observation.parts[part];AtelIdentity identity;

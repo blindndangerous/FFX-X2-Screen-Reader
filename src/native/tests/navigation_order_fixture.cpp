@@ -174,6 +174,12 @@ int main() {
         check(!routeStartRefusal(true,true,true,true,false,false) && !routeStartRefusal(false,false,false,false,true,true),"an open field, or Auto walk off, reads the route as before");
         // Djose: Backslash on "Pedestal reset tile, currently inactive" said only "12 west" and never walked.
         check(ffx::nav::inactiveRouteText(L"Pedestal reset tile",L"12 west")==L"Auto walk unavailable: Pedestal reset tile is currently inactive. Route: 12 west","an inactive destination refuses Auto walk by name and still reads the route");
+        // S.S. Liki dock: a walking Villager read its route, then canceled on "destination geometry".
+        {struct P {float x,y,z;};const P stand{1,0,2},walked{1.5f,0,2};
+            check(ffx::nav::destinationMoving(7,stand,1000,7,walked,1016) && !ffx::nav::destinationMoving(7,stand,1000,7,stand,1016),"a destination actor at a new position between recent copies is moving");
+            check(!ffx::nav::destinationMoving(7,stand,1000,7,walked,2001) && !ffx::nav::destinationMoving(7,stand,1016,7,walked,1000),"old or reordered copies do not mark a destination as moving");
+            check(!ffx::nav::destinationMoving(7,stand,1000,8,walked,1016) && !ffx::nav::destinationMoving(0,stand,1000,0,walked,1016),"a replaced or empty actor slot is not a moving destination");
+            check(ffx::nav::movingRouteText(L"Villager",L"12 west")==L"Auto walk unavailable: Villager is moving. Route: 12 west","a moving destination refuses Auto walk before its route instead of canceling after it");}
         check(ffx::nav::inactiveRouteText(L"Pedestal",L"")==L"Auto walk unavailable: Pedestal is currently inactive.","an inactive destination inside its zone refuses without an empty route");
         // Turning Hide unreachable on starts a check; until verdicts arrive the visible count is the
         // unfiltered one, so "6 of 35" would later become "6 of 10". Speak the row without "N of M".
