@@ -459,8 +459,8 @@ void receiveQuery(const speechq::Header& header,const nav::QueryObservation& que
     if(query.query==nav::Query::GuideTarget) {event.direct.emplace();if(!takePuzzleGuideTarget(query.local,query.resourceSerial,*event.direct)) {speechq::emitOwned(L"Navigation action is unavailable or retired. Request the route again.",header,"utility-reply",false,false);return;}}
     s.pending.push_back(std::move(event));processPending();if(s.unavailable) reportWaiting();
 }
-unsigned actorModel(const nav::Scene& scene,unsigned actor) {uint16_t model=0;std::memcpy(&model,scene.actors[actor].bytes.data(),sizeof(model));return model;}
-Point actorPoint(const nav::Scene& scene,unsigned actor) {float p[3]{};std::memcpy(p,scene.actors[actor].bytes.data()+0xc,sizeof(p));return {p[0],p[1],p[2]};}
+unsigned actorModel(const nav::Scene& observed,unsigned actor) {uint16_t model=0;std::memcpy(&model,observed.actors[actor].bytes.data(),sizeof(model));return model;}
+Point actorPoint(const nav::Scene& observed,unsigned actor) {float p[3]{};std::memcpy(p,observed.actors[actor].bytes.data()+0xc,sizeof(p));return {p[0],p[1],p[2]};}
 void receiveScene(const speechq::Header& header,const nav::SceneObservation& captured) {
     auto& s=owned();const auto& observation=captured.scene;
     if((s.revision && s.revision!=observation.revision) || (s.epoch && s.epoch!=observation.epoch)) resetOwned(observation.epoch);
