@@ -579,13 +579,25 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
     if(state.manualPush.phase<0 && observation.control) manualPushCue(observation,state);
     enabled=true;if(action==OwnedGuideAction::Next || action==OwnedGuideAction::Previous ||
         (action==OwnedGuideAction::Path && state.step==state.expected &&
-            (!std::strcmp(state.route->script,"bvyt1100") || !std::strcmp(state.route->script,"bsyt0100")))) follow(observation,state);
+            (!std::strcmp(state.route->script,"bvyt1100") || !std::strcmp(state.route->script,"bsyt0100")))) {
+        // F9/F10 first catch up with play. When that already moved the
+        // selection to the step now expected, the press lands there: moving
+        // on again skipped it (dome0700 F10 from step 2 read step 4).
+        const auto before=state.step;follow(observation,state);
+        if(state.step!=before && (action==OwnedGuideAction::Next || action==OwnedGuideAction::Previous)) action=OwnedGuideAction::Step;
+    }
+    const bool domeStart=action==OwnedGuideAction::Expected && !std::strcmp(state.route->script,"dome0700");
     if(action==OwnedGuideAction::Next) {if(state.step+1<state.end) ++state.step;}else if(action==OwnedGuideAction::Previous) {if(state.step>state.begin) --state.step;}else if(action==OwnedGuideAction::Expected) {follow(observation,state);
         // An unidentified trial state keeps the F9/F10 selection. Live Djose:
         // Shift+F11 after F10 chose step 11 dropped it, so the pedestal row
         // went inactive and auto walk refused it.
         if(state.route->steps[state.expected].check || state.expected+1>=state.end) state.step=state.expected;}
     unsigned selected=action==OwnedGuideAction::Expected?state.expected:state.step;
+    // dome0700 first visit: the activation tile (step 1) has no done flag. A
+    // first-pattern panel count above 0 shows the player is past it, so step
+    // 2 is expected; before that, step 1 is.
+    const bool domeFirst=domeStart && state.begin==0 && state.expected==0 && state.end>1;
+    if(domeFirst) selected=state.step=value(observation,state,0x0c000022)>0?1u:0u;
     if(!std::strcmp(state.route->script,"bvyt1100")) {
         if(!observation.parts[state.part].guideReady) return L"The puzzle observations are unavailable.";
         if((action==OwnedGuideAction::Expected || action==OwnedGuideAction::Path) && state.expected<=state.begin+1 &&
@@ -594,7 +606,7 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
     // dome0700: pedestal steps wait for the floor pattern. Step 2 is read and
     // stays selected, so the next F9/F10 press starts from what was spoken.
     if(!std::strcmp(state.route->script,"dome0700") && selected>=2 && selected<=5 && value(observation,state,0x0c000022)!=6) selected=state.step=1;
-    if(action==OwnedGuideAction::Expected && !state.route->steps[selected].check && selected+1<state.end) {
+    if(action==OwnedGuideAction::Expected && !domeFirst && !state.route->steps[selected].check && selected+1<state.end) {
         std::wstring text=L"The current trial state does not identify an exact puzzle step. Use "+modKeyName(ModKey::PuzzleStep)+L" and "+modKeyName(ModKey::PuzzlePath)+L" to select the step you have reached.";
         if(state.step!=selected) text+=L" Step "+std::to_wstring(state.step-state.begin+1)+L" stays selected.";
         return text;

@@ -152,6 +152,19 @@ int main(int argc,char** argv) {
         check(text.find(L"complete")!=std::wstring::npos,"completed reviewed step explains completion");
         std::puts("PASS: Zanarkand completed pattern 0 stale-step suppression.");
     }
+    if(!test || test==25) {
+        // ffx-dome: the activation tile has no done flag. Expected names step 1
+        // before any first-pattern panel, then step 2 once one is touched.
+        setup(0);auto text=query(OwnedGuideAction::Expected);
+        check(text.find(L"Step 1 of 11")!=std::wstring::npos && text.find(L"activation tile")!=std::wstring::npos,"Expected names the activation tile at the first-visit start");
+        set(0x0c000022,2);text=query(OwnedGuideAction::Expected);
+        check(text.find(L"Step 2 of 11")!=std::wstring::npos,"a touched first-pattern panel makes step 2 expected");
+        // F10 from step 2 after the pattern completes lands on step 3, not 4.
+        setup(0);query(OwnedGuideAction::Next);set(0x0c000022,6);set(0x5c000004,1);text=query(OwnedGuideAction::Next);
+        check(text.find(L"Step 3 of 11")!=std::wstring::npos,"F10 after the first pattern completes reads step 3");
+        text=query(OwnedGuideAction::Next);check(text.find(L"Step 4 of 11")!=std::wstring::npos,"the next F10 moves on to step 4");
+        std::puts("PASS: Zanarkand Expected start step and F10 catch-up.");
+    }
     if(!test || test==4) {
         setup(2);position(66);query();set(0x0c000024,1);panel(66,false);query(OwnedGuideAction::TileCompleted,66);
         set(0x0c000024,0);panel(66,true);query(OwnedGuideAction::TileCompleted,66);
