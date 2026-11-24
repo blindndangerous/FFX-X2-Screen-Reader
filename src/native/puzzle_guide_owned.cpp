@@ -432,12 +432,17 @@ std::wstring autoRailCue(const nav::Scene& observation,State& state) {
 bool pushStep(const State& state,const PuzzleStep& step) {return step.platform || (!std::strcmp(state.route->script,"dome0700") && step.worker>=44 && step.worker<=47);}
 std::wstring path(const nav::Scene& observation,const Mesh& mesh,const std::vector<Entity>& entities,const Entity& target,bool platform,unsigned manual,unsigned intentRevision,const std::wstring& finish={},bool describeOnly=false) {
     constexpr double UnitsPerStep=11.13;resetNavAudio();
-    if(mesh.panels.required && (!mesh.panels.ready || !panelFactsFresh(mesh.panels.revision,mesh.panels.capturedAt,GetTickCount64()) ||
-        (mesh.triangles.empty() && !mesh.openPlane))) return noSafePanelRoute;
+    if(mesh.panels.required) {
+        const auto gap=mesh.triangles.empty() && !mesh.openPlane?"collision map unavailable":panelFactsGap(mesh.panels,GetTickCount64());
+        if(gap) {recordLog("floor panel guide route refused: %s",gap);return noSafePanelRoute;}
+    }
     if(target.pushControl && !target.zone.valid) return L"The pedestal collision data is unavailable.";
     if(mesh.triangles.empty() && !mesh.openPlane) return L"The current collision map is unavailable. Read the puzzle step or use the pathfinder.";
     const auto points=navigationRouteOwned(mesh,observation.player,target,entities);
-    if(mesh.panels.required && (points.empty() || !panelFactsFresh(mesh.panels.revision,mesh.panels.capturedAt,GetTickCount64()))) return noSafePanelRoute;
+    if(mesh.panels.required && (points.empty() || !panelFactsFresh(mesh.panels.revision,mesh.panels.capturedAt,GetTickCount64()))) {
+        recordLog("floor panel guide route refused: %s (target W%d panel %u)",points.empty()?(panelRouteGap?panelRouteGap:"no route"):"stale panel facts",target.worker,target.panelLocal);
+        return noSafePanelRoute;
+    }
     if(points.empty()) return platform?L"No walking path to that platform in the current map state. Use its lift, pedestal, or rail control first.":L"No walking path in the current map state. Complete the preceding sphere or platform action first.";
     const bool walk=!describeOnly && !bevelleEntrance(target.pushControl,target.position) && setting(Setting::AutoWalk);
     if(!describeOnly) routeNavAudio(points,target,walk);
@@ -610,7 +615,7 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
             if(action==OwnedGuideAction::Path) {
                 Entity panel;panel.name=L"Floor puzzle panel";panel.position=point;
                 if(mesh.panels.required) {
-                    if(!mesh.panels.ready) {resetNavAudio();return std::wstring(noSafePanelRoute)+L" "+label;}
+                    if(!mesh.panels.ready) {recordLog("floor panel guide route refused: %s",mesh.panels.gap?mesh.panels.gap:"panel facts not ready");resetNavAudio();return std::wstring(noSafePanelRoute)+L" "+label;}
                     panel.panelLocal=localPanel;panel.worker=mesh.panels.rows[localPanel-57].worker;
                     panel.position=mesh.panels.rows[localPanel-57].center;panel.name=zanarkandGlyphLabel(localPanel);
                     const auto directions=path(observation,mesh,entities,panel,false,manual,intentRevision,L"Step onto the named panel.");

@@ -14,6 +14,12 @@ inline bool panelFactsFresh(unsigned revision,ULONGLONG capturedAt,ULONGLONG now
         capturedAt && now>=capturedAt && now-capturedAt<=250; // Same bound as navigation intent dispatch.
 }
 
+// Why panel facts cannot route now, for the log only; nullptr when usable.
+inline const char* panelFactsGap(const FloorPanels& panels,ULONGLONG now) {
+    if(!panels.ready) return panels.gap?panels.gap:"panel facts not ready";
+    return panelFactsFresh(panels.revision,panels.capturedAt,now)?nullptr:"stale panel facts";
+}
+
 inline double collisionBodyRadius(const nav::ActorBody& actor) {
     const auto field=[&](unsigned offset) {float v;std::memcpy(&v,actor.bytes.data()+offset,sizeof(v));return v;};
     return (field(0x5c)+field(0x64))*.5*field(0x4e4);
@@ -29,9 +35,9 @@ inline FloorPanels readFloorPanels(const nav::Scene& observation) {
         result.chunk=script.span.chunk;result.serial=script.span.serial;result.epoch=observation.epoch;
         result.sample=observation.panelSample;result.revision=observation.panelRevision;result.capturedAt=observation.capturedAt;
         if(!observation.geometryValid || !script.guideReady || !script.span.serial || observation.epoch!=script.span.epoch ||
-            observation.playerIndex<0 || unsigned(observation.playerIndex)>=observation.actorCount) return result;
+            observation.playerIndex<0 || unsigned(observation.playerIndex)>=observation.actorCount) {result.gap="scene or guide not ready";return result;}
         result.radius=collisionBodyRadius(observation.actors[observation.playerIndex]);
-        if(!std::isfinite(result.radius) || result.radius<=0) return result;
+        if(!std::isfinite(result.radius) || result.radius<=0) {result.gap="player radius";return result;}
         // A quota can change the guide exemption even before the visible target moves.
         constexpr unsigned bindings[]={0x20000a00,0x5c000004,0x0c000020,0x0c000022,0x0c000024,
             0x0c000025,0x0c000026,0x0c000027,0x0c000028,0x0c000029};
@@ -41,24 +47,24 @@ inline FloorPanels readFloorPanels(const nav::Scene& observation) {
                 const auto& row=script.bindings.rows[j];
                 if(row.binding==bindings[i] && row.high==1 && !row.element) {result.pattern[i]=row.value;found=true;break;}
             }
-            if(!found) return result;
+            if(!found) {result.gap="pattern binding missing";return result;}
         }
         unsigned seen=0;
         for(unsigned i=0;i<observation.count;++i) {
             const auto& w=observation.workers[i];
             if(!w.valid || w.part!=part || w.local<57 || w.local>83) continue;
             const auto index=w.local-57,bit=1u<<index;
-            if(w.type!=6 || w.global!=i || !w.interactions.entryReady || (seen&bit)) return result;
+            if(w.type!=6 || w.global!=i || !w.interactions.entryReady || (seen&bit)) {result.gap="panel worker not ready";return result;}
             seen|=bit;
             if(!(w.interactions.channels&0x20)) continue;
-            if(w.interactions.entries[5]!=2) return result;
+            if(w.interactions.entries[5]!=2) {result.gap="panel entry state";return result;}
             const auto shape=playerEntryRegion(w.geometry,0x20);
-            if(!shape.valid) return result;
+            if(!shape.valid) {result.gap="panel shape";return result;}
             result.active|=bit;
             result.rows[index]={shape.center,std::cos(shape.angle),std::sin(shape.angle),
                 shape.width,shape.depth,static_cast<int>(i)};
         }
-        result.ready=seen==((1u<<27)-1);
+        result.ready=seen==((1u<<27)-1);result.gap=result.ready?nullptr:"panel workers missing";
         return result;
     }
     return result;

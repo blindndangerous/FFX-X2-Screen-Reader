@@ -19,6 +19,7 @@ struct FloorPanels {
     std::array<FloorPanel,27> rows{};std::array<int,10> pattern{};
     uintptr_t chunk=0;unsigned serial=0,epoch=0,revision=0,sample=0,active=0;
     ULONGLONG capturedAt=0;double radius=0;bool required=false,ready=false;
+    const char* gap="no panel map script"; // First unready fact, for the log only.
 };
 struct Mesh { std::vector<Triangle> triangles; bool openPlane=false,fixedHeight=false; double planeY=0;
     int playerTriangle=-1; Point player; bool swimmingFloor=false; std::vector<std::array<double,3>> floorY;
@@ -88,6 +89,8 @@ double panelLegCorridor(const FloorPanels&,unsigned exempt,Point,Point);
 bool insidePanel(const FloorPanel&,Point);
 bool touchesPanel(const FloorPanel&,Point,Point,double margin);
 std::vector<Point> panelSafeRoute(const Mesh&,const Entity&,const std::vector<Point>&);
+// Why this thread's last panel route came back empty, for the log only.
+extern thread_local const char* panelRouteGap;
 bool routeLineClear(const Mesh&,Point,Point,double& coveredUntil);
 // Besaid and Kilika pedestals start their push script on body contact. Give
 // every other target's zone that pedestal as an obstacle to walk around.

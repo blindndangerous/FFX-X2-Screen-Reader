@@ -334,17 +334,22 @@ double panelLegCorridor(const FloorPanels& panels,unsigned exempt,Point a,Point 
     }
     return clearance;
 }
+thread_local const char* panelRouteGap=nullptr;
 std::vector<Point> panelSafeRoute(const Mesh& mesh,const Entity& target,const std::vector<Point>& base) {
     const auto& panels=mesh.panels;
-    if(!panels.required || !panels.ready || !panelFactsFresh(panels.revision,panels.capturedAt,GetTickCount64()) ||
-        base.size()<2 || !mesh.events.ready) return {};
+    const auto refuse=[](const char* why) {panelRouteGap=why;return std::vector<Point>{};};
+    if(!panels.required) return refuse("panel map not required");
+    if(const auto gap=panelFactsGap(panels,GetTickCount64())) return refuse(gap);
+    if(base.size()<2) return refuse("no floor route under the panels");
+    if(!mesh.events.ready) return refuse("route events not ready");
+    panelRouteGap=nullptr;
     unsigned forbidden=panels.active;
     if(target.panelLocal) {
-        if(target.panelLocal<57 || target.panelLocal>83) return {};
+        if(target.panelLocal<57 || target.panelLocal>83) return refuse("target panel out of range");
         const unsigned i=target.panelLocal-57;
         const auto& targetPanel=panels.rows[i];
         if(!(forbidden&(1u<<i)) || target.worker!=targetPanel.worker ||
-            !touchesPanel(targetPanel,base.back(),base.back(),-.25)) return {};
+            !touchesPanel(targetPanel,base.back(),base.back(),-.25)) return refuse("target panel inactive, moved or not at route end");
         forbidden&=~(1u<<i);
     }
     const auto clear=[&](Point a,Point b) {
@@ -356,12 +361,13 @@ std::vector<Point> panelSafeRoute(const Mesh& mesh,const Entity& target,const st
     bool direct=true;
     for(size_t i=1;i<base.size();++i) if(!clear(base[i-1],base[i])) {direct=false;break;}
     if(direct) return base;
-    if(!clear(base.front(),base.front()) || !clear(base.back(),base.back())) return {};
+    if(!clear(base.front(),base.front())) return refuse("player touches an active panel");
+    if(!clear(base.back(),base.back())) return refuse("destination touches an active panel");
 
     // Retain the base path's floor connectivity. New visibility edges must
     // pass both the panel test and the collision mesh's full segment test.
     // Do not replace a pedestal keep-out or scripted approach with a shortcut.
-    if(target.zone.obstacleRadius>0 || target.zone.contactRadius>0) return {};
+    if(target.zone.obstacleRadius>0 || target.zone.contactRadius>0) return refuse("blocked route to a keep-out target");
     const VisibilityIndex floor(mesh);std::vector<VisibilityIndex::Work> scratch;
     std::vector<Point> nodes=base;
     for(unsigned i=0;i<panels.rows.size();++i) if(forbidden&(1u<<i)) {
@@ -382,7 +388,7 @@ std::vector<Point> panelSafeRoute(const Mesh& mesh,const Entity& target,const st
         nav::checkComputation();
         size_t at=nodes.size();double best=std::numeric_limits<double>::infinity();
         for(size_t i=0;i<nodes.size();++i) if(!visited[i] && costs[i]<best) {best=costs[i];at=i;}
-        if(at==nodes.size()) return {};
+        if(at==nodes.size()) return refuse("no detour around active panels");
         if(at==goal) break;
         visited[at]=true;
         for(size_t i=1;i<nodes.size();++i) {

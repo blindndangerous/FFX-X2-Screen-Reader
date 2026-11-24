@@ -23,7 +23,7 @@ std::vector<Point> navigationRoute(const Mesh& mesh,Point origin,const Entity& t
     return butterflyRoute(mesh,origin,fresh,hazards(butterflyTargets()));
 }
 std::vector<Point> navigationRouteOwned(const Mesh& mesh,Point origin,const Entity& target,const std::vector<Entity>& liveTargets) {
-    if(mesh.panels.required && (target.butterfly || target.swimDepth)) return {};
+    if(mesh.panels.required && (target.butterfly || target.swimDepth)) {panelRouteGap="butterfly or swimming target";return {};}
     if(target.swimDepth) return swimmingRoute(mesh,origin,target);
     if(!target.butterfly) {
         auto current=target;avoidContactPedestals(current,liveTargets);

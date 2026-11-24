@@ -248,8 +248,8 @@ void pathfind(const Pending& event,bool assist=false) {
             emit(event,L"Auto walk not resumed: Rail pedestal. Press "+modKeyName(ModKey::Route)+L".","navigation-path",false);
         return;
     }
-    if(s.mesh.panels.required && (!s.mesh.panels.ready || !panelFactsFresh(s.mesh.panels.revision,s.mesh.panels.capturedAt,GetTickCount64()))) {
-        resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;
+    if(s.mesh.panels.required) if(const auto gap=panelFactsGap(s.mesh.panels,GetTickCount64())) {
+        recordLog("floor panel route refused: %s (age-ms=%llu)",gap,GetTickCount64()-s.mesh.panels.capturedAt);resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;
     }
     if(!s.mesh.events.ready) {resetNavAudio();emit(event,L"Navigation data is unavailable. Waiting for the field to become ready.","navigation-data-unavailable");return;}
     if(!assist) {
@@ -290,7 +290,10 @@ void pathfind(const Pending& event,bool assist=false) {
     if(start<0 || end<0) {resetNavAudio();emit(event,label(target)+(start<0?L": player is outside the mapped floor":L": destination is outside the mapped floor"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;}
     const auto points=navigationRouteOwned(s.mesh,player,target,s.entities);
     if(points.empty()) {
-        if(s.mesh.panels.required) {resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;}
+        if(s.mesh.panels.required) {
+            recordLog("floor panel route refused: %s (target W%d panel %u, active %08x)",panelRouteGap?panelRouteGap:"no route",target.worker,target.panelLocal,s.mesh.panels.active);
+            resetNavAudio();emit(event,noSafePanelRoute,"navigation-action-refused");return;
+        }
         if(target.zone.valid) for(const auto& row:interactionRouteDiagnostics(s.mesh,player,target,s.entities)) recordLog("%s",row.c_str());
         resetNavAudio();emit(event,label(target)+(target.zone.valid?L": no reachable interaction zone on the connected floor":L": no connected collision route"),"navigation-path");if(assist) intent(event,target,nav::Intent::AssistFailed);return;
     }

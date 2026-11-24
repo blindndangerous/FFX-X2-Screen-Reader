@@ -49,6 +49,7 @@ void resetNavAudio() {if(!inspectTarget) unexpectedFixtureCall();}
 void routeNavAudio(const std::vector<Point>&,const Entity&,bool) {unexpectedFixtureCall();}
 int setting(Setting) {unexpectedFixtureCall();}
 bool inInteractionZone(const InteractionZone&,Point) {if(railControlNames) return railInZone;unexpectedFixtureCall();}
+thread_local const char* panelRouteGap=nullptr;
 std::vector<Point> navigationRouteOwned(const Mesh&,Point,const Entity& target,const std::vector<Entity>&) {
     if(inspectTarget) throw TargetObserved{target};unexpectedFixtureCall();
 }

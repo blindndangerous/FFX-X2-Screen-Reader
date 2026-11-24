@@ -319,6 +319,7 @@ void startAutoWalk(bool announce) {
         output(L"Auto walk unavailable: Dive has no configured control",false,"auto-walk"); return;
     }
     if(leg.panelRevision && !panelFactsFresh(leg.panelRevision,leg.panelCapturedAt,GetTickCount64())) {
+        recordLog("floor panel walk refused: stale panel facts (age-ms=%llu)",GetTickCount64()-leg.panelCapturedAt);
         output(noSafePanelRoute,false,"auto-walk");return;
     }
     maskPanelRevision=leg.panelRevision;maskPanelSample=leg.panelSample;maskPanelAt=leg.panelCapturedAt;
