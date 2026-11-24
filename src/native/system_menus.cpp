@@ -64,6 +64,7 @@ void yesNo(Event& e) {
     queueCursor=false;
 }
 void esc(Event& e) {
+    if(escHelpRepeatsReplay(e.args[0])) return;
     if(announceEscSetting(e.args[0])) return;
     resetSelectionDetail();
     const auto id=read<unsigned>(e.args[0]);

@@ -11,6 +11,11 @@ thread_local int page=-1,row=-1;
 bool bindingHelp=false;
 uintptr_t popupOwner=0;unsigned popupEpoch=0;bool popupYes=false;
 ReadyBytes<512> popupText,popupYesText,popupNoText;
+// Native Esc reopens on Resume but its help callback fires only when focus
+// changes, so closing on Resume made the next open silent. Keep the last help
+// identity as plain values (not the native pointer) to replay that one case.
+struct EscHelp {unsigned id=0;int16_t page=-1,row=-1;};
+EscHelp lastHelp;bool replayedResume=false;
 void endPopup() {if(popupOwner) {popupOwner=0;resetEscCapture();(void)beginSelectionDetail();}}
 
 void popupFocus(bool opening) {
@@ -73,6 +78,13 @@ void escVisibility(Event& e) {
     // +70 is unchanged in both pinned layouts. This covers Esc closure even
     // when no popup-confirmed callback is delivered.
     if(e.ecx==popupOwner && !e.args[0]) endPopup();
+    const auto menu=read<uintptr_t>(address(0x8cc868));
+    if(!menu || e.ecx!=menu) return;
+    if(!static_cast<uint8_t>(e.args[0])) {replayedResume=false;return;}
+    if(read<uint8_t>(menu+0x70) || bindingHelp || lastHelp.id!=0x218) return;
+    uint8_t entry[8]{};
+    std::memcpy(entry,&lastHelp.id,4);std::memcpy(entry+4,&lastHelp.page,2);std::memcpy(entry+6,&lastHelp.row,2);
+    replayedResume=announceEscSetting(reinterpret_cast<uintptr_t>(entry));
 }
 void focusBefore(Event&) { focusing=true; page=row=-1; bindingHelp=false; }
 void specialControls(uintptr_t entry,EscPacket& packet) {
@@ -198,6 +210,11 @@ bool announceEscSetting(uintptr_t entry) {
     packet.detail=beginSelectionDetail();packet.automatic=setting(Setting::AutoDetail)!=0;
     commitEscPacket(packet);return true;
 }
+bool escHelpRepeatsReplay(uintptr_t entry) {
+    const EscHelp help{read<unsigned>(entry),read<int16_t>(entry+4,-1),read<int16_t>(entry+6,-1)};
+    const bool repeat=replayedResume && help.id==lastHelp.id && help.page==lastHelp.page && help.row==lastHelp.row;
+    replayedResume=false;lastHelp=help;return repeat;
+}
 bool escMenuActive() {
     // 690130 drives native Esc visibility and invokes onEscClose using +70.
     const auto menu=read<uintptr_t>(address(0x8cc868));
@@ -218,7 +235,8 @@ void installEscDetails() {
     hook(0x301760,bindingBefore,bindingAfter);hook(0x301f40,bindingBefore,bindingAfter);
     hook(0x2e88b0,featureBefore,featureAfter);
 }
-void resetEscDetails() { focusing=false;page=row=-1;bindingHelp=false;popupOwner=0;popupEpoch=0;popupYes=false;popupText={};popupYesText={};popupNoText={};resetEscCapture(); }
+// lastHelp survives resets: the native Esc movie keeps its focus across loads.
+void resetEscDetails() { replayedResume=false;focusing=false;page=row=-1;bindingHelp=false;popupOwner=0;popupEpoch=0;popupYes=false;popupText={};popupYesText={};popupNoText={};resetEscCapture(); }
 int escVideoFieldIndex(unsigned field) {
     if(page!=111) return -1;
     for(unsigned i=0;i<_countof(escVideoFields);++i) if(escVideoFields[i]==field) return static_cast<int>(i);

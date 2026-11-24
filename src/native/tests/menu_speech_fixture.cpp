@@ -52,6 +52,7 @@ void resetEscDetails() {}
 void installNaming() {}
 void resetNaming() {}
 bool announceEscSetting(uintptr_t) {return false;}
+bool escHelpRepeatsReplay(uintptr_t) {return false;}
 bool escMenuActive() {return false;}
 bool readEscControls() {return false;}
 bool readHelpControls() {return false;}

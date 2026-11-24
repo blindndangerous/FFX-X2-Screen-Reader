@@ -12,6 +12,16 @@ void escFocusFixtures() {
     set<unsigned>(entry,0x218);set<int16_t>(entry+4,1);set<int16_t>(entry+6,0);
     event(0x28e6e0,address(entry));expect(L"Resume","Escape highlights speak the actual option name");
     keys['I'](false);expect(L"Resume game","Escape manual detail is the displayed help");
+    {
+        Event shown;shown.ecx=address(config)+0x1000;
+        auto visible=[&](bool on){shown.args[0]=on;for(auto h:listeners[0x628ef0])if(h.enter)h.enter(shown);set<uint8_t>(config+0x1070,on);drainSpeechDomainsForTest();};
+        visible(false);auto at=said.size();visible(true);
+        check(said.size()==at+1 && said.back().first==L"Resume","reopening Esc on Resume speaks Resume without a native focus change");
+        event(0x28e6e0,address(entry));drainSpeechDomainsForTest();check(said.size()==at+1,"a native Resume callback right after the replay is not spoken twice");
+        set<unsigned>(entry,0x21a);event(0x28e6e0,address(entry));drainSpeechDomainsForTest();
+        visible(false);at=said.size();visible(true);check(said.size()==at,"reopening after leaving another option waits for the native focus change");
+        set<unsigned>(entry,0x218);event(0x28e6e0,address(entry));expect(L"Resume","native reset to Resume is spoken");
+    }
     set<uint8_t>(0x1685f70,1); // Underlying Sphere Grid description must not win.
     set<unsigned>(entry,0x222);set<int16_t>(entry+4,11);set<int16_t>(entry+6,0);
     event(0x28e6e0,address(entry));expect(L"Audio","System submenu speaks its label");

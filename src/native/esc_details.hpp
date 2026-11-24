@@ -2,6 +2,7 @@
 #include "events.hpp"
 namespace ffx {
 bool announceEscSetting(uintptr_t entry);
+bool escHelpRepeatsReplay(uintptr_t entry);
 bool escMenuActive();
 bool readEscControls();
 void installEscDetails();
