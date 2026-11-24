@@ -267,6 +267,14 @@ int main() {
     begin(); pedestalSawMovement=false; autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkReaderModifier(false);
     check(!pedestalSawMovement,"a reader chord in the window-message path is not pedestal movement");
     autoWalkPlayerInput(VK_DOWN); check(pedestalSawMovement,"a plain window-message Down is still pedestal movement");
+    // ffx-lvi: NVDA keeps Insert and Caps Lock from DirectInput and passes the
+    // Escape on alone. Only the low-level hook still sees the modifier.
+    begin(); autoWalkReaderHook(true); keys={}; keys[0x01]=0x80; autoWalkKeyboard(keys.data());
+    check(autoWalkActive() && !keys[0x01],"Escape with a hook-only reader modifier neither cancels nor reaches the game");
+    autoWalkReaderModifier(false); autoWalkPlayerInput(VK_ESCAPE); updateAutoWalk();
+    check(autoWalkActive(),"message-path Escape with a hook-only reader modifier does not cancel");
+    autoWalkReaderHook(false); keys={}; autoWalkKeyboard(keys.data()); keys[0x01]=0x80; autoWalkKeyboard(keys.data()); updateAutoWalk();
+    check(!autoWalkActive(),"Escape after the hook sees the modifier released still cancels");
     begin(); autoWalkReaderModifier(true); autoWalkPlayerInput(VK_DOWN); autoWalkPlayerInput(VK_RETURN); updateAutoWalk();
     check(autoWalkActive(),"message-path arrow and Enter with a reader modifier held do not cancel");
     autoWalkReaderModifier(false); autoWalkPlayerInput(VK_DOWN); updateAutoWalk();

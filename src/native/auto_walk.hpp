@@ -32,6 +32,8 @@ void autoWalkPlayerInput(unsigned vk);
 // Input owners publish whether Insert, Numpad Insert or Caps Lock is held before
 // reporting key presses; those screen-reader chords never cancel auto walk.
 void autoWalkReaderModifier(bool held);
+// Insert or Caps Lock held as seen by the low-level keyboard hook.
+void autoWalkReaderHook(bool held);
 unsigned autoWalkInputRevision(); // Copied manual-input cancellation token for delayed routes.
 void installAutoWalk();
 using NavigationKeyboardAssist=void(*)(uint8_t*);

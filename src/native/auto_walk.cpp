@@ -114,6 +114,10 @@ std::array<unsigned,8> swimManualScans{};
 constexpr unsigned readerModifierScans[]={0xd2,0x52,0x3a};
 constexpr unsigned cancelScans[]={0x11,0x1e,0x1f,0x20,0xc8,0xd0,0xcb,0xcd,0x1c,0x01};
 std::atomic<bool> readerModifier{false};
+// Insert or Caps Lock held, seen by the mod's low-level keyboard hook. NVDA
+// keeps its modifier keys from DirectInput and the key state, but passes the
+// unbound Escape on, so the game alone saw a bare Escape.
+std::atomic<bool> hookModifier{false};
 std::array<bool,256> readerOwned{},physicalDown{}; // DirectInput poll owner only
 // Keys held while the mod menu was open stay the menu's until released. The
 // Enter that activated "Read path to current step" otherwise bumped the manual
@@ -679,7 +683,8 @@ void updateAutoWalk() {
     if(pushStandFinal) {auto aimed=leg;aimed.goal=steer;mask=precisionInput(octMasks[desired],aimed,player,true);stamp=now;return;}
     mask=precisionInput(octMasks[desired] | (leg.target.swimDepth?16u:0u),leg,player); stamp=now;
 }
-void autoWalkReaderModifier(bool held) {readerModifier=held;}
+void autoWalkReaderHook(bool held) {hookModifier=held;}
+void autoWalkReaderModifier(bool held) {readerModifier=held || hookModifier.load();}
 void autoWalkPlayerInput(unsigned vk) {
     // Reader chords belong to the screen reader: neither auto walk nor an armed
     // pedestal approach may take them as manual movement.
@@ -694,7 +699,7 @@ void autoWalkPlayerInput(unsigned vk) {
     }
 }
 void autoWalkKeyboard(uint8_t* keys) {
-    bool modifier=false;
+    bool modifier=hookModifier.load();
     for(unsigned scan:readerModifierScans) if(keys[scan]&0x80) modifier=true;
     readerModifier=modifier;
     const bool menu=modMenuActive();

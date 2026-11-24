@@ -200,9 +200,35 @@ bool capturesKey(unsigned vk,bool shift,bool control) {
     const auto& binding=bindings[vk];
     return binding.handler && (!binding.available || binding.available());
 }
+#ifndef FFX_READER_TEST
+namespace {
+// NVDA's keyboard hook takes its modifier keys (Insert, Caps Lock) away from
+// the game, then passes an unbound key such as Escape on alone. A low-level
+// hook installed after NVDA's runs before it, so it still sees the modifier.
+// It only records the two keys; every key goes on unchanged.
+std::atomic<bool> hookInsert{false},hookCaps{false};
+LRESULT CALLBACK readerModifierHook(int code,WPARAM message,LPARAM data) {
+    if(code==HC_ACTION) {
+        const auto& key=*reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
+        const bool down=message==WM_KEYDOWN || message==WM_SYSKEYDOWN;
+        if(key.vkCode==VK_INSERT) hookInsert=down;else if(key.vkCode==VK_CAPITAL) hookCaps=down;
+        if(key.vkCode==VK_INSERT || key.vkCode==VK_CAPITAL) autoWalkReaderHook(hookInsert.load() || hookCaps.load());
+    }
+    return CallNextHookEx(nullptr,code,message,data);
+}
+DWORD WINAPI readerModifierThread(void*) {
+    if(!SetWindowsHookExW(WH_KEYBOARD_LL,readerModifierHook,GetModuleHandleW(nullptr),0)) return 1;
+    MSG message;while(GetMessageW(&message,nullptr,0,0)>0) {}
+    return 0;
+}
+}
+#endif
 void installInput() {
 #if defined(FFX_DEV_UTILITIES) && !defined(FFX_READER_TEST)
     startDevPipe();
+#endif
+#ifndef FFX_READER_TEST
+    if(const auto thread=CreateThread(nullptr,0,readerModifierThread,nullptr,0,nullptr)) CloseHandle(thread);
 #endif
     const auto user = GetModuleHandleW(L"user32.dll");
     const char* names[] = {"PeekMessageA", "PeekMessageW", "GetMessageA", "GetMessageW"};
