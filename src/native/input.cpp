@@ -174,7 +174,10 @@ bool consumeKey(unsigned vk,bool shift,bool control) {
     const bool captured=activity || capturesKey(vk,shift,control);
     // Unbound function keys belong to the game/screen reader, including NVDA
     // history on F12. Do not cancel the addon speech they can initiate.
-    if(captured || vk<VK_F1 || vk>VK_F24) interruptSpeechForInput();
+    // The game can open the Escape menu and commit its first row before this
+    // poll sees the same press. Interrupting then drops that row unspoken.
+    const bool escMenuPress=vk==VK_ESCAPE && !captured && escMenuActive();
+    if((captured || vk<VK_F1 || vk>VK_F24) && !escMenuPress) interruptSpeechForInput();
     if(!captured) return false;
     const bool menu=modMenuActive();
     const auto registeredChord=chord(vk,shift);

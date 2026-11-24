@@ -466,7 +466,10 @@ int main() {
     check(pressed==beforeEsc+3,"equal distinct Escape help requests remain distinct");
     consumeKey('I',false);testEsc=false;drain();check(pressed==beforeEsc+3,"closed Escape retires its pending help key");
     consumeKey('I',false);testEsc=true;fire(0x225930,{});
-    check(pressed==beforeEsc+3,"opening Escape does not replay an underlying field command");testEsc=false;
+    check(pressed==beforeEsc+3,"opening Escape does not replay an underlying field command");
+    {const auto beforeOpen=speechInputs;consumeKey(VK_ESCAPE,false);check(speechInputs==beforeOpen,"Escape seen after its menu opened keeps the first row speech");}
+    testEsc=false;
+    {const auto beforeField=speechInputs;consumeKey(VK_ESCAPE,false);check(speechInputs==beforeField+1,"Escape outside its menu still interrupts speech");}
     check(consumeKey('I',false),"native Help captures manual help");fire(0x225930,{});
     check(pressed==beforeEsc+4,"native Help also dispatches I without field-input events");
     // Original 76F580 always calls 776220 after reading menu input. Help can
