@@ -101,7 +101,7 @@ void publishLeg() {
         if(s.collision.panels.required) {
             const auto& panels=s.collision.panels;
             if(!panels.ready || !panelFactsFresh(panels.revision,panels.capturedAt,GetTickCount64())) {publishEmpty();return;}
-            p.leg.panelSample=panels.sample;p.leg.panelRevision=panels.revision;p.leg.panelCapturedAt=panels.capturedAt;
+            p.leg.panelRevision=panels.revision;p.leg.panelCapturedAt=panels.capturedAt;
             p.leg.panelCorridor=panelLegCorridor(panels,s.target.panelLocal,p.leg.start,p.leg.goal)-panels.radius;
         }
         OwnedNavTarget copied;std::memset(&copied,0,sizeof(copied));if(!captureOwnedNavTarget(s.target,copied)) {publishEmpty();return;}p.leg.target=copied.native;

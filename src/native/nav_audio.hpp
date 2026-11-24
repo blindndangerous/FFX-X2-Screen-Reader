@@ -27,7 +27,7 @@ struct NavAudioState {unsigned contextSerial=navAudioContextSerial(); float pan=
 struct NavLeg { Point start,goal,final; NativeRouteTarget target; unsigned epoch=0; bool arrived=false;
     unsigned collisionSerial=navCollisionSerial();bool pendingCollision=false;unsigned arrivalSerial=0;
     Point arrivalInside;bool arrivalUnreachable=false;
-    unsigned panelRevision=0,panelSample=0;ULONGLONG panelCapturedAt=0;double panelCorridor=0; };
+    unsigned panelRevision=0;ULONGLONG panelCapturedAt=0;double panelCorridor=0; };
 bool navLeg(NavLeg&);
 void publishNavAudio(const NavAudioState&);
 void pauseNavAudio();

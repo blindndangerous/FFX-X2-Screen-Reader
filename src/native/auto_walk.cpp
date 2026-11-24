@@ -35,7 +35,7 @@ std::atomic<unsigned> manualRevision{1};
 std::atomic<unsigned> routeFailures{0};
 std::atomic<unsigned> mask{0},maskEpoch{0};
 std::atomic<unsigned> maskCollisionSerial{0};
-std::atomic<unsigned> maskPanelRevision{0},maskPanelSample{0};
+std::atomic<unsigned> maskPanelRevision{0};
 std::atomic<uint64_t> maskPanelAt{0},stamp{0};
 uint64_t panelPendingSince=0;
 unsigned epoch=0,panelDrain=0,panelPulse=0,panelBits=0;
@@ -260,7 +260,7 @@ unsigned command() {
     if(const auto reason=unsafeReason())
         if(!bandSteerSince || now-bandSteerSince>BandSteerMs || std::wcscmp(reason,ControlDisabled)!=0 || nativeVisibleMessageText()) return 0;
     const auto panelRevision=maskPanelRevision.load();
-    if(panelRevision && (maskPanelSample.load()!=floorPanelSample.load() || !panelMovementFresh(panelRevision,maskPanelAt.load(),GetTickCount64()))) return 0;
+    if(panelRevision && !panelMovementFresh(panelRevision,maskPanelAt.load(),GetTickCount64())) return 0;
     return mask.load();
 }
 void textOpened(Event& e) {
@@ -322,7 +322,7 @@ void startAutoWalk(bool announce) {
         recordLog("floor panel walk refused: stale panel facts (age-ms=%llu)",GetTickCount64()-leg.panelCapturedAt);
         output(noSafePanelRoute,false,"auto-walk");return;
     }
-    maskPanelRevision=leg.panelRevision;maskPanelSample=leg.panelSample;maskPanelAt=leg.panelCapturedAt;
+    maskPanelRevision=leg.panelRevision;maskPanelAt=leg.panelCapturedAt;
     panelDrain=PedestalDrainFrames;panelPulse=panelBits=0;panelPendingSince=0;
     walking=leg.target; resumePhase=ResumeNone;
     epoch=generation(); maskEpoch=epoch; previous=0; octant=-1; best=-1;collisionPendingSince=0;waypointReached=false;
@@ -395,7 +395,7 @@ void updateAutoWalk() {
     }
     if(leg.panelRevision && floorPanelScriptActive.load()) {mask=0;panelPulse=0;panelDrain=PedestalDrainFrames;return;}
     if(leg.panelRevision && leg.arrived) {stop("arrived");return;}
-    if(leg.panelRevision && (leg.panelSample!=floorPanelSample.load() || leg.panelRevision!=floorPanelRevision.load())) {
+    if(leg.panelRevision && leg.panelRevision!=floorPanelRevision.load()) {
         if(mask.exchange(0)) {panelPulse=0;panelDrain=PedestalDrainFrames;}
         else if(panelDrain) --panelDrain;
         if(!panelPendingSince) {panelPendingSince=now;refreshNavCollision();}
@@ -403,7 +403,7 @@ void updateAutoWalk() {
         return;
     }
     panelPendingSince=0;
-    maskPanelRevision=leg.panelRevision;maskPanelSample=leg.panelSample;maskPanelAt=leg.panelCapturedAt;
+    maskPanelRevision=leg.panelRevision;maskPanelAt=leg.panelCapturedAt;
     // Withhold only synthetic input while the worker rebuilds a changed gate.
     // No wait occurs on this owner. An unavailable result stops immediately;
     // a pending result has the existing600ms field-recovery bound.

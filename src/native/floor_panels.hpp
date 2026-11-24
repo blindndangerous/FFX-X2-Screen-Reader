@@ -50,7 +50,7 @@ inline FloorPanels readFloorPanels(const nav::Scene& observation) {
         if(script.span.chunk!=observation.primary || !script.panelMap) continue;
         result.required=true;
         result.chunk=script.span.chunk;result.serial=script.span.serial;result.epoch=observation.epoch;
-        result.sample=observation.panelSample;result.revision=observation.panelRevision;result.capturedAt=observation.capturedAt;
+        result.revision=observation.panelRevision;result.capturedAt=observation.capturedAt;
         if(!result.revision) {result.gap="panel state unverified";return result;}
         if(!observation.geometryValid || !script.guideReady || !script.span.serial || observation.epoch!=script.span.epoch ||
             observation.playerIndex<0 || unsigned(observation.playerIndex)>=observation.actorCount) {result.gap="scene or guide not ready";return result;}

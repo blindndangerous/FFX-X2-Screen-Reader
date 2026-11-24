@@ -57,7 +57,8 @@ int main() {
     Entity panel;panel.worker=9;panel.panelLocal=66;panel.name=L"Floor panel 11";panel.position=panels.rows[9].center;
     speechq::Header panelHeader{};panelHeader.generation=epoch;
     auto observePanels=[&] {
-        nativeOwner=false;observation.player=player;panels.capturedAt=GetTickCount64();
+        // Live Dome captures land almost every frame; each one counts a sample.
+        ++floorPanelSample;nativeOwner=false;observation.player=player;panels.capturedAt=GetTickCount64();
         updateOwnedNavAudio(observation,mesh,{},panelHeader,L"");
     };
     observePanels();const auto detour=navigationRouteOwned(mesh,player,panel,{});

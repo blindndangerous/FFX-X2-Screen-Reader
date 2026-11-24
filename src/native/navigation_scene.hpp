@@ -27,7 +27,7 @@ struct SceneBindings {std::array<SceneValue,32> rows{};unsigned count=0;};
 struct PartFact {bool panelMap=false;AtelSpan span;SceneBindings bindings;bool bindingsReady=false,butterflyExiting=false,guideReady=false,bindingsExpected=false,identityReady=false;};
 struct Scene {
     ULONGLONG capturedAt=0;
-    unsigned panelRevision=0,panelSample=0;
+    unsigned panelRevision=0;
     unsigned epoch=0,revision=0,count=0,actorCount=0,partCount=0,room=0,area=0;
     int playerIndex=-1;
     uintptr_t controller=0,primary=0;

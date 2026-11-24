@@ -17,7 +17,7 @@ struct Triangle { int vertices[3]{}, neighbours[3]{}; unsigned collision = 0, co
 struct FloorPanel {Point center;double cosine=1,sine=0,width=0,depth=0;int worker=-1;};
 struct FloorPanels {
     std::array<FloorPanel,27> rows{};std::array<int,10> pattern{};
-    uintptr_t chunk=0;unsigned serial=0,epoch=0,revision=0,sample=0,active=0;
+    uintptr_t chunk=0;unsigned serial=0,epoch=0,revision=0,active=0;
     ULONGLONG capturedAt=0;double radius=0;bool required=false,ready=false;
     const char* gap="no panel map script"; // First unready fact, for the log only.
 };

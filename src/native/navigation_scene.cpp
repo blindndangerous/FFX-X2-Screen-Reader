@@ -182,7 +182,9 @@ bool panelScriptInvalidatesCapture(uintptr_t chunk,bool knownOwner) {
 }
 bool captureNavigationScene(Scene& s,unsigned revision,bool needGeometry) {
     if(!nativeGameThread()) return false;
-    s.panelSample=floorPanelChunk.load()?floorPanelSample.fetch_add(1)+1:floorPanelSample.load();
+    // Counted for the panel log only. The panel revision alone guards routes:
+    // a capture lands almost every Dome frame, after the leg was published.
+    if(floorPanelChunk.load()) floorPanelSample.fetch_add(1);
     s.panelRevision=floorPanelScriptActive.load()?0:floorPanelRevision.load();s.capturedAt=GetTickCount64();s.audioContext=navAudioContextSerial();s.collisionSerial=navCollisionSerial();
     s.epoch=generation();s.revision=revision;s.count=s.actorCount=s.partCount=s.areaNameCount=0;s.playerIndex=-1;s.geometryValid=s.surfaceReady=false;
     s.baajFactsReady=false;s.baajTreasureFlags=s.baajActivatedCount=-1;

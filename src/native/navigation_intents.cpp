@@ -107,7 +107,7 @@ bool qualify(unsigned slot,unsigned token) {
         // movement starts. Never start a route against obsolete ledge facts.
         if(f.collisionSerial!=navCollisionSerial() || !f.events.ready || !sameRouteEvents(f.events,captureRouteEvents(controller))) return rejected("collision serial or route events",f.collisionSerial,navCollisionSerial());
         if(f.panelRevision && !panelMovementFresh(f.panelRevision,f.capturedAt,now)) return rejected("floor panel state");
-        NavLeg leg;if(!navLeg(leg) || leg.pendingCollision || leg.panelRevision!=f.panelRevision || (f.panelRevision && leg.panelSample!=floorPanelSample.load()) || leg.target.panelLocal!=f.target.panelLocal || leg.target.worker!=f.target.worker || leg.target.id!=f.target.id || leg.target.pushControl!=f.target.pushControl || leg.target.pushLocal!=f.target.pushLocal) return rejected("route leg");
+        NavLeg leg;if(!navLeg(leg) || leg.pendingCollision || leg.panelRevision!=f.panelRevision || leg.target.panelLocal!=f.target.panelLocal || leg.target.worker!=f.target.worker || leg.target.id!=f.target.id || leg.target.pushControl!=f.target.pushControl || leg.target.pushLocal!=f.target.pushLocal) return rejected("route leg");
         if(f.pointOnly && distanceXZ(leg.final,f.target.position)>.1) return rejected("route end");
     }
     return true;

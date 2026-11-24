@@ -185,6 +185,25 @@ int main() {try {
         check(freshPanels(),"restored worker identity qualifies on a complete recapture");
         Event unknown{};unknown.epoch=generation();script.before(unknown);script.after(unknown);
         check(!freshPanels(),"unreadable interpreter owner invalidates the capture");
+        // The live Dome captures a scene almost every frame, so one lands
+        // between the leg publication and the queued start (ffx-s4).
+        // A flat two-triangle floor; the panels lie on the diagonal far beyond the goal.
+        static std::array<RawNavigationTriangle,2> floor{{{{0,1,2},{-1,-1,1},0},{{0,2,3},{0,-1,-1},0}}};
+        static std::array<RawNavigationVertex,4> corners{{{{-200,0,-200,0}},{{200,0,-200,0}},{{200,0,200,0}},{{-200,0,200,0}}}};
+        static std::array<uint8_t,12> floorRoot{};put(floorRoot.data()+0xa,int16_t{4});
+        triangleCount=2;trianglesPointer=reinterpret_cast<uintptr_t>(floor.data());
+        verticesPointer=reinterpret_cast<uintptr_t>(corners.data());rootPointer=reinterpret_cast<uintptr_t>(floorRoot.data());
+        panels=capturePanels();check(freshPanels(),"Dome start fixture begins settled");const auto origin=playerPosition();
+        const Point goal{origin.x+5,origin.y,origin.z+10};
+        auto domeStarts=[&](bool everyFrame) {
+            const auto before=starts;
+            check(queuePuzzleGuidePoint(goal,-1,false,L"Stand on the activation tile.",UtilityText{}),"admit Dome guide point");
+            for(unsigned i=0;i<3;++i) {if(everyFrame) nav::requestNavigationScene();ownerEvent();work();}
+            return starts==before+1;
+        };
+        check(domeStarts(false),"unchanged Dome floor starts a guide route");
+        check(domeStarts(true),"a newer capture of the unchanged Dome floor keeps the queued start");
+        triangleCount=0;trianglesPointer=verticesPointer=rootPointer=0;
         std::puts("PASS: periodic no-op panel scripts keep facts fresh; state changes and incomplete observations fence movement until settled.");
     }
     // Native encoded title getter: all requested IDs share a controlled ready
