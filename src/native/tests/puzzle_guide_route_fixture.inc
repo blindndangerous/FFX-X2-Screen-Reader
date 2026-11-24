@@ -519,10 +519,12 @@ void zanarkandGuideRouteFixture() {
     const std::vector<GuideWrite> firstVisit={{0x20000a00,2768},{0x5c000004,0},{0x0c000020,0},{0x0c000021,0},{0x0c000022,0},{0x0c000023,0},
         {0x0c000024,0},{0x0c000025,0},{0x0c000027,0},{0x0c000029,0},{0x5c000008,0},{0x5c000010,2},{0x5c00000c,1},{0x5c000018,0},{0x5c00001c,0}};
     walkGuideRoute("dome0700",{
-        {"entry",firstVisit,0},
-        {"step on activation tile",{{0x0c000022,0},{0x0c000023,0}},0},
-        {"partial floor pattern",{{0x0c000022,3}},0},
-        {"wrong active panel resets the initial pattern",{{0x0c000022,0}},0},
+        // The activation tile has no done flag: step 1 until a first-pattern
+        // panel is touched, then step 2, which stays once reached.
+        {"entry",firstVisit,1},
+        {"step on activation tile",{{0x0c000022,0},{0x0c000023,0}},1},
+        {"partial floor pattern",{{0x0c000022,3}},2},
+        {"wrong active panel resets the initial pattern",{{0x0c000022,0}},2},
         {"complete floor pattern",{{0x0c000022,6},{0x0c000023,0}},3},
         {"activate pedestal 1",{{0x5c000004,1},{0x0c000021,1}},3},
         {"complete pedestal 1 pattern",{{0x0c000024,6},{0x0c000020,1}},4},
@@ -537,11 +539,11 @@ void zanarkandGuideRouteFixture() {
         {"insert Kilika recess",{{0x5c000008,0},{0x5c00001c,1},{0x0c000020,6}},11},
         {"gate opens",{{0x0c000020,7}},11},
     });
-    // An unidentified trial state keeps and names the F9/F10 selection.
+    // At the first-visit start Expected keeps an F10 choice of step 2.
     loadGuideRoute("dome0700",{{"entry",firstVisit,0}});
     for(const auto& write:firstVisit) setValue(write.low,write.high,write.value,write.element);
-    guideSays(OwnedGuideAction::Next,L"Step 2 of","manual next before an unidentified state");
-    guideSays(OwnedGuideAction::Expected,L" Step 2 stays selected.","unidentified expected step keeps the selection");
+    guideSays(OwnedGuideAction::Next,L"Step 2 of","manual next at the start");
+    guideSays(OwnedGuideAction::Expected,L"Step 2 of","Expected keeps step 2 chosen at the start");
     resetOwnedPuzzleGuide();
     // W56 (the activation tile) only resets 0x22 and 0x23, which are already
     // 0, so step 1 has no done signal. Its text must send the player to step

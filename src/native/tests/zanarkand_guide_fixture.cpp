@@ -163,6 +163,11 @@ int main(int argc,char** argv) {
         setup(0);query(OwnedGuideAction::Next);set(0x0c000022,6);set(0x5c000004,1);text=query(OwnedGuideAction::Next);
         check(text.find(L"Step 3 of 11")!=std::wstring::npos,"F10 after the first pattern completes reads step 3");
         text=query(OwnedGuideAction::Next);check(text.find(L"Step 4 of 11")!=std::wstring::npos,"the next F10 moves on to step 4");
+        // Live: a completion observation catches the guide up first, without a
+        // word. F10 then still reads step 3.
+        setup(0);query(OwnedGuideAction::Next);set(0x0c000022,6);set(0x5c000004,1);query(OwnedGuideAction::Completed);
+        text=query(OwnedGuideAction::Next);
+        check(text.find(L"Step 3 of 11")!=std::wstring::npos,"F10 after a silent completion catch-up reads step 3");
         std::puts("PASS: Zanarkand Expected start step and F10 catch-up.");
     }
     if(!test || test==4) {

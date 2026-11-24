@@ -30,7 +30,8 @@
 namespace ffx {
 namespace {
 struct ManualPush {int phase=-1;Point position{};bool moving=false;};
-struct State {unsigned epoch=0,revision=0,step=0,expected=0,part=0,begin=0,end=0,railWindow=0;const PuzzleRoute* route=nullptr;int pattern=-1,progress=-1,railPhase=0;std::uint64_t placed=0,removed=0,railLogAt=0;ManualPush manualPush;};
+// read: the step the guide last spoke. Play can move step on without a word.
+struct State {unsigned epoch=0,revision=0,step=0,expected=0,part=0,begin=0,end=0,railWindow=0,read=0;const PuzzleRoute* route=nullptr;int pattern=-1,progress=-1,railPhase=0;std::uint64_t placed=0,removed=0,railLogAt=0;ManualPush manualPush;};
 ProcessStorage<State> storage;
 std::atomic<unsigned> revision{1};std::atomic<bool> enabled{false};
 std::atomic<bool> refreshPending{false};
@@ -110,7 +111,7 @@ bool context(const nav::Scene& observation,State& state) {
         else if(visit==ZanarkandPhase::ReturnVisit) begin=route->returnStep;
         else end=0;
     }
-    if(state.epoch!=observation.epoch || state.revision!=current || state.route!=route || state.begin!=begin || state.end!=end) {state.step=state.expected=begin;state.pattern=state.progress=-1;state.placed=state.removed=0;state.railWindow=0;state.railPhase=0;state.manualPush={};state.epoch=observation.epoch;state.revision=current;state.route=route;state.begin=begin;state.end=end;}
+    if(state.epoch!=observation.epoch || state.revision!=current || state.route!=route || state.begin!=begin || state.end!=end) {state.step=state.expected=state.read=begin;state.pattern=state.progress=-1;state.placed=state.removed=0;state.railWindow=0;state.railPhase=0;state.manualPush={};state.epoch=observation.epoch;state.revision=current;state.route=route;state.begin=begin;state.end=end;}
     return true;
 }
 void synchronizeTiles(const nav::Scene& observation,State& state,unsigned local=0) {
@@ -580,11 +581,12 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
     enabled=true;if(action==OwnedGuideAction::Next || action==OwnedGuideAction::Previous ||
         (action==OwnedGuideAction::Path && state.step==state.expected &&
             (!std::strcmp(state.route->script,"bvyt1100") || !std::strcmp(state.route->script,"bsyt0100")))) {
-        // F9/F10 first catch up with play. When that already moved the
-        // selection to the step now expected, the press lands there: moving
-        // on again skipped it (dome0700 F10 from step 2 read step 4).
-        const auto before=state.step;follow(observation,state);
-        if(state.step!=before && (action==OwnedGuideAction::Next || action==OwnedGuideAction::Previous)) action=OwnedGuideAction::Step;
+        // F9/F10 first catch up with play. When play has moved the selection
+        // on since the guide last spoke (here, or in a completion observation
+        // before), the press lands on the new step: moving on again skipped
+        // it (dome0700 F10 from step 2 read step 4).
+        follow(observation,state);
+        if(state.step!=state.read && (action==OwnedGuideAction::Next || action==OwnedGuideAction::Previous)) action=OwnedGuideAction::Step;
     }
     const bool domeStart=action==OwnedGuideAction::Expected && !std::strcmp(state.route->script,"dome0700");
     if(action==OwnedGuideAction::Next) {if(state.step+1<state.end) ++state.step;}else if(action==OwnedGuideAction::Previous) {if(state.step>state.begin) --state.step;}else if(action==OwnedGuideAction::Expected) {follow(observation,state);
@@ -595,9 +597,10 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
     unsigned selected=action==OwnedGuideAction::Expected?state.expected:state.step;
     // dome0700 first visit: the activation tile (step 1) has no done flag. A
     // first-pattern panel count above 0 shows the player is past it, so step
-    // 2 is expected; before that, step 1 is.
-    const bool domeFirst=domeStart && state.begin==0 && state.expected==0 && state.end>1;
-    if(domeFirst) selected=state.step=value(observation,state,0x0c000022)>0?1u:0u;
+    // 2 is expected; before that, step 1 is, unless F10 already chose step 2.
+    // A later manual selection keeps the unidentified-state answer below.
+    const bool domeFirst=domeStart && state.begin==0 && state.expected==0 && state.end>1 && state.step<=1;
+    if(domeFirst) selected=state.step=value(observation,state,0x0c000022)>0 || state.step==1?1u:0u;
     if(!std::strcmp(state.route->script,"bvyt1100")) {
         if(!observation.parts[state.part].guideReady) return L"The puzzle observations are unavailable.";
         if((action==OwnedGuideAction::Expected || action==OwnedGuideAction::Path) && state.expected<=state.begin+1 &&
@@ -611,6 +614,7 @@ std::wstring puzzleGuideOwned(OwnedGuideAction action,const nav::Scene& observat
         if(state.step!=selected) text+=L" Step "+std::to_wstring(state.step-state.begin+1)+L" stays selected.";
         return text;
     }
+    state.read=selected;
     const auto& current=state.route->steps[selected];const auto prefix=(state.route->returnStep?state.begin>=state.route->returnStep?std::wstring(L"Return-visit treasure. "):std::wstring(L"First-visit trial. "):std::wstring{})+L"Step "+std::to_wstring(selected-state.begin+1)+L" of "+std::to_wstring(state.end-state.begin)+L". ";
 #ifdef FFX_DEV_UTILITIES
     {char event[160];std::snprintf(event,sizeof(event),"script=%s step=%u total=%u expected=%u action=%u",state.route->script,selected-state.begin+1,state.end-state.begin,state.expected-state.begin+1,static_cast<unsigned>(action));devPipeEvent("step",event);}
