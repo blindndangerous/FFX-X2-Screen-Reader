@@ -26,9 +26,16 @@ std::wstring navigationExitName(const AtelScript& script,unsigned worker,int roo
         if(name.empty()) { names.clear(); break; }
         names.push_back(name);
     }
-    else if(room>=0) {
+    else if(room>=0 && areaIndex(room)>=0) {
         const auto name=lookup(areaIndex(room));
         if(!name.empty()) names.push_back(name);
+    }
+    // Rooms with two areas have no generated row (maps_v3 room_areas): the Via
+    // Purifico passages lead to room 209 (areas 244, 245) and room 208 (246, 247).
+    else if(room==208 || room==209) for(const auto index:room==208?std::array<int,2>{246,247}:std::array<int,2>{244,245}) {
+        const auto name=lookup(index);
+        if(name.empty()) { names.clear(); break; }
+        if(std::find(names.begin(),names.end(),name)==names.end()) names.push_back(name);
     }
     // Different subareas of one native location share its own prefix. The
     // game's area selector is collision/ATEL state, not the arrival-point ID.

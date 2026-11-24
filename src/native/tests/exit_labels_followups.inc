@@ -83,6 +83,10 @@ void exitLabelFixtures() {
     AtelScript unknown; unknown.name="changed"; unknown.checksum=ruins.checksum;
     check(navigationExitName(unknown,37,-1,L"Exit")==L"Exit 38","different script cannot adopt hashed catalog destinations");
     check(navigationExitName(unknown,2,-1,L"Exit to the antechamber")==L"Exit 3 to the antechamber","unresolved destination preserves the authored trial role");
+    // Via Purifico: both passage exits said only "Exit 1"; their rooms have two native areas.
+    const auto bevelleName=[](int area) {return area==244 || area==245?std::wstring(L"Bevelle - Via Purifico"):area==246?std::wstring(L"Bevelle - Main Gate"):area==247?std::wstring(L"Highbridge"):std::wstring();};
+    check(navigationExitName(unknown,30,209,L"Exit 1",bevelleName)==L"Exit 1 to Bevelle - Via Purifico","a two-area passage room with one native name names it once");
+    check(navigationExitName(unknown,26,208,L"Exit 1",bevelleName)==L"Exit 1 to Bevelle - Main Gate or Highbridge","a two-area passage room names both native areas");
     const auto winno=retainedExitScript("swin0200","sw");
     const auto winnoName=[](int area) {return area==91?std::wstring(L"S.S. Winno - Deck"):std::wstring(L"Zanarkand");};
     check(navigationExitName(winno,34,191,L"Exit",winnoName)==L"Exit 1 to Jecht Shot challenge","original Jecht trigger names its challenge role instead of the later flashback room");
