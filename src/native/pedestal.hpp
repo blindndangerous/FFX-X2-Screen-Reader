@@ -56,6 +56,8 @@ struct PedestalPlan {
     // A requested walk can continue into the push. Besaid and Kilika use
     // physical contact (Confirm opens the sphere prompt). Bevelle uses W39's edge.
     bool walkConsent=false;
+    // Zanarkand pattern pedestals start a pattern; they never move.
+    bool startsPattern=false;
 };
 static_assert(std::is_trivially_copyable_v<PedestalSnapshot> && std::is_trivially_destructible_v<PedestalPlan>);
 PedestalPlan pedestalPlan(unsigned control,unsigned local,const PedestalSnapshot&);

@@ -328,6 +328,9 @@ void ruleTests() {
       const auto text=describePedestalPlan(p,s.position,L"Confirm");
       check(text.rfind(L"Press Confirm once. The pedestal then moves ",0)==0 && text.find(L"Push ")==std::wstring::npos,"single Confirm push names the button, then the pedestal movement"); }
     for(unsigned local=44;local<=47;++local) { s=snapshot({},{{0x0c000021,0}}); check(pedestalPlan(6,local,s).moves[0].mode==PushMode::Single,"each Zanarkand pedestal activates its pattern once"); }
+    // Zanarkand pattern pedestals stay in place, so the text never says they move.
+    { s=snapshot({},{{0x0c000021,0}}); const auto text=describePedestalPlan(pedestalPlan(6,44,s),s.position,L"C");
+      check(text==L"Press C once to start this pedestal's pattern.","Zanarkand pattern pedestal text names the pattern, not a movement"); }
     bool missingRejected=false;
     try { (void)pedestalPlan(1,7,snapshot({},{{0x5c0000cc,1} })); }
     catch(const std::out_of_range&) { missingRejected=true; }
