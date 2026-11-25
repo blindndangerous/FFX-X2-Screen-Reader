@@ -39,7 +39,7 @@ void drainThroughOneScenePacket() {
     }
     check(deliveredScene,"one held scene packet drains independently");
 }
-unsigned busyNoticeCount() {return static_cast<unsigned>(std::count(said.begin(),said.end(),L"Navigation data is busy. Updates resume when it recovers."));}
+unsigned busyNoticeCount() {return static_cast<unsigned>(std::count(said.begin(),said.end(),L"Navigation updates delayed."));}
 }
 
 namespace ffx {

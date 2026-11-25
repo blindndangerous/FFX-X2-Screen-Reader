@@ -84,7 +84,7 @@ bool submitNavigationQuery(Query query,bool shift,unsigned policyRevision,unsign
     p.query.policyRevision=policyRevision;p.query.local=local;p.query.chunk=chunk;p.query.resourceSerial=resourceSerial;
     // The demand stamp identifies observations captured after this request.
     // Sharing one observation across a burst never merges its independent actions.
-    if(!speechq::captureDomain(Domain,p,p.query.epoch)) {output(L"Navigation is busy. Try the command again after it recovers.",false,"navigation-pressure");return false;}
+    if(!speechq::captureDomain(Domain,p,p.query.epoch)) {output(L"Navigation busy. Press again.",false,"navigation-pressure");return false;}
     waiting.store(true,std::memory_order_release);return true;
 }
 bool captureRequestedNavigationScene(bool geometry,bool changed) {
@@ -99,7 +99,7 @@ bool captureRequestedNavigationScene(bool geometry,bool changed) {
     if(scene || inBattle() || read<uint16_t>(address(0xd2ca90))==23 || !nativeReaderResourcesReady()) {lastCaptured=want;lastRevision=currentRevision;return false;}
     unsigned slot=Slots,token=nonzero(nextTicket)&~Writing;if(!token) token=nonzero(nextTicket)&~Writing;
     for(unsigned i=0;i<Slots;++i) {unsigned empty=0;if(tickets[i].compare_exchange_strong(empty,token|Writing,std::memory_order_acquire,std::memory_order_relaxed)) {slot=i;break;}}
-    if(slot==Slots) {if(!pressure) {output(L"Navigation data is busy. Updates resume when it recovers.",false,"navigation-pressure");pressure=true;pressureRevision=currentRevision;}return false;}
+    if(slot==Slots) {if(!pressure) {output(L"Navigation updates delayed.",false,"navigation-pressure");pressure=true;pressureRevision=currentRevision;}return false;}
     auto& frame=frames.get()[slot];frame.requested=want;frame.revision=currentRevision;frame.capturedAt=GetTickCount64();
     const auto textRevision=railTextRevision;
     frame.available=captureNavigationScene(frame.scene,currentRevision,geometry);

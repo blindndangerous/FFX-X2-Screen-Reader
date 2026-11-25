@@ -229,7 +229,7 @@ void intent(const Pending& event,const Entity& target,nav::Intent kind) {
     if(refusal && kind!=nav::Intent::AssistFailed) {emit(event,refusal,"navigation-action-refused",false);return;}
     if(!nav::submitNavigationIntent(owned().observation,target,kind,event.query.manual,event.query.intentRevision,
         kind!=nav::Intent::AssistStart && event.query.query!=nav::Query::Resume && event.query.query!=nav::Query::SilentPath))
-        emit(event,L"Navigation action is unavailable or busy. Request the route again after it recovers.","navigation-pressure",false);
+        emit(event,L"Navigation busy. Press again.","navigation-pressure",false);
 }
 void beacon(const Pending&) {
     auto& s=owned();if(!setting(Setting::Beacon) || navRouteKnown() || !s.selection.valid || !s.observation.allowed) return;
@@ -458,7 +458,7 @@ void receiveQuery(const speechq::Header& header,const nav::QueryObservation& que
     auto& s=owned();if(s.pending.size()>=128) {
         if(query.query==nav::Query::GuideCompleted) {releaseOwnedGuideRefresh();return;}
         if(query.query==nav::Query::GuideTarget) {QueuedPuzzleTarget retired;takePuzzleGuideTarget(query.local,query.resourceSerial,retired);}
-        speechq::emitOwned(L"Navigation is busy. Try the command again after it recovers.",header,"navigation-pressure",false,false);return;
+        speechq::emitOwned(L"Navigation busy. Press again.",header,"navigation-pressure",false,false);return;
     }
     Pending event{header,query,{}};
     if(query.query==nav::Query::GuideTarget) {event.direct.emplace();if(!takePuzzleGuideTarget(query.local,query.resourceSerial,*event.direct)) {speechq::emitOwned(L"Navigation action is unavailable or retired. Request the route again.",header,"utility-reply",false,false);return;}}

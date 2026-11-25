@@ -348,11 +348,11 @@ void resetNavAudio() {pauseNavAudio();clearNavRoute();publishPositionalCue(0,0,f
 void refreshNavCollision() {nav::requestNavigationScene();captureWallCues();}
 void routeNavAudio(const std::vector<Point>& points,const Entity& target) {routeNavAudio(points,target,false);}
 void routeNavAudio(const std::vector<Point>& points,const Entity& target,bool assisted) {
-    if(!onOwner()) {if(!captureRoute(RoutePacket,points,target,assisted)) output(L"Navigation route is busy. Try again after it recovers.",false,"navigation-pressure");nav::requestNavigationScene();return;}
+    if(!onOwner()) {if(!captureRoute(RoutePacket,points,target,assisted)) output(L"Navigation busy. Press again.",false,"navigation-pressure");nav::requestNavigationScene();return;}
     setRoute(points,target,true,assisted);if(owned().ready) advance();
 }
 void updateNavTarget(const Entity& target) {
-    if(!onOwner()) {if(!captureRoute(TargetPacket,{},target)) output(L"Navigation updates are busy. Updates resume when it recovers.",false,"navigation-pressure");return;}
+    if(!onOwner()) {if(!captureRoute(TargetPacket,{},target)) output(L"Navigation updates delayed.",false,"navigation-pressure");return;}
     reconcile();auto& s=owned();
     finishConfirmedArrival();
     if(s.target.panelLocal || s.routeEpoch!=s.epoch || target.actor!=s.target.actor || target.worker!=s.target.worker || target.id!=s.target.id || target.pushControl!=s.target.pushControl || target.pushLocal!=s.target.pushLocal || sameTarget(s.target,target)) return;
