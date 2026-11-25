@@ -276,6 +276,12 @@ int main() {try {
     check(navigationSaid.size()==beforeGuideQueue+4,"four equal guide commands retain four actual pipeline responses");
     for(size_t i=beforeGuideQueue;i<navigationSaid.size();++i) check(navigationSaid[i].find(L"Step 1 of")==0,"queued guide starts at original manual first step");
     check(nav::submitNavigationQuery(nav::Query::GuideNext,false,ownedPuzzleGuideRevision()),"admit guide next");fresh();check(navigationSaid.back().find(L"Step 2 of")==0,"queued guide next changes one manual step");
+    // Live 2026-11-25: F8 > Cloister of Trials > Read current puzzle step was
+    // silent because the queue drops non-menu speech while the menu is open.
+    speechq::fixture::modal=true;const auto beforeMenuStep=navigationSaid.size();
+    check(nav::submitNavigationQuery(nav::Query::GuideStep,false,ownedPuzzleGuideRevision()),"admit guide step from the open mod menu");fresh();
+    check(navigationSaid.size()==beforeMenuStep+1 && navigationSaid.back().find(L"Step 2 of")==0,"a guide row in the open mod menu answers as the menu");
+    speechq::fixture::modal=false;
     const auto completionSpeech=navigationSaid.size();unsigned claimed=0;for(unsigned i=0;i<32;++i) if(claimOwnedGuideRefresh()) {++claimed;check(nav::submitNavigationQuery(nav::Query::GuideCompleted,false,ownedPuzzleGuideRevision()),"admit one environmental completion update");}fresh();
     check(claimed==1 && navigationSaid.size()==completionSpeech,"environmental completion replaces only silent state, without suppressing independent voiced commands");
     check(nav::submitNavigationQuery(nav::Query::GuideStep,false,ownedPuzzleGuideRevision()),"manual repeat after completion");fresh();check(navigationSaid.back().find(L"Step 2 of")==0,"queued completion preserves manual selection");
