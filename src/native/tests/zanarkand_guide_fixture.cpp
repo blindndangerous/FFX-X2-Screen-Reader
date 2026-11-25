@@ -323,7 +323,7 @@ int main(int argc,char** argv) {
     };
     if(!test || test==17) {
         setup(2);plannedRoute={{-25,5,55}}; // Active wrong W69 is between player and later targets.
-        for(const auto* name:{L"Besaid Sphere source",L"Exit 3 to Dome - Cloister of Trials"}) {
+        for(const auto* name:{L"Kilika Sphere source",L"Exit 3 to Dome - Cloister of Trials"}) {
             routeFixture=false;select(name);
             const auto step=query(OwnedGuideAction::Step);
             check(step.find(name)!=std::wstring::npos && step.find(manualWarning)==std::wstring::npos,
