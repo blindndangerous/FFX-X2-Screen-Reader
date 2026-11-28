@@ -2,6 +2,8 @@
 #include "navigation_cancel.hpp"
 #include "events.hpp"
 #include "sphere_grid.hpp"
+#include "settings.hpp"
+#include "sphere_ui_text.hpp"
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -61,9 +63,12 @@ unsigned edgeCost(const GridSnapshot& grid,int a,int b,int character) {
     return 0;
 }
 }
-std::wstring sphereNodeLabel(const GridSnapshot& grid,int index) {
+std::wstring sphereNodeLabel(const GridSnapshot& grid,int index,bool neededForF6) {
     if(index<0 || static_cast<size_t>(index)>=grid.nodes.size()) return L"Unknown node";
-    return (grid.nodes[index].name.empty()?L"Unnamed node":grid.nodes[index].name)+L", node "+std::to_wstring(index+1);
+    std::wstring label=grid.nodes[index].name.empty()?L"Unnamed node":grid.nodes[index].name;
+    if(neededForF6 || setting(Setting::SphereNodeNumbers))
+        label+=sphereUiText(grid.uiLanguage).numberPrefix+std::to_wstring(index+1);
+    return label;
 }
 GridRoute sphereRoute(const GridSnapshot& grid,int start,int goal,int character) {
     GridRoute result;
@@ -142,7 +147,7 @@ std::wstring sphereNextText(const GridSnapshot& grid,const GridRoute& route) {
     if(!direction.empty()) return direction+L" to "+sphereNodeLabel(grid,to);
     // Crowded layouts can need several cursor selections. Report position
     // without presenting an arrow combination that selects a different node.
-    return sphereNodeLabel(grid,to)+L" lies "+locationDirection(grid.nodes[from],grid.nodes[to])+L" from this node. No direct arrow combination selects it. F6 selects a node by number.";
+    return sphereNodeLabel(grid,to,true)+L" lies "+locationDirection(grid.nodes[from],grid.nodes[to])+L" from this node. No direct arrow combination selects it. F6 selects a node by number.";
 }
 std::wstring sphereOrientation(const GridSnapshot& grid) {
     if(grid.selected<0 || static_cast<size_t>(grid.selected)>=grid.nodes.size()) return {};
@@ -154,8 +159,9 @@ std::wstring sphereOrientation(const GridSnapshot& grid) {
         const int next=edge.a==grid.selected?edge.b:edge.b==grid.selected?edge.a:-1;
         if(next<0 || static_cast<size_t>(next)>=grid.nodes.size()) continue;
         auto direction=inputDirection(grid,grid.selected,next);
-        if(direction.empty()) direction=L"position "+locationDirection(at,grid.nodes[next])+L"; use F6";
-        auto label=direction+L": "+sphereNodeLabel(grid,next);
+        const bool needsF6=direction.empty();
+        if(needsF6) direction=L"position "+locationDirection(at,grid.nodes[next])+L"; use F6";
+        auto label=direction+L": "+sphereNodeLabel(grid,next,needsF6);
         if(grid.nodes[next].locked) label+=L", locked";
         label+=edge.travelled&(1u<<grid.character)?L", previously travelled":L", new link";
         neighbours.push_back(label);

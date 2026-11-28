@@ -5,6 +5,7 @@
 #include "settings.hpp"
 #include "sphere_grid.hpp"
 #include "sphere_jump.hpp"
+#include "sphere_ui_text.hpp"
 #include "status_review.hpp"
 #include <atomic>
 
@@ -23,6 +24,11 @@ void announceCharacter() {
     previousCharacter=read<uint8_t>(engine+0x115bc);
     TextPlan p;prepareTextPlan(p,"sphere-character");p.headline=planPlayerName(p,previousCharacter);commitTextPlan(p);
 }
+TextRef withNodeNumber(TextPlan& p,TextRef line,int index) {
+    if(!setting(Setting::SphereNodeNumbers)) return line;
+    const auto& text=sphereUiText(nativeMenuLanguage());
+    return planConcat(p,line,planConcat(p,planLiteral(p,text.numberPrefix),planInteger(p,index+1)));
+}
 void announceNode() {
     const auto engine=read<uintptr_t>(address(0x1f05834));if(!engine) return;
     const int index=read<int16_t>(engine+0x112fc,-1);if(index<0 || index>=read<int16_t>(engine+2) || index==previousNode) return;
@@ -30,8 +36,9 @@ void announceNode() {
     auto line=planPair(p,TextPlanOp::Or,node.name,planLiteral(p,L"Unnamed node"));const auto character=read<uint8_t>(engine+0x115bc);
     if(character<7 && (node.activated&(1u<<character))) line=planConcat(p,line,planConcat(p,planLiteral(p,L", activated for "),planPlayerName(p,character)));
     else if(node.sphere) {const auto name=planRecordName(p,0x390a40,node.sphere);line=planConcat(p,line,planPair(p,TextPlanOp::IfText,name,planConcat(p,planLiteral(p,L", requires 1 "),name)));}
-    p.headline=planConcat(p,line,planConcat(p,planLiteral(p,L", node "),planInteger(p,index+1)));
-    planSelectionDetail(p,node.description,setting(Setting::AutoDetail)!=0);previousNode=index;commitTextPlan(p);
+    p.headline=withNodeNumber(p,line,index);
+    // Node type 1 is empty. The manual description still comes from the game.
+    planSelectionDetail(p,node.description,setting(Setting::AutoDetail)!=0 && node.type!=1);previousNode=index;commitTextPlan(p);
 }
 void openingBefore(Event& e) { e.before[0] = opened(); }
 void openingAfter(Event& e) {
@@ -66,7 +73,26 @@ Key selected() {
     k[0] = pool; k[1] = slot; k[2] = row; k[4]=movement?9:slot==11?10:-1;
     auto entry = win + 0x40 + row * 12;
     k[3] = slot == 8 ? read<uint16_t>(entry + 8) : read<uintptr_t>(entry);
+    if(slot==8) k[5]=read<uint8_t>(entry+4)!=0;
     return k;
+}
+TextRef movementCost(TextPlan& p) {
+    // The move confirmation spends the preview cost from +1161C. The
+    // native level display draws this same saved balance minus that cost.
+    const auto engine=read<uintptr_t>(address(0x1f05834));
+    int32_t cost=0;
+    if(!engine || !copy(engine+0x1161c,&cost,sizeof(cost)) || cost<0) return 0;
+    const auto character=read<uint8_t>(engine+0x115bc,255);
+    if(character>=7) return 0;
+    using Saved=uintptr_t(__cdecl*)(unsigned);
+    const auto saved=reinterpret_cast<Saved>(address(0x3853f0))(character);
+    uint8_t levels=0;
+    if(!saved || !copy(saved+0x3b,&levels,sizeof(levels)) || cost>levels) return 0;
+    const auto& text=sphereUiText(nativeMenuLanguage());
+    const bool singular=cost==1 || (cost==0 && text.singularAtZero);
+    auto line=planConcat(p,planLiteral(p,text.costPrefix),planInteger(p,cost));
+    line=planConcat(p,line,planLiteral(p,singular?text.singularCost:text.pluralCost));
+    return planConcat(p,line,planConcat(p,planInteger(p,levels-cost),planLiteral(p,text.balanceSuffix)));
 }
 void selectionBefore(Event& e) { e.before = selected(); if (e.rva == 0x6583e0) ++inputDepth; }
 void selectionAfter(Event& e) {
@@ -80,12 +106,22 @@ void selectionAfter(Event& e) {
     const bool confirmation=k[4]>=0;
     TextPlan p;prepareTextPlan(p,confirmation && opening?"sphere-confirmation-prompt":"sphere-list",!(confirmation && opening));
     const auto name=k[1]==8?planRecordName(p,0x390a40,static_cast<unsigned>(k[3])):planEncoded(p,k[3]);
-    const auto line=k[1]==8?planCountedName(p,name,quantity(static_cast<unsigned>(k[3]))):name;
-    if(confirmation && opening) {p.interrupt=true;p.headline=planEncoded(p,read<uintptr_t>(k[0]+k[4]*0x340+0x40));addTextPlanOutput(p,line,"sphere-list",false);}
-    else p.headline=line;
+    auto line=k[1]==8?planCountedName(p,name,quantity(static_cast<unsigned>(k[3]))):name;
+    if(k[5]) {
+        const auto& locale=menuAvailabilityText(nativeMenuLanguage());
+        const auto unavailable=planConcat(p,planLiteral(p,L", "),planLiteral(p,locale.unavailable));
+        line=planPair(p,TextPlanOp::IfText,line,planConcat(p,line,unavailable));
+    }
+    if(confirmation && opening) {
+        p.interrupt=true;
+        const auto prompt=planEncoded(p,read<uintptr_t>(k[0]+k[4]*0x340+0x40));
+        p.headline=prompt;
+        if(k[4]==9 && prompt) {
+            if(const auto cost=movementCost(p)) p.headline=planPair(p,TextPlanOp::IfText,prompt,planConcat(p,prompt,cost));
+        }
+        addTextPlanOutput(p,line,"sphere-list",false);
+    } else p.headline=line;
     if(k[1]==8) {
-        const auto entry=k[0]+k[1]*0x340+0x40+k[2]*12;
-        if(read<uint8_t>(entry+4)) addTextPlanOutput(p,planLiteral(p,L"Unavailable"),"sphere-availability",false);
         planSelectionDetail(p,planSphereItemDescription(p,static_cast<unsigned>(k[3])),setting(Setting::AutoDetail)!=0);
     }else if(confirmation) resetSelectionDetail();
     else planSelectionDetail(p,planMenuDescription(p,9,k[2]==0?0x1f:0x1e),setting(Setting::AutoDetail)!=0);
@@ -122,7 +158,7 @@ void movementAfter(Event& e) {
     if(destination<0 || destination>=read<int16_t>(engine+2) || destination==e.before[2]) return;
     TextPlan p;prepareTextPlan(p,"sphere-movement");const auto node=planSphereNode(p,destination);if(!node.valid) return;p.gate=node.name;
     auto line=planConcat(p,planPlayerName(p,character),planConcat(p,planLiteral(p,L" moved to "),node.name));
-    line=planConcat(p,line,planConcat(p,planLiteral(p,L", node "),planInteger(p,destination+1)));
+    line=withNodeNumber(p,line,destination);
     using Saved=uintptr_t(__cdecl*)(unsigned);const auto saved=reinterpret_cast<Saved>(address(0x3853f0))(character);
     if(saved && e.before[4]) {const auto levels=read<uint8_t>(saved+0x3b);if(levels!=e.before[3]) {
         line=planConcat(p,line,planConcat(p,planLiteral(p,L". Sphere Levels "),planInteger(p,e.before[3])));

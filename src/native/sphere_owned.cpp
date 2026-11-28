@@ -5,6 +5,7 @@
 #include "events.hpp"
 #include "controller.hpp"
 #include "nav_audio.hpp"
+#include "menu_list_text.hpp"
 #include <atomic>
 #include <cstring>
 #include <algorithm>
@@ -22,7 +23,7 @@ struct Facts {
     std::array<ItemFact,256> items;std::array<Encoded<40>,7> people;std::array<Encoded<256>,8> stats;
     std::array<int,7> positions;std::array<unsigned,7> levels;
     int selected=-1,character=-1;unsigned nodeCount=0,linkCount=0;bool valid=false;
-    uintptr_t grid=0,definitions=0,itemDefinitions=0;unsigned epoch=0,language=0,revision=0;
+    uintptr_t grid=0,definitions=0,itemDefinitions=0;unsigned epoch=0,language=0,uiLanguage=1,revision=0;
 };
 struct Frame {Facts facts;unsigned revision=0;};
 struct Packet {SphereWork work;unsigned epoch=0,revision=0,slot=Slots,token=0,key=0;bool shift=false,cursor=false,open=false;};
@@ -55,6 +56,7 @@ bool capture(Facts& out) {
     out.epoch=generation();out.revision=revision.load(std::memory_order_acquire);out.grid=grid;out.definitions=read<uintptr_t>(address(0x16860e0));out.itemDefinitions=read<uintptr_t>(address(0x16860e4));
     const auto nativeLanguage=reinterpret_cast<unsigned(__cdecl*)()>(address(0x3852b0))();out.language=nativeLanguage&1;
     if(!out.definitions || !out.itemDefinitions) return false;
+    out.uiLanguage=nativeMenuLanguage();
     prepareCopiedControlSnapshot(out.controls);
     auto& cache=immutable.get();
     // The static catalog is reused only for the exact physical layout, language
@@ -106,6 +108,7 @@ template<unsigned N> std::wstring decode(const Encoded<N>& encoded,const OwnedTe
 void restore(const Facts& facts,Owned& to) {
     if(facts.nodeCount>facts.nodes.size() || facts.linkCount>facts.links.size() || facts.character<0 || facts.character>=7 || facts.selected<0 || static_cast<unsigned>(facts.selected)>=facts.nodeCount) throw nav::ComputationCancelled{};
     to.grid={};to.grid.selected=facts.selected;to.grid.character=facts.character;to.grid.positions=facts.positions;to.grid.levels=facts.levels;
+    to.grid.uiLanguage=facts.uiLanguage;
     const auto controls=copiedControlContext(facts.controls);
     for(unsigned i=0;i<facts.items.size();++i) {to.itemNames[i]=decode(facts.items[i].name,controls);to.stock[i]=facts.items[i].stock;}
     for(unsigned i=0;i<7;++i) to.people[i]=decode(facts.people[i],controls);for(unsigned i=0;i<8;++i) to.stats[i]=decode(facts.stats[i],controls);

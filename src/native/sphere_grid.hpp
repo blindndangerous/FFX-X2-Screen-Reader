@@ -17,6 +17,7 @@ struct GridSnapshot {
     std::array<int,7> positions{};
     std::array<unsigned,7> levels{};
     int selected=-1,character=-1;
+    unsigned uiLanguage=1;
 };
 struct GridRoute {
     std::vector<int> nodes;
@@ -45,7 +46,7 @@ GridRoute sphereRoute(const GridSnapshot&,int start,int goal,int character);
 std::wstring sphereRouteText(const GridSnapshot&,const GridRoute&,int character);
 std::wstring sphereNextText(const GridSnapshot&,const GridRoute&);
 std::wstring sphereOrientation(const GridSnapshot&);
-std::wstring sphereNodeLabel(const GridSnapshot&,int index);
+std::wstring sphereNodeLabel(const GridSnapshot&,int index,bool neededForF6=false);
 bool readSphereDescription();
 void spherePathKey(bool);
 void sphereOrientationKey(bool);

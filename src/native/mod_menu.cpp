@@ -24,6 +24,7 @@
 #include "text_plan.hpp"
 #include "esc_details.hpp"
 #include "menu_list_text.hpp"
+#include "sphere_ui_text.hpp"
 #include <atomic>
 #include <stdexcept>
 #include <cstring>
@@ -45,7 +46,7 @@ constexpr unsigned audioItems[]={option(Setting::Beacon),option(Setting::BeaconV
     option(Setting::RaceCues),option(Setting::ButterflyCues),option(Setting::LightningWarning),option(Setting::JechtCues),BeaconPreview,WallPreview,Back};
 constexpr unsigned navigationItems[]={option(Setting::AutoWalk),option(Setting::AutoWalkPath),option(Setting::HideUnreachable),option(Setting::PartialSteps),option(Setting::HiddenAirshipDestinations),HiddenAirshipMenu,Back};
 constexpr unsigned miscItems[]={option(Setting::AutoDetail),option(Setting::AutoExtraInfo),option(Setting::VoicedDialogue),option(Setting::CombatDetail),
-    option(Setting::MenuIndex),option(Setting::UnavailableCue),option(Setting::OverdriveAssist),option(Setting::OverdriveCues),option(Setting::LightningAutoDodge),option(Setting::JechtAssist),option(Setting::ShowMaximumHp),option(Setting::ShowMaximumMp),option(Setting::PolishText),option(Setting::ChocoboAssist),option(Setting::RemiemAssist),option(Setting::ButterflyAssist),option(Setting::BlitzAssist),SpeechBackendMenu,BindingsMenu,TrialMenu,GagazetMenu,SinMenu,Back};
+    option(Setting::MenuIndex),option(Setting::SphereNodeNumbers),option(Setting::UnavailableCue),option(Setting::OverdriveAssist),option(Setting::OverdriveCues),option(Setting::LightningAutoDodge),option(Setting::JechtAssist),option(Setting::ShowMaximumHp),option(Setting::ShowMaximumMp),option(Setting::PolishText),option(Setting::ChocoboAssist),option(Setting::RemiemAssist),option(Setting::ButterflyAssist),option(Setting::BlitzAssist),SpeechBackendMenu,BindingsMenu,TrialMenu,GagazetMenu,SinMenu,Back};
 constexpr unsigned gagazetItems[]={option(Setting::GagazetAssist),option(Setting::GagazetCues),GagazetGuide,GagazetSelected,GagazetStatus,Back};
 constexpr unsigned sinItems[]={SinMenu,SinGuide,SinStatus,Back};
 constexpr unsigned speechItems[]={option(Setting::SpeakPunctuationNames),Back};
@@ -122,6 +123,12 @@ TextRef recipeRow(TextPlan& p) {
         const auto& text=menuAvailabilityText(nativeMenuLanguage());
         return planSuffix(p,planLiteral(p,text.option),planLiteral(p,setting(Setting::UnavailableCue)?text.on:text.off),L": ");
     }
+    if(item==option(Setting::SphereNodeNumbers)) {
+        const auto locale=nativeMenuLanguage();
+        const auto& values=menuAvailabilityText(locale);
+        return planSuffix(p,planLiteral(p,sphereUiText(locale).numberOption),
+            planLiteral(p,setting(Setting::SphereNodeNumbers)?values.on:values.off),L": ");
+    }
     if(item<SettingsCount) {
         const auto id=static_cast<Setting>(item);unsigned style=0;
         if(id==Setting::VoicedDialogue) style=1; else if(id==Setting::CombatDetail) style=2;
@@ -195,6 +202,7 @@ void description() {
         if(item<SettingsCount) {
             const auto* description=settingInfo(static_cast<Setting>(item)).description;
             if(item==option(Setting::UnavailableCue)) emitReady(menuAvailabilityText(nativeMenuLanguage()).description);
+            else if(item==option(Setting::SphereNodeNumbers)) emitReady(sphereUiText(nativeMenuLanguage()).numberHelp);
             else if(item==option(Setting::LightningWarning)) { TextPlan p;prepareTextPlan(p,"mod-menu");const auto name=planPrimaryDodgeName(p);const auto named=planSuffix(p,planPrefix(p,planLiteral(p,L"Dodge: "),name,L""),planLiteral(p,L". Press once when the beep begins."),L"");
                 const auto controls=planPair(p,TextPlanOp::Or,named,planLiteral(p,L"Press the game's configured dodge action once when the beep begins."));p.headline=planConcat(p,planConcat(p,planLiteral(p,description),planLiteral(p,L" ")),controls);commitTextPlan(p); }
             else emitReady(description);

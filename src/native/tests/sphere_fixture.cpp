@@ -76,6 +76,16 @@ int main() {
     check(sphereRouteText(grid,path,0).find(L"Sphere 8265")==std::wstring::npos,"already activated destination spends no ability sphere");
     grid.selected=3;
     check(sphereOrientation(grid).find(L"node 4")!=std::wstring::npos,"stable node orientation");
+    GridSnapshot crowded=grid; crowded.selected=0; crowded.links={{0,2,0}};
+    setSetting(Setting::SphereNodeNumbers,0);
+    check(sphereNodeLabel(crowded,0)==L"Stat" && sphereNextText(crowded,GridRoute{{0,1}})==L"right to Stat",
+        "ordinary route labels omit node numbers when Off");
+    check(sphereNextText(crowded,GridRoute{{0,2}}).find(L"Stat, node 3")!=std::wstring::npos &&
+        sphereNextText(crowded,GridRoute{{0,2}}).find(L"F6")!=std::wstring::npos,"next-step F6 fallback retains the exact number");
+    crowded.uiLanguage=2;
+    check(sphereOrientation(crowded).find(L"use F6: Stat, case 3")!=std::wstring::npos,
+        "orientation F6 fallback retains the exact number in the captured language");
+    setSetting(Setting::SphereNodeNumbers,1);
     grid.nodes[4].activated=0; grid.selected=0; grid.nodes[2].locked=false;
     grid.links.push_back({4,5,0}); fixture=grid;
     setSetting(Setting::AutoDetail,0); openSpherePlanner(false);

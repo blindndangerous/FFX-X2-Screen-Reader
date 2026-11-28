@@ -48,6 +48,10 @@ native draw result.
 Frida runtime and 0.5 setup scripts. The native build shortcut, retained
 offline tools and full debugging record remain available. The
 [contributor guide](CONTRIBUTING.md) links the current build and setup decisions.
+[PR #13](Docs/plan.md#november24-pull-request-review-hold) adds localized Sphere
+Grid movement costs and inline unavailable speech, skips empty-node Autodetail
+and adds an independent node-number setting. F6 guidance keeps the required
+number. Local gameplay remains pending.
 Enemy HP/MP rendering awaits individual review.
 
 [Airship Proceed? choices](Docs/plan.md#november24-airship-proceed-confirmation)

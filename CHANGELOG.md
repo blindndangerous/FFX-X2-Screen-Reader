@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sphere Grid Move prompts read the Sphere Level cost and the balance after moving. The Use list reads “Unavailable” with the sphere name and quantity. Autodetail skips empty-node descriptions, and **I** still reads them. **F8 > Miscellaneous > Sphere Grid node numbers** defaults On and always gives the required number when guidance calls for **F6**.
+
 - Retired the Frida runtime and old 0.5 setup scripts. Added a contributor guide and architecture notes for the current native build and GitHub setup.
 
 - Shift+F11 updates Cloister guidance when you undo a verified sphere transfer. This covers Besaid's pedestal and supported source recesses, and the opening sphere sequences in Kilika and Djose.

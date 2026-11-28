@@ -1,6 +1,7 @@
 #include "sphere_owned.hpp"
 #include "events.hpp"
 #include "sphere_grid.hpp"
+#include "menu_list_text.hpp"
 #include <map>
 namespace ffx {
 namespace {
@@ -93,6 +94,7 @@ bool sphereSnapshot(GridSnapshot& result,bool materials) {
     if(nodes<1 || nodes>1024 || links<0 || links>1024) return false;
     result.selected=read<int16_t>(grid+0x112fc,-1); result.character=read<uint8_t>(grid+0x115bc,255);
     if(result.selected<0 || result.selected>=nodes || result.character>=7) return false;
+    result.uiLanguage=nativeMenuLanguage();
     const auto spheres=materials?activationSpheres():std::map<unsigned,unsigned>{};
     for(int i=0;i<nodes;++i) result.nodes.push_back(copyNode(i,spheres));
     for(int i=0;i<links;++i) {

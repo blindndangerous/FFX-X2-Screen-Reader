@@ -117,6 +117,8 @@ int main(int argc,char** argv) {
         loadSettings();
         check(!setting(Setting::AutoExtraInfo) && settingInfo(Setting::AutoExtraInfo).initial==0,"fresh extra information defaults Off");
         check(!setting(Setting::UnavailableCue) && settingInfo(Setting::UnavailableCue).initial==0,"fresh rejection cue defaults Off");
+        check(setting(Setting::SphereNodeNumbers)==1 && settingInfo(Setting::SphereNodeNumbers).initial==1 &&
+            static_cast<unsigned>(Setting::SphereNodeNumbers)==39,"node numbers default On with a new appended ID");
         check(static_cast<unsigned>(Setting::AutoDetail)==2 && static_cast<unsigned>(Setting::BlitzAssist)==36 &&
             static_cast<unsigned>(Setting::AutoExtraInfo)==37 && static_cast<unsigned>(Setting::UnavailableCue)==38,
             "appending the rejection cue preserves all previous setting IDs");
@@ -132,6 +134,7 @@ int main(int argc,char** argv) {
             for(const auto id:assists)check(setting(id)==0,"missing assistance key must default Off");
             check(!setting(Setting::AutoExtraInfo),"legacy INI with no extra-info key inherits Off without rewriting");
             check(!setting(Setting::UnavailableCue),"legacy INI with no rejection cue key inherits Off without rewriting");
+            check(setting(Setting::SphereNodeNumbers)==1,"legacy INI with no node-numbers key inherits On without rewriting");
             check(contents(path)==ini,"missing-key loading must preserve exact file bytes");
         }
         for(unsigned mask=0;mask<1024;++mask) {

@@ -192,6 +192,22 @@ the landing commits. PR #5 remains open for the deferred proposals.
   build passed. Local deployment remains on hold.
   [PR #12](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/12),
   [contributor guide](../CONTRIBUTING.md).
+- **Sphere Grid speech.** The owner approved all four changes from PR #13.
+  Native code at `A44F27–A44F35` stores the rounded preview cost at grid offset
+  `+0x1161C`. The movement confirmation spends it and the level renderer draws
+  the resulting balance. The prompt reads both values before Yes/No. Greyed-out
+  spheres say “Unavailable” with the Use-list row. Empty nodes keep their native
+  description on **I** and skip Autodetail. The new default-On node-number
+  setting applies to routine speech. Guidance that requires F6 always says the
+  exact number to enter. The added strings use the eight supported game UI
+  languages. The bounded x86 Sphere Grid, accessibility menu, settings
+  defaults and both 176-hook reader profiles passed. Native selector replay
+  matched 13,320 Standard and Expert inputs in each profile, and F6 accepted
+  node entry with number announcements Off. Local deployment and gameplay
+  confirmation remain on hold.
+  [PR #13](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/13),
+  [Sphere Grid behavior and evidence](features/menus/index.md#sphere-grid),
+  [remaining gameplay checks](features/verification.md#sphere-grid-speech).
 - **Enemy HP/MP display evidence unresolved.** The user recalls obtaining
   screenshots of an enemy HP bar. The retained Battle Mode screenshot shows
   party HP and MP and the turn order. Earlier notes document numeric party

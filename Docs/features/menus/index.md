@@ -236,9 +236,21 @@ key press. Preserve native input and independent F8 accessibility settings.
 events and contextual keys. `sphere_data.cpp` captures the selected native node,
 layout links, positions, stock and text. `sphere_owned.cpp` transfers bounded
 snapshots through tickets to its preparation domain; no borrowed getter/pointer
-is used to compute routes on a worker. A maximum1024-node/1023-link fixture checks
+is used to compute routes on a worker. The snapshot carries the UI language ID
+captured on the native thread for localized node number suffixes. A maximum1024-node/1023-link fixture checks
 the transport, plus source reuse/getter denial, reset recovery and no native
 heap work. These component timings do not establish real audible/hardware latency.
+
+The Sphere Grid reader uses the movement callback's identity to distinguish
+Move and Quit, which share the choice window. On Move prompt entry, it reads
+the preview cost from the grid engine at `+0x1161C` and the selected character's
+saved levels at `+0x3B`. The native confirmation spends that cost and the native
+level display draws that same post-move balance. Valid values are appended to the
+prompt before the queued Yes/No choice. The Use list reads its native row
+availability byte and says the label with the name and quantity. Node type 1
+skips automatic description speech and keeps the native description on **I**.
+Added speech uses the current game UI language. These observations use existing
+native events and leave movement and inventory actions to the game.
 
 `sphere_paths.cpp`, `sphere_sections.cpp`, `sphere_expert.cpp`,
 `sphere_orientation.cpp` and `sphere_planner.cpp` own route/cost/branch behavior.
@@ -261,6 +273,9 @@ These commands describe routes; they do not move the pawn or activate nodes.
 owner. It validates current Grid/context, range/native mode and defers the native
 cursor operation to its approved owner. UI root/child focus is excluded from
 game hotkey capture. Other F6 contexts remain independent.
+The saved `sphere_node_numbers` preference defaults On. Off omits the ordinal
+from routine labels. If the native arrow selector cannot directly reach the next
+node, orientation and route guidance still announce the number to enter with F6.
 
 See [Grid controls/directions/F6 evidence](../../tester_report_20261015.md),
 [owned capture and pipeline](../../threading_audit_20261012.md),

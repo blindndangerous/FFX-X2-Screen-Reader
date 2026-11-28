@@ -1,5 +1,17 @@
 # Verification and remaining gameplay checks
 
+## Sphere Grid speech
+
+After deployment resumes, preview a legal move. Expect its cost and the
+remaining Sphere Levels before the Yes/No choice. Confirm it and compare the
+reported balance with the movement result. In Use, focus a greyed-out sphere
+and expect its name, quantity and “Unavailable” in one announcement.
+With Autodetail On, focus an empty node. Expect its name alone apart from the
+optional number. Press **I** for its description. Turn **F8 > Miscellaneous >
+Sphere Grid node numbers** Off. Browsing and movement should omit numbers.
+When guidance calls for **F6**, enter the number it gives and confirm
+that the cursor reaches the intended node. [Sphere Grid behavior](menus/index.md#sphere-grid).
+
 ## Unavailable menus — November27
 
 After deployment resumes, browse a greyed-out item or ability in the field.

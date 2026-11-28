@@ -709,9 +709,16 @@ are consumed only on the Sphere Grid.
   enabled with F7 or in F8. Activation feedback announces the actual character/node.
   Ability nodes resolve the ability's own description, including all text lines.
   Activation feedback includes actual before/after stat values when they change.
-* Movement reads the native confirmation prompt and Yes/No choices. Confirming
-  a move announces the character and destination node, plus changed Sphere Levels.
+  Autodetail skips empty-node descriptions. **I** still reads them.
+* In the **Use** list, a greyed-out sphere says “Unavailable” with its name and quantity.
+* Movement reads the native confirmation prompt with the Sphere Level cost and
+  balance after moving, followed by the selected Yes/No choice. Confirming a move
+  announces the character and destination node, plus changed Sphere Levels.
   Native preview start says "Preparing to move" before the delayed confirmation.
+
+**F8 > Miscellaneous > Sphere Grid node numbers** defaults On. Turn it Off to
+omit numbers from routine node announcements, movement results and directions.
+Directions that call for **F6** always give the number to enter.
 
 **F6** — at a stationary grid cursor in Browse, Move or Use, open **Node number**.
 Type the spoken node number and press Enter to select that cursor position;

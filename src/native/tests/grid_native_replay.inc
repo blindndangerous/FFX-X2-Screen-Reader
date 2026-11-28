@@ -77,7 +77,9 @@ void gridNativeReplayFixture() {
     set<int16_t>(pool+0x2700,7);event(0x225930,0);check(sphereJumpContext(),"F6 remains reserved for the grid while its action menu is open, without toggling the field beacon");
     set<int16_t>(pool+0x2700,-1);event(0x225930,0);
     for(const auto bad:{L"",L"0",L"5",L"-1",L"2x",L"1.5",L"99999"}) check(!sphereJumpForTest(bad),"numeric entry rejects empty, invalid and out of range input");
-    check(sphereJumpForTest(L"3"),"one-based node accepted");event(0x225930,0);
+    setSetting(Setting::SphereNodeNumbers,0);
+    check(sphereJumpForTest(L"3"),"one-based node accepted with number announcements Off");event(0x225930,0);
+    setSetting(Setting::SphereNodeNumbers,1);
     check(read<int16_t>(raw+0x112fc)==2 && read<uintptr_t>(raw+0x115b0)==address(0x645010),"actual original wrapper moves cursor and preserves return mode");
     set<uintptr_t>(0x2320000+0x115b0,0);set<uintptr_t>(0x2320000+0x115a8,address(0x644ef0));event(0x225930,0);
     check(sphereJumpForTest(L"3"),"Move destination queued");event(0x225930,0);check(read<int16_t>(raw+0x112fc)==2 && !read<uintptr_t>(raw+0x115b0),"native unavailable Move node does not run cursor function");
