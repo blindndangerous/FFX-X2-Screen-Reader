@@ -293,6 +293,11 @@ an HP bar; they do not display numeric maximum HP or status-effect labels.
 When selecting a party target in battle, a command such as Potion reads the
 target's HP, and a command such as Ether reads the target's MP. The preview
 follows the active target window's action on each turn.
+The target preview adds harmful statuses from the party status list or the
+highlighted enemy's visible Sensor or Scan pane. A visible overhead Doom
+countdown can also be heard without Sensor. **H** reads the turn owner's full
+status. **Shift+H** reads the party numbers shown in the HUD. The game displays
+party status labels on a separate HUD page.
 
 When the game reveals **Sensor** information for a highlighted enemy, its
 exact current and maximum HP are read directly. **Ctrl+Left** selects the first

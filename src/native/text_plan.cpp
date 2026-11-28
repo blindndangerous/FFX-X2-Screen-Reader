@@ -91,6 +91,7 @@ std::wstring render(TextRef root) {
             out=left+L": ";const auto maximum=static_cast<int>(n.offset);
             if(!n.length) out+=std::to_wstring(maximum>0?static_cast<int>(std::floor(static_cast<double>(n.value)/maximum*100+.5)):0)+L"%";
             else out+=(n.length==2?L"MP ":L"HP ")+std::to_wstring(n.value)+L"/"+std::to_wstring(maximum);
+            if(!right.empty()) out+=L", "+right;
             continue;
         }
         if(n.op==TextPlanOp::EquipmentName) {
@@ -99,6 +100,17 @@ std::wstring render(TextRef root) {
             continue;
         }
         if(n.offset>p.used || n.length>p.used-n.offset) return {};
+        if(n.op==TextPlanOp::JoinedRefs) {
+            if(n.length%sizeof(TextRef) || n.length>32*sizeof(TextRef)) return {};
+            for(unsigned at=0;at<n.length;at+=sizeof(TextRef)) {
+                TextRef ref=0;std::memcpy(&ref,p.bytes.data()+n.offset+at,sizeof(ref));
+                if(ref>i) return {};
+                if(!ref || values[ref-1].empty()) continue;
+                if(!out.empty()) out+=L", ";
+                out+=values[ref-1];
+            }
+            continue;
+        }
         if(n.op==TextPlanOp::Literal) {
             if(n.length%sizeof(wchar_t)) return {};
             out.resize(n.length/sizeof(wchar_t));std::memcpy(out.data(),p.bytes.data()+n.offset,n.length);continue;
@@ -178,8 +190,8 @@ TextRef planMenuListIndex(TextPlan& p,TextRef label,unsigned selected,unsigned c
     return node(p,n);
 }
 TextRef planSettingValue(TextPlan& p,int value,unsigned style) {TextPlanNode n;n.op=TextPlanOp::SettingValue;n.value=value;n.offset=style;return node(p,n);}
-TextRef planBattleTarget(TextPlan& p,TextRef name,int current,int maximum,unsigned kind) {
-    TextPlanNode n;n.op=TextPlanOp::BattleTarget;n.left=name;n.value=current;n.offset=static_cast<unsigned>(maximum);n.length=kind;return node(p,n);
+TextRef planBattleTarget(TextPlan& p,TextRef name,int current,int maximum,unsigned kind,TextRef ailments) {
+    TextPlanNode n;n.op=TextPlanOp::BattleTarget;n.left=name;n.right=ailments;n.value=current;n.offset=static_cast<unsigned>(maximum);n.length=kind;return node(p,n);
 }
 TextRef planVitals(TextPlan& p,int64_t current,int64_t maximum,bool mp,bool showMaximumHp) {
     TextPlanNode n;n.op=mp?TextPlanOp::Mp:TextPlanOp::Hp;n.value=current;n.offset=static_cast<unsigned>(maximum);n.length=showMaximumHp;return node(p,n);
@@ -202,6 +214,14 @@ TextRef planPair(TextPlan& p,TextPlanOp op,TextRef left,TextRef right) {
 }
 TextRef planConcat(TextPlan& p,TextRef left,TextRef right) {return planPair(p,TextPlanOp::Concat,left,right);}
 TextRef planJoin(TextPlan& p,TextRef left,TextRef right) {return planPair(p,TextPlanOp::Join,left,right);}
+TextRef planJoinedRefs(TextPlan& p,const TextRef* refs,unsigned count) {
+    if(!count) return 0;
+    if(count==1) return refs[0];
+    if(count>32 || count*sizeof(TextRef)>p.bytes.size()-p.used) {p.valid=false;return 0;}
+    TextPlanNode n;n.op=TextPlanOp::JoinedRefs;n.offset=p.used;n.length=count*sizeof(TextRef);
+    std::memcpy(p.bytes.data()+p.used,refs,n.length);p.used+=n.length;
+    return node(p,n);
+}
 TextRef planOrderedRow(TextPlan& p,TextRef previous,TextRef text,int64_t order) {
     TextPlanNode n;n.op=TextPlanOp::OrderedRows;n.left=previous;n.right=text;n.value=order;return node(p,n);
 }

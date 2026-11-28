@@ -55,6 +55,9 @@ number. Local gameplay remains pending.
 [PR #14](Docs/plan.md#november24-pull-request-review-hold) adds localized
 Shift+Slash help for the frontmost screen and an F8 Help row. The shortcut
 respects the keyboard layout and native bindings. Local gameplay remains pending.
+[PR #15](Docs/plan.md#november24-pull-request-review-hold) adds localized,
+visibility-qualified battle target ailments and the drawn Doom counter. The
+native party HUD uses a separate status page from its HP and MP numbers.
 Enemy HP/MP rendering awaits individual review.
 
 [Airship Proceed? choices](Docs/plan.md#november24-airship-proceed-confirmation)

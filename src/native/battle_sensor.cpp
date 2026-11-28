@@ -10,7 +10,7 @@ namespace {
 constexpr unsigned Receiver=2,MaximumRows=8197;
 enum Command : unsigned {Begin=1,Row,Description,Complete,Move};
 struct View {unsigned epoch=0,serial=0,captured=0,owner=255,target=255,players=0,monsters=0;uintptr_t window=0;};
-View view;unsigned nextSerial=0;
+View view;unsigned nextSerial=0,paneSerial=0;
 async::AtomicSnapshot<View> published;
 std::atomic<unsigned> activeBatch{0};
 struct Ready {unsigned epoch=0,serial=0,count=0;};
@@ -108,6 +108,7 @@ bool information(unsigned id,uintptr_t chr) {
 void displayed(Event&) {
     if(!read<uint8_t>(address(0xf3c8fe))) {resetBattleSensor();return;}
     highlightBattleSensor(currentWindow());
+    paneSerial=view.captured && validNativeContext()?view.serial:0;
 }
 }
 bool battleSensorVisible(unsigned id) {
@@ -129,7 +130,10 @@ void highlightBattleSensor(uintptr_t win) {
     activeBatch.store(view.serial,std::memory_order_release);
     if(!information(id,chr)) resetBattleSensor();else {view.captured=1;published.publish(view);}
 }
-void resetBattleSensor() {view={};view.serial=++nextSerial;published.publish(view);activeBatch.store(0,std::memory_order_release);}
+bool battleSensorPaneVisible(unsigned id) {
+    return paneSerial && paneSerial==view.serial && view.target==id && validNativeContext();
+}
+void resetBattleSensor() {view={};view.serial=++nextSerial;paneSerial=0;published.publish(view);activeBatch.store(0,std::memory_order_release);}
 bool battleSensorAvailable() {
     if(!validNativeContext() || !view.captured) return false;
     Ready status;

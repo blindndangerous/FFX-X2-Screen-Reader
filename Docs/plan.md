@@ -223,6 +223,19 @@ the landing commits. PR #5 remains open for the deferred proposals.
   [PR #14](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/14),
   [help behavior](features/menus/index.md#contextual-mod-help),
   [remaining gameplay checks](features/verification.md#contextual-mod-help).
+- **Battle target ailments.** The owner approved the PR #15 hand-merge with
+  native party-list rules and Sensor or Scan visibility. Localized status
+  text follows the current HP or MP preview. The existing graphics hook
+  accepts the Doom counter when the native countdown draws all its digits.
+  Retained renderer `8963C0` draws status labels on mode 2 and numbers on
+  modes 0, 1 and 3. The numbers readout stays tied to the numeric page.
+  Both 176-hook reader profiles passed, including group Sensor gating,
+  Threaten and clipped, hidden and stale Doom graphics. The accessibility menu,
+  804 menu speech checks and independent H status worker also passed.
+  Local deployment and gameplay remain on hold.
+  [PR #15](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/15),
+  [battle target behavior](features/battle/index.md#commands-and-event-speech),
+  [remaining gameplay checks](features/verification.md#battle-target-ailments).
 - **Enemy HP/MP display evidence unresolved.** The user recalls obtaining
   screenshots of an enemy HP bar. The retained Battle Mode screenshot shows
   party HP and MP and the turn order. Earlier notes document numeric party

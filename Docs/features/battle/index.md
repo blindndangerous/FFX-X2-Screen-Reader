@@ -30,6 +30,20 @@ Party target HP/MP uses the confirmed command from the active native targeting
 window. Equipment, Change and Summon highlights provide their own descriptions.
 See [target preview ownership and regression coverage](hp_sources_20261021.md#battle-target-preview-command).
 
+Target previews use native status text IDs and add harmful entries after the
+target's current HP or MP readout. Only actors in the three party HUD slots use
+the party list rules from `8981D0`, including the additional Threaten check at
+`79AFD0`. Enemy ailments require the current highlighted actor's confirmed
+Sensor or Scan pane. The native visibility event can follow the initial target
+update. A later update adds newly revealed ailment speech once.
+
+The overhead Doom number comes from the accepted digit sprites at the
+Doom-only call in `79F680`. All digits must be accepted for the same actor and
+displayed value. A later render pass without the complete number or a changed
+counter retires the old value. The existing battle graphics hooks collect bounded
+scalars. The target text plan owns the localized labels and formats speech off
+the native thread.
+
 Graphical Miss/Guard/Overkill words are qualified by original sprite identity,
 draw ownership and clip position. Status effects and damage are not inferred
 from an English label. A new spell/ability must follow its actual native action,
@@ -52,7 +66,9 @@ Shift+T/right stick right read visible turns. O or the battle mod face binding
 reads the active character's meter; Shift+O/right stick left read all visible
 meters. Shift+H/right stick down read visible HP/MP panels. Show maximum HP/MP
 settings control presentation; current HP can use percent versus maximum. Native
-right-stick input is consumed in battle for these commands. Existing saved face
+panel modes 0, 1 and 3 draw numbers at `8963C0`. Mode 2 draws status labels on
+its own page. Shift+H stays scoped to the numeric draws.
+Right-stick input is consumed in battle for these commands. Existing saved face
 bindings are respected. Combat detail defaults Normal/off, Autodetail defaults
 Off, Overdrive auto-success defaults Off, manual Overdrive cues default On,
 maximum HP/MP defaults Off, and Speech defaults On; all values persist in the

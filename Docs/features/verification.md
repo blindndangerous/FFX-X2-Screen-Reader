@@ -1,5 +1,16 @@
 # Verification and remaining gameplay checks
 
+## Battle target ailments
+
+Highlight an affected party member with Potion and Ether. Expect the matching
+HP or MP preview followed by harmful status names. A positive effect should
+stay out of target speech. **H** still reads the turn owner's full status.
+On enemies, check the list with Sensor or Scan visible, then hidden. Group
+targeting should disclose ailments only for the target shown in that pane.
+An overhead Doom countdown adds its remaining turns while the number is visible.
+Cycle the party HUD to confirm that the status page and number pages are
+separate. [Battle target and HUD behavior](battle/index.md#commands-and-event-speech).
+
 ## Contextual mod help
 
 Press **Shift+Slash** in the field, then on the Sphere Grid and with Escape

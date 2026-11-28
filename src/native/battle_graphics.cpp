@@ -1,8 +1,11 @@
-// Read the Overkill word only on its first accepted visible sprite submission.
+// Read Overkill and Doom from accepted visible native sprite submissions.
+#include "battle_graphics.hpp"
 #include "events.hpp"
 #include "game_visual_text.hpp"
 #include "ready_game_text.hpp"
 #include <array>
+#include <algorithm>
+#include <cmath>
 namespace ffx {
 namespace {
 struct Popup { uintptr_t pool=0; unsigned epoch=0,owner=31; bool revealed=false; };
@@ -11,6 +14,12 @@ std::array<Popup,128> popups;
 std::array<Draw,128> frame{};
 unsigned frameCount=0;
 size_t cursor=0;
+struct DoomDigits {uintptr_t actor=0;unsigned turns=0,places=0;};
+std::array<DoomDigits,31> pendingDoom{},displayedDoom{};
+unsigned pendingDoomCount=0,displayedDoomCount=0,doomEpoch=0;
+bool doomDrawing=false;
+uintptr_t doomDigitReturn=0;
+unsigned digitCount(unsigned turns) {return turns<10?1u:turns<100?2u:3u;}
 int slotOf(uintptr_t pool,uintptr_t node) {
     return pool>=0x10000 && node>=pool && node<pool+128*20 && (node-pool)%20==0?
         static_cast<int>((node-pool)/20):-1;
@@ -28,7 +37,8 @@ void registeredAfter(Event& e) {
 }
 void renderBefore(Event&) {
     frameCount=0; cursor=0;
-    if(!inBattle()) return;
+    pendingDoomCount=0;doomDrawing=inBattle();
+    if(!doomDrawing) return;
     const auto pool=read<uintptr_t>(address(0xd360b0));
     auto node=read<uintptr_t>(address(0xd360b4));
     std::array<bool,128> visited{};
@@ -51,8 +61,28 @@ void renderBefore(Event&) {
         node=read<uintptr_t>(node+16);
     }
 }
+void doomDigit(Event& e) {
+    if(!doomDrawing || e.args[2]!=3 || e.args[3]>9 || !e.edi ||
+       e.result==static_cast<uintptr_t>(-1) || !(e.args[7]&255)) return;
+    // 79F680's Doom-only sprite call holds the actor in EDI and the digit's
+    // horizontal offset in EBX. Retain the value only when all digits are drawn.
+    const unsigned turns=read<uint8_t>(e.edi+0x5c8),digits=digitCount(turns);
+    const auto offset=static_cast<int>(e.ebx);
+    const auto first=static_cast<int>(digits*9/2)-9;
+    if(offset>first || offset<first-18 || (first-offset)%9) return;
+    const auto place=static_cast<unsigned>((first-offset)/9);
+    if(place>=digits || e.args[3]!=(turns/(place==0?1u:place==1?10u:100u))%10) return;
+    if(!pendingDoomCount || pendingDoom[pendingDoomCount-1].actor!=e.edi) {
+        if(pendingDoomCount==pendingDoom.size()) return;
+        pendingDoom[pendingDoomCount++]={e.edi,turns,0};
+    }
+    auto& digitsForActor=pendingDoom[pendingDoomCount-1];
+    if(digitsForActor.turns==turns) digitsForActor.places|=1u<<place;
+}
 void rendered(Event& e) {
-    if(e.parentRva!=0x39f680 || e.args[2]!=2 || e.args[3]!=61 || cursor>=frameCount) return;
+    if(e.parentRva!=0x39f680) return;
+    if(e.caller==doomDigitReturn) {doomDigit(e);return;}
+    if(e.args[2]!=2 || e.args[3]!=61 || cursor>=frameCount) return;
     // Native renderer traverses the same list in order. Include already revealed
     // records so overlapping popups still retain their own native allocation.
     const auto draw=frame[cursor++];
@@ -67,10 +97,32 @@ void rendered(Event& e) {
         planLiteral(p,label));
     commitTextPlan(p);
 }
-void renderAfter(Event&) { frameCount=0; cursor=0; }
+void renderAfter(Event&) {
+    frameCount=0;cursor=0;
+    displayedDoomCount=doomDrawing?pendingDoomCount:0;doomEpoch=generation();
+    std::copy_n(pendingDoom.begin(),displayedDoomCount,displayedDoom.begin());
+    doomDrawing=false;
 }
-void resetBattleGraphics() { popups={}; frameCount=0; cursor=0; }
+}
+int displayedDoomTurns(uintptr_t actor) {
+    if(doomEpoch!=generation()) return -1;
+    for(unsigned i=0;i<displayedDoomCount;++i) {
+        const auto& draw=displayedDoom[i];
+        if(draw.actor!=actor || draw.places!=(1u<<digitCount(draw.turns))-1) continue;
+        // The phase and actor can hide the overlay before the next draw runs.
+        const auto phase=read<uint8_t>(address(0xd2a8e0));
+        const auto scale=read<float>(actor+0x40);
+        if((phase>=31 && phase<=33) || !read<uint8_t>(actor+0x10) ||
+           !read<uint8_t>(actor+0xdc8) || !read<uint8_t>(actor+0x15) ||
+           !std::isfinite(scale) || scale==0 || !(read<uint16_t>(actor+0x616)&0x4000) ||
+           read<uint8_t>(actor+0x5c8)!=draw.turns) return -1;
+        return static_cast<int>(draw.turns);
+    }
+    return -1;
+}
+void resetBattleGraphics() { popups={};frameCount=0;cursor=0;pendingDoomCount=displayedDoomCount=doomEpoch=0;doomDrawing=false; }
 void installBattleGraphics() {
+    doomDigitReturn=address(0x39f680)+0x1c7;
     hook(0x39fc80,registeredBefore,registeredAfter);
     hook(0x39f680,renderBefore,renderAfter);
     hook(0x4999b0,nullptr,rendered);

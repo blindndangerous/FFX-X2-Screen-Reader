@@ -1,4 +1,13 @@
 namespace {
+uintptr_t __cdecl targetStatusName(int space,unsigned id,unsigned language) {
+    check(space==1 && language==0,"target reads status from the game's language and text space");
+    switch(id) {
+    case 0x1009: return address(0x2310940);
+    case 0x1011: return address(0x2310980);
+    case 0x1014: return address(0x23109c0);
+    default: check(false,"unexpected or beneficial status requested");return 0;
+    }
+}
 void battleTargetPreviewFixtures() {
     constexpr unsigned parent=0xf3c910,activeWindow=0x1fcc092;
     const auto target=address(parent)+0xf0;
@@ -18,6 +27,27 @@ void battleTargetPreviewFixtures() {
     write<uint16_t>(target+0xd8,1);write<uint16_t>(target+0xda,0);
     select(7,0x2002); // This equipment handle collides with the fixture's Ether ID.
     preview(0x2001);expect(L"Tidus: HP 100/200","Potion uses the accepted action after a weapon highlight");
+    const auto actor=read<uintptr_t>(address(0xd334cc));
+    std::array<uint16_t,3> savedHud{};std::array<uint8_t,18> savedStatus{};
+    check(copy(address(0xf3f76c),savedHud.data(),sizeof(savedHud)) && copy(actor+0x606,savedStatus.data(),savedStatus.size()),
+        "preserve native HUD and party status fixtures");
+    const auto threaten=read<uint8_t>(actor+0x5c6);
+    uint8_t savedGetter[7]{};
+    check(copy(address(0x38fd40),savedGetter,sizeof(savedGetter)),"save native status text adapter");
+    encoded(0x2310940,"Poison");encoded(0x2310980,"Threaten");encoded(0x23109c0,"Darkness");
+    stub(0x38fd40,reinterpret_cast<void*>(targetStatusName));
+    set<uint16_t>(0xf3f76c,0);set<uint16_t>(0xf3f76e,255);set<uint16_t>(0xf3f770,255);
+    write<uint16_t>(actor+0x606,0x808);write<uint8_t>(actor+0x60a,2);write<uint8_t>(actor+0x613,3);
+    write<uint8_t>(actor+0x5c6,0);write<uint16_t>(actor+0x616,0);
+    preview(0x2002);expect(L"Tidus: MP 17/30, Poison, Darkness","party target appends native ailments and omits Haste and hidden Threaten");
+    write<uint8_t>(actor+0x5c6,0xff);
+    preview(0x2001);expect(L"Tidus: HP 100/200, Poison, Threaten, Darkness","party target applies the native Threaten condition");
+    set<uint16_t>(0xf3f76c,255);
+    preview(0x2002);expect(L"Tidus: MP 17/30","non-HUD party target does not disclose raw actor statuses");
+    std::memcpy(reinterpret_cast<void*>(actor+0x606),savedStatus.data(),savedStatus.size());write<uint8_t>(actor+0x5c6,threaten);
+    std::memcpy(reinterpret_cast<void*>(address(0xf3f76c)),savedHud.data(),sizeof(savedHud));
+    std::memcpy(reinterpret_cast<void*>(address(0x38fd40)),savedGetter,sizeof(savedGetter));
+    FlushInstructionCache(GetCurrentProcess(),reinterpret_cast<void*>(address(0x38fd40)),sizeof(savedGetter));
     select(15,0x2002);
     preview(0x2001);expect(L"Tidus: HP 100/200","the other equipment window cannot choose the MP preview");
     select(10,2);

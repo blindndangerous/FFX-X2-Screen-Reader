@@ -10,7 +10,7 @@ uintptr_t __cdecl sensorHelp(unsigned id,int kind) {
 }
 uintptr_t __cdecl sensorStatus(int space,unsigned id,unsigned languageId) {
     check(space==1 && languageId==0,"Sensor labels use the native status text space and current language");
-    return address(id==0x1009?0x2310720:0x2310730);
+    return address(id==0x1009?0x2310720:id==0x102e?0x2310740:0x2310730);
 }
 void sensorFixtures() {
     scene=0; set<uint8_t>(0x1fcc092,0);
@@ -30,6 +30,48 @@ void sensorFixtures() {
     resetBattle(); event(0x49d300,address(0xf3c910));
     expect(L"Gold Element: 78%","without Sensor the gauge uses committed HP rather than the action calculator's forecast");
     check(!battleSensorVisible(20) && !battleSensorAvailable(),"hidden Sensor information is unavailable");
+    encoded(0x2310720,"Poison");encoded(0x2310730,"Haste");encoded(0x2310740,"Doom");
+    stub(0x38fd40,reinterpret_cast<void*>(sensorStatus));
+    set<uint16_t>(monster+0x606,8);set<uint16_t>(monster+0x616,0x4000);set<uint8_t>(monster+0x5c8,12);
+    const auto priorDoomField=read<uint8_t>(address(monster+0x10)),priorDoomVisible=read<uint8_t>(address(monster+0x15));
+    const auto priorDoomScale=read<float>(address(monster+0x40));
+    set<uint8_t>(monster+0x10,1);set<uint8_t>(monster+0x15,1);set<float>(monster+0x40,1);
+    auto focus=[&](unsigned owner) {set<uint8_t>(0xf3c918,static_cast<uint8_t>(owner));event(0x49d300,address(0xf3c910));};
+    auto digit=[&](unsigned value,int offset,uintptr_t result,unsigned callerOffset=0x1c7) {
+        Event e;e.rva=0x4999b0;e.parentRva=0x39f680;e.caller=address(0x39f680)+callerOffset;
+        e.edi=address(monster);e.ebx=static_cast<uintptr_t>(offset);e.result=result;
+        e.args[2]=3;e.args[3]=value;e.args[7]=0x80;listeners.at(e.rva).front().leave(e);
+    };
+    focus(1);expect(L"Gold Element: 78%","raw ailment and Doom flags do not reveal an undisplayed enemy status or number");
+    event(0x39f680,0,[&]{digit(2,0,0);digit(1,-9,static_cast<uintptr_t>(-1));digit(1,-9,0,0x1c8);});
+    focus(2);expect(L"Gold Element: 78%","clipped or foreign digit cannot reveal part of a Doom counter");
+    event(0x39f680,0,[&]{digit(2,0,0);digit(1,-9,0);});
+    focus(3);expect(L"Gold Element: 78%, Doom, 12 turns","complete accepted Doom count is visible without Sensor");
+    set<uint8_t>(monster+0x15,0);
+    focus(5);expect(L"Gold Element: 78%","a hidden actor cannot reuse its previous visible Doom number");
+    set<uint8_t>(monster+0x15,1);
+    const auto priorBattlePhase=read<uint8_t>(address(0xd2a8e0));set<uint8_t>(0xd2a8e0,31);
+    focus(6);expect(L"Gold Element: 78%","the native hidden phase withholds an earlier Doom number");
+    set<uint8_t>(0xd2a8e0,priorBattlePhase);
+    set<uint8_t>(monster+0x5c8,11);
+    focus(4);expect(L"Gold Element: 78%","old drawn Doom count cannot reveal a newer unrendered value");
+    event(0x39f680,0);
+    focus(0);expect(L"Gold Element: 78%","next frame without the graphic retires Doom");
+    set<uint16_t>(monster+0x616,0);set<uint8_t>(monster+0x5c8,0);
+    set<uint8_t>(monster+0x10,priorDoomField);set<uint8_t>(monster+0x15,priorDoomVisible);set<float>(monster+0x40,priorDoomScale);
+    const auto nextMonster=monster+0xf90;
+    encoded(nextMonster+0x540,"Second Element");
+    set<uint8_t>(nextMonster+0xdc8,1);set<int>(nextMonster+0x594,100);set<int>(nextMonster+0x5d0,90);set<uint16_t>(nextMonster+0x606,8);
+    set<uint16_t>(0xf3c9ea,48);sensorParty=true;
+    focus(0);expect(L"Gold Element: HP 777/1000, Second Element: 90%","eligible Sensor without a confirmed pane does not reveal ailments for either group target");
+    set<uint8_t>(0xf3c8fe,1);event(0x4913f0,0);
+    focus(0);expect(L"Gold Element: HP 777/1000, Poison, Second Element: 90%","confirmed pane reveals the highlighted enemy only");
+    const auto paneSpeech=said.size();focus(0);check(said.size()==paneSpeech,"unchanged pane does not repeat ailment speech");
+    set<uint8_t>(0xf3c8fe,0);event(0x4913f0,0);focus(1);
+    expect(L"Gold Element: HP 777/1000, Second Element: 90%","hidden pane retires the reveal for group targets");
+    set<uint8_t>(nextMonster+0xdc8,0);set<uint16_t>(nextMonster+0x606,0);
+    set<uint16_t>(monster+0x606,0);set<uint16_t>(0xf3c9ea,16);set<uint8_t>(0xf3c918,0);
+    sensorParty=false;resetBattle();stub(0x38fd40,reinterpret_cast<void*>(menu));
     sensorParty=true; sensorHelpCalls=0; event(0x49d300,address(0xf3c910));
     expect(L"Gold Element: HP 777/1000","Sensor availability changes on the same target and uses displayed HP numbers");
     check(sensorHelpCalls==1,"Sensor buffer is assembled at enemy highlight before the pane visibility callback");

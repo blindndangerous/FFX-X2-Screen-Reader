@@ -4,7 +4,7 @@
 namespace ffx {
 using TextRef=unsigned;
 constexpr unsigned TextPlanNodeLimit=128,TextPlanByteLimit=98304+16384;
-enum class TextPlanOp : unsigned {Literal,Integer,First,Lines,Description,Concat,Join,SpaceJoin,Periods,IfText,Or,Hp,Mp,EquipmentName,MessagePrompt,MessageRows,BattleTarget,SettingValue,NativeButtonMask,PrimaryDodgeName,LineBreaks,OrderedRows,MenuListIndex};
+enum class TextPlanOp : unsigned {Literal,Integer,First,Lines,Description,Concat,Join,SpaceJoin,Periods,IfText,Or,Hp,Mp,EquipmentName,MessagePrompt,MessageRows,BattleTarget,SettingValue,NativeButtonMask,PrimaryDodgeName,LineBreaks,OrderedRows,MenuListIndex,JoinedRefs};
 struct TextPlanNode {
     TextPlanOp op=TextPlanOp::Literal;
     unsigned left=0,right=0,offset=0,length=0;
@@ -37,7 +37,7 @@ TextRef planMenuListIndex(TextPlan&,TextRef label,unsigned selected,unsigned cou
 TextRef planNativeButtonMask(TextPlan&,uint16_t);
 TextRef planPrimaryDodgeName(TextPlan&);
 TextRef planSettingValue(TextPlan&,int value,unsigned style); // 0=toggle,1=voiced,2=combat,3=Polish,4=steps,5=percent.
-TextRef planBattleTarget(TextPlan&,TextRef name,int current,int maximum,unsigned kind);
+TextRef planBattleTarget(TextPlan&,TextRef name,int current,int maximum,unsigned kind,TextRef ailments=0);
 TextRef planVitals(TextPlan&,int64_t current,int64_t maximum,bool mp,bool showMaximumHp);
 TextRef planEquipmentFallback(TextPlan&,TextRef name,unsigned character,bool armor,unsigned id);
 TextRef planEncoded(TextPlan&,uintptr_t,unsigned limit=256,TextPlanOp=TextPlanOp::First,
@@ -45,6 +45,7 @@ TextRef planEncoded(TextPlan&,uintptr_t,unsigned limit=256,TextPlanOp=TextPlanOp
 TextRef planPair(TextPlan&,TextPlanOp,TextRef,TextRef);
 TextRef planConcat(TextPlan&,TextRef,TextRef);
 TextRef planJoin(TextPlan&,TextRef,TextRef); // Comma-separated, skipping empty values.
+TextRef planJoinedRefs(TextPlan&,const TextRef* refs,unsigned count);
 TextRef planOrderedRow(TextPlan&,TextRef previous,TextRef text,int64_t order);
 TextRef planPrefix(TextPlan&,TextRef prefix,TextRef text,const wchar_t* separator);
 TextRef planSuffix(TextPlan&,TextRef text,TextRef suffix,const wchar_t* separator);

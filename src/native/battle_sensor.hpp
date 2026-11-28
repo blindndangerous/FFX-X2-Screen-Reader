@@ -2,6 +2,7 @@
 #include "events.hpp"
 namespace ffx {
 bool battleSensorVisible(unsigned id);
+bool battleSensorPaneVisible(unsigned id);
 void highlightBattleSensor(uintptr_t window);
 void resetBattleSensor();
 void installBattleSensor();

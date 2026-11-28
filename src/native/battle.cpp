@@ -2,6 +2,7 @@
 #include "settings.hpp"
 #include "message_text.hpp"
 #include "battle_sensor.hpp"
+#include "battle_graphics.hpp"
 #include "overdrive.hpp"
 #include "wakka.hpp"
 #include "ready_game_text.hpp"
@@ -42,12 +43,12 @@ unsigned previousPlayers = 0, previousMonsters = 0;
 unsigned previousSeymour=0;
 bool previewMp = false;
 uintptr_t previousTargetWindow=0;
-unsigned previousTargetOwner=255,previousTargetCommand=0xffff;
-bool previousSensor=false;
+unsigned previousTargetOwner=255,previousTargetCommand=0xffff,previousSelectedTarget=255;
+bool previousSensor=false,previousSensorPane=false;
 void resetTargetPreview() {
     previousPlayers=previousMonsters=previousSeymour=0;
-    previousTargetWindow=0;previousTargetOwner=255;previousTargetCommand=0xffff;
-    previousSensor=previewMp=false;
+    previousTargetWindow=0;previousTargetOwner=previousSelectedTarget=255;previousTargetCommand=0xffff;
+    previousSensor=previousSensorPane=previewMp=false;
 }
 // Numeric pay windows have no command-list cursor. Track the native rendered
 // amount and selected decimal place, retiring on every window transition.
@@ -307,6 +308,54 @@ TextRef wheelMechanic(TextPlan& p,const SeymourWheels& s,unsigned id) {
         planSuffix(p,planLiteral(p,elements[i]),planInteger(p,counts[i]),L" "));
     return planConcat(p,planLiteral(p,L"Energizing wheels: "),mix);
 }
+// Native status text IDs from the party HUD list (8981D0) and Sensor list
+// (899F40). The target preview includes their harmful entries only.
+constexpr unsigned ailmentIds[]={0x1006,0x1007,0x1008,0x1009,0x100a,0x100b,0x100c,0x100d,
+    0x100e,0x100f,0x1010,0x1011,0x1012,0x1013,0x1014,0x101e,0x102a,0x102e};
+constexpr unsigned DoomAilment=1u<<(_countof(ailmentIds)-1);
+unsigned targetAilments(uintptr_t chr,bool party) {
+    std::array<uint8_t,18> status{};
+    if(!copy(chr+0x606,status.data(),status.size())) return 0;
+    auto bits=static_cast<unsigned>(status[0])|((status[1]&0xfu)<<8);
+    // The party renderer's Threaten entry requires 79AFD0, which also tests +5C6.
+    if(party && (bits&0x800) && read<uint8_t>(chr+0x5c6)!=0xff) bits&=~0x800u;
+    constexpr unsigned temporal[]={2,3,4,14};
+    for(unsigned i=0;i<_countof(temporal);++i) if(status[temporal[i]]) bits|=1u<<(12+i);
+    if(status[17]&0x04) bits|=1u<<16; // Curse, extra bit 10.
+    if(status[17]&0x40) bits|=DoomAilment;
+    return bits;
+}
+const wchar_t* doomTurnSuffix(unsigned locale,unsigned turns) {
+    static constexpr const wchar_t* suffixes[][2]={
+        {L"\u30bf\u30fc\u30f3",L"\u30bf\u30fc\u30f3"}, {L" turn",L" turns"},
+        {L" tour",L" tours"}, {L" turno",L" turnos"}, {L" Runde",L" Runden"},
+        {L" turno",L" turni"}, {L" \u56de\u5408",L" \u56de\u5408"}, {L" \ud134",L" \ud134"}
+    };
+    const auto index=menuLanguageIndex(locale);
+    return suffixes[index][turns!=1 && !(index==2 && turns==0)];
+}
+struct AilmentText {
+    std::array<TextRef,_countof(ailmentIds)> labels{};
+    unsigned locale=0;
+    bool hasLocale=false;
+    TextRef plan(TextPlan& p,unsigned mask,int doomTurns) {
+        if(doomTurns>=0) mask|=DoomAilment;
+        if(!mask) return 0;
+        std::array<TextRef,_countof(ailmentIds)> names{};
+        unsigned count=0;
+        for(unsigned i=0;i<labels.size();++i) if(mask&(1u<<i)) {
+            if(!labels[i]) labels[i]=planMenuText(p,1,ailmentIds[i]);
+            auto label=labels[i];
+            if(label && (1u<<i)==DoomAilment && doomTurns>=0) {
+                if(!hasLocale) {locale=nativeMenuLanguage();hasLocale=true;}
+                const auto turns=planConcat(p,planInteger(p,doomTurns),planLiteral(p,doomTurnSuffix(locale,doomTurns)));
+                label=planPair(p,TextPlanOp::IfText,label,planJoin(p,label,turns));
+            }
+            if(label) names[count++]=label;
+        }
+        return planJoinedRefs(p,names.data(),count);
+    }
+};
 void targets(Event& e) {
     if (!nativeGameThread() || e.epoch!=generation() || !inBattle()) return;
     const auto win = e.args[0];
@@ -325,7 +374,18 @@ void targets(Event& e) {
     const auto wheels=seymourWheels(monsters);
     const bool sensor=read<uint8_t>(win+2)==1 && read<int>(address(0xf3d6a0))!=1 && battleSensorVisible(selected);
     highlightBattleSensor(win);
-    if(!newPreview && players==previousPlayers && monsters==previousMonsters && previousSensor==sensor && previousSeymour==wheels.key) return;
+    const bool pane=sensor && battleSensorPaneVisible(selected);
+    const bool paneOpened=pane && !previousSensorPane;
+    previousSensorPane=pane;
+    const bool changed=newPreview || selected!=previousSelectedTarget || players!=previousPlayers || monsters!=previousMonsters ||
+        previousSensor!=sensor || previousSeymour!=wheels.key;
+    if(!changed && !paneOpened) return;
+    const auto monstersArray=read<uintptr_t>(address(0xd34460));
+    const auto paneAilments=pane && monstersArray && (monsters&(1u<<(selected-16)))?
+        targetAilments(monstersArray+(selected-20)*0xf90,false):0u;
+    // The native Sensor visibility callback can follow the first target update.
+    // Speak the updated row once when that reveal adds ailment information.
+    if(!changed && !paneAilments) return;
     if(newPreview) {
         previewMp=false;
         if(hasBattleCommandRecord(command)) {
@@ -336,7 +396,7 @@ void targets(Event& e) {
         }
     }
     TextPlan p;prepareTextPlan(p,"battle-target");TextRef names=0;
-    const auto monstersArray=read<uintptr_t>(address(0xd34460));
+    AilmentText ailmentText;
     for(unsigned bit=4;bit<12;++bit) if((monsters&(1u<<bit)) && monstersArray) {
         const auto chr=monstersArray+(bit-4)*0xf90;
         if(!read<uint8_t>(chr+0xdc8)) continue;
@@ -348,7 +408,8 @@ void targets(Event& e) {
             using Getter=uintptr_t(__cdecl*)(unsigned);const auto actor=reinterpret_cast<Getter>(address(0x394030))(bit+16);
             hp=read<int>(actor+0x5d0);maximum=read<int>(actor+0x594);kind=1;
         }
-        auto target=planBattleTarget(p,name,hp,maximum,kind);
+        const auto ailments=ailmentText.plan(p,selected==bit+16?paneAilments:0,displayedDoomTurns(chr));
+        auto target=planBattleTarget(p,name,hp,maximum,kind,ailments);
         if(selected==bit+16) {
             const auto mechanic=wheelMechanic(p,wheels,selected);
             if(mechanic)target=planSuffix(p,target,mechanic,L", ");
@@ -356,13 +417,18 @@ void targets(Event& e) {
         names=planJoin(p,names,target);
     }
     const auto array=read<uintptr_t>(address(0xd334cc));
+    std::array<uint16_t,3> hudActors{};
+    const bool partyStatus=players && copy(address(0xf3f76c),hudActors.data(),sizeof(hudActors));
     for(unsigned bit=0;bit<18;++bit) if((players&(1u<<bit)) && array) {
         const auto chr=array+bit*0xf90;if(!read<uint8_t>(chr+0xdc8)) continue;
+        const bool hudRow=partyStatus && std::find(hudActors.begin(),hudActors.end(),bit)!=hudActors.end();
+        const auto ailments=ailmentText.plan(p,hudRow?targetAilments(chr,true):0,displayedDoomTurns(chr));
         names=planJoin(p,names,planBattleTarget(p,planBattleName(p,bit),
-            read<int>(chr+(previewMp?0x5d4:0x5d0)),read<int>(chr+(previewMp?0x598:0x594)),previewMp?2:1));
+            read<int>(chr+(previewMp?0x5d4:0x5d0)),read<int>(chr+(previewMp?0x598:0x594)),previewMp?2:1,ailments));
     }
     p.headline=names;commitTextPlan(p); previousPlayers = players; previousMonsters = monsters;
-    previousTargetWindow=win;previousTargetOwner=owner;previousTargetCommand=command;previousSensor=sensor;previousSeymour=wheels.key;
+    previousTargetWindow=win;previousTargetOwner=owner;previousTargetCommand=command;previousSelectedTarget=selected;
+    previousSensor=sensor;previousSeymour=wheels.key;
 }
 void whoseTurn(bool) {
     if (!inBattle()) return;
@@ -485,8 +551,6 @@ bool readBattleSummonDetail() {
     planSelectionDetail(p,summonDetail(p,read<uint16_t>(list+row*2)),false);commitTextPlan(p);
     return readSelectionDetail();
 }
-void installBattleGraphics();
-void resetBattleGraphics();
 void installBattleStatus();
 void resetBattleStatus();
 void installOverdrive();
