@@ -2,10 +2,29 @@
 #include "runtime.hpp"
 #include "controller_model.hpp"
 namespace ffx {
+namespace {
+constexpr unsigned FirstKeyboardId=28,EndKeyboardId=128, KeyboardScanTable=0x830e90;
+}
 unsigned configuredKeyboardScan(unsigned id) {
     // Config IDs name both device classes. Native keyboard629F00 subtracts
     // 28; its device Update then converts that local ID to a DI scan code.
-    return id>=28 && id<128?read<uint8_t>(address(0x830e90)+id-28):0;
+    return id>=FirstKeyboardId && id<EndKeyboardId?read<uint8_t>(address(KeyboardScanTable)+id-FirstKeyboardId):0;
+}
+bool configuredKeyboardScanIsFree(unsigned scan) {
+    // Both slots of every native keyboard action, including the ones below
+    // the ordinary movement/action group. A missing config cannot prove availability.
+    const auto config=read<uintptr_t>(address(0x1efb504));
+    std::array<unsigned,75> ids{};
+    std::array<uint8_t,EndKeyboardId-FirstKeyboardId> scans{};
+    if(!scan || !config || !copy(config+0x60,ids.data(),sizeof(ids)) ||
+       !copy(address(KeyboardScanTable),scans.data(),sizeof(scans))) return false;
+    const auto owns=[&](unsigned id) {
+        return id>=FirstKeyboardId && id<EndKeyboardId && scans[id-FirstKeyboardId]==scan;
+    };
+    for(const auto& binding:keyboard)
+        if(binding.first>=ids.size() || binding.second>=ids.size() ||
+           owns(ids[binding.first]) || owns(ids[binding.second])) return false;
+    return true;
 }
 int configuredControllerButton(unsigned id) {
     // Native controller629E50 subtracts11, not keyboard's28.

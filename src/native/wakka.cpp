@@ -8,6 +8,7 @@
 #include "controller.hpp"
 #include "native_image.hpp"
 #include "ready_game_text.hpp"
+#include "context_help_text.hpp"
 #include <atomic>
 
 
@@ -317,10 +318,14 @@ void effectCreated(Event& e) {
 }
 }
 bool wakkaMenuActive() { return active; }
-void wakkaMenuKey(unsigned vk) {
+void wakkaMenuKey(unsigned vk,bool shift) {
 
     if(!nativeGameThread()) return;
     if(!validMenu()) { releaseMenu(true); return; }
+    if(vk==VK_OEM_2 && shift) {
+        output(contextHelpText(nativeMenuLanguage()).reels,true,WakkaChoiceProducer);
+        return;
+    }
     if(vk==VK_ESCAPE || vk==VK_BACK || vk==VK_F8) {
         dismissed=true; releaseMenu(true); output(L"Manual reels",true,WakkaChoiceProducer); return;
     }

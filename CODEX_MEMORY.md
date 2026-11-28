@@ -52,6 +52,9 @@ offline tools and full debugging record remain available. The
 Grid movement costs and inline unavailable speech, skips empty-node Autodetail
 and adds an independent node-number setting. F6 guidance keeps the required
 number. Local gameplay remains pending.
+[PR #14](Docs/plan.md#november24-pull-request-review-hold) adds localized
+Shift+Slash help for the frontmost screen and an F8 Help row. The shortcut
+respects the keyboard layout and native bindings. Local gameplay remains pending.
 Enemy HP/MP rendering awaits individual review.
 
 [Airship Proceed? choices](Docs/plan.md#november24-airship-proceed-confirmation)

@@ -5,6 +5,7 @@
 #include "selection_details.hpp"
 #include "system_menu_capture.hpp"
 #include "resource_reset.hpp"
+#include "shops.hpp"
 
 namespace ffx {
 namespace {
@@ -119,7 +120,6 @@ void config(Event& e) {
 }
 void installStatusReview();
 void resetStatusReview();
-void installShops();
 void installConfirmations();
 void installEscSettings();
 void installSystemMenus() {

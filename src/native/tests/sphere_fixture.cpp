@@ -90,6 +90,8 @@ int main() {
     grid.links.push_back({4,5,0}); fixture=grid;
     setSetting(Setting::AutoDetail,0); openSpherePlanner(false);
     check(spherePlannerActive() && captured && contains(L"Character 0: Ability") && contains(L"1 of 2"),"F3 opens active character's abilities directly with speech capture");
+    spherePlannerKey(VK_OEM_2,true);
+    check(spherePlannerActive() && captured && contains(L"Sphere Grid planner."),"planner help keeps the modal menu open");
     spherePlannerKey('I'); check(said.back()==L"Native ability effect","manual ability description");
     spherePlannerKey(VK_DOWN); spherePlannerKey('I'); check(said.back()==L"Native passive effect","passive ability included");
     spherePlannerKey(VK_RETURN); check(!spherePlannerActive() && !captured && contains(L"destination Passive"),"selection saves target, closes capture");

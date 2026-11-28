@@ -96,6 +96,13 @@ The October20 local developer console reserves Shift+F1 through queue pressure
 and focus/console handoff, preserving plain F1. Existing chords default to
 ordinary handback. [Design, bounds and regression evidence](console_f1_20261020.md).
 
+Contextual help uses the same shifted-chord registration and native-return
+dispatch. It checks the current layout's question-mark mapping and both
+configured keyboard slots for every native keyboard action. Missing binding
+data, text entry or resource loading leaves the key with the game. A claimed
+press stays consumed if the command queue is full. F8 Help works independently
+of keyboard layout and bindings.
+
 `physical_gamepad.cpp` exclusively owns SDL initialization/device enumeration,
 event pumping and snapshots. `controller.cpp` consumes copied states at native
 input boundaries, preserving ordinary input and consuming only reserved commands.

@@ -3,6 +3,7 @@
 namespace ffx {
 struct Binding { unsigned first,second,label; };
 unsigned configuredKeyboardScan(unsigned id);
+bool configuredKeyboardScanIsFree(unsigned scan);
 int configuredControllerButton(unsigned id);
 unsigned configuredActionKeyboardScan(unsigned action);
 std::array<unsigned,2> configuredActionKeyboardScans(unsigned action);

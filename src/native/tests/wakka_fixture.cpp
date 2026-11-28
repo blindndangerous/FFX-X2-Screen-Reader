@@ -52,6 +52,9 @@ std::wstring spoken;
 float frequency=0;
 unsigned generation() { return epoch; }
 bool nativeGameThread() { return owner; }
+bool nativeResourceLoading() noexcept {return false;}
+unsigned wakkaLocale=1;
+unsigned __cdecl wakkaMenuLanguage() {return wakkaLocale;}
 bool inBattle() { return battle; }
 bool utilityConsoleActive() { return false; }
 bool modMenuActive() { return wakkaMenuActive(); }
@@ -68,6 +71,7 @@ void navAudioOverdriveBeep(float value,unsigned) { ++beeps; frequency=value; }
 void navAudioCancelOverdriveBeep() {}
 bool copy(uintptr_t source,void* target,size_t size) { __try { memcpy(target,reinterpret_cast<void*>(source),size); return true; } __except(EXCEPTION_EXECUTE_HANDLER) { return false; } }
 uintptr_t address(unsigned rva) {
+    if(rva==0x241290) return reinterpret_cast<uintptr_t>(wakkaMenuLanguage);
     if(rva==0xf3f73c) return reinterpret_cast<uintptr_t>(clockWords);
     if(rva==wakka_rva::GlobalTable) return reinterpret_cast<uintptr_t>(&globalTable);
     if(rva==0x394030) return reinterpret_cast<uintptr_t>(character);
@@ -224,6 +228,9 @@ void cases(const wchar_t* path) {
     check(calls==forwarded+2 && wakkaMenuActive() && captured && clockWords[0]==1,
         "foreign wrappers forward native stubs without waiting or touching owner choice/timer state");owner=true;
     owner=false; wakkaMenuKey(VK_RETURN); check(wakkaMenuActive() && clockWords[0]==1,"foreign-thread key cannot mutate paused native state"); owner=true;
+    wakkaLocale=2;wakkaMenuKey(VK_OEM_2,true);wakkaLocale=1;
+    check(spoken.find(L"Rouleaux de Wakka.")==0 && wakkaMenuActive() && clockWords[0]==1,
+        "localized reel help speaks during modal capture while preserving the paused native clock");
     wakkaMenuKey(VK_END); check(spoken==L"Thunder Shot","native valid Element matches and last choice");
     wakkaMenuKey(VK_HOME); check(spoken==L"Fire Shot","first native match");
     wakkaMenuKey(VK_DOWN); check(spoken==L"Ice Shot","next native match");

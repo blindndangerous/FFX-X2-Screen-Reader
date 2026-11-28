@@ -203,8 +203,9 @@ bool escMenuActive() {
     const auto menu=read<uintptr_t>(address(0x8cc868));
     return menu && read<uint8_t>(menu+0x70)!=0;
 }
+bool escControlsAvailable() {return escMenuActive() && page==12 && row>=0 && row<5;}
 bool readEscControls() {
-    if(!escMenuActive() || page!=12 || row<0 || row>=5) return false;
+    if(!escControlsAvailable()) return false;
     EscPacket packet;prepareEscPacket(packet,EscCaptureKind::SpecialControls);
     specialControls(address(0x83a2bc)+16+row*24,packet);
     commitEscPacket(packet);return true;

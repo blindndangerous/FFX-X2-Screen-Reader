@@ -16,10 +16,12 @@
 #include <map>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 namespace ffx {
 bool fixtureNativeOwner=true;
+bool fixtureLoading=false;
 bool nativeGameThread() {return fixtureNativeOwner;}
-bool nativeResourceLoading() noexcept {return false;}
+bool nativeResourceLoading() noexcept {return fixtureLoading;}
 bool captureControllerBinding(uint64_t);
 std::vector<SpeechBackendChoice> speechBackendChoices() { return {{0,L"Automatic"},{1,L"NVDA"},{3,L"SAPI"}}; }
 std::wstring speechBackendStatus() { return L"NVDA"; }
@@ -33,12 +35,21 @@ bool testForeground=true;
 unsigned epoch=1,drains=0,previews=0,repeats=0,navUpdates=0;
 bool navPaused=false;
 bool captured=false;
+bool fixtureGrid=false,fixtureBattle=false,fixtureSensor=false,fixturePlanner=false;
+bool fixtureReview=false,fixtureFooter=false,fixtureEscFooter=false,fixtureShop=false;
 std::vector<std::wstring> said;
 std::map<unsigned,void(*)(bool)> keys;
 std::map<unsigned,bool(*)()> contexts;
 std::atomic<int> scene{0};
 bool fixtureEsc=false;
 bool escMenuActive() {return fixtureEsc;}
+bool escControlsAvailable() {return fixtureEsc && fixtureEscFooter;}
+bool statusReviewAvailable() {return fixtureReview || fixtureFooter;}
+bool statusReviewLinesAvailable() {return fixtureReview;}
+bool helpControlsAvailable() {return fixtureFooter;}
+bool shopExtraAvailable() {return fixtureShop;}
+bool battleSensorAvailable() {return fixtureSensor;}
+bool sphereGridOpen() {return fixtureGrid;}
 unsigned generation() { return epoch; }
 void log(const char*,...) {}
 std::wstring join(const std::vector<std::wstring>& parts,const wchar_t* separator) {
@@ -47,15 +58,38 @@ std::wstring join(const std::vector<std::wstring>& parts,const wchar_t* separato
 bool hook(unsigned,Handler,Handler) {return false;}
 unsigned fixtureMenuLanguage=1;
 unsigned __cdecl menuLanguage() {return fixtureMenuLanguage;}
-uintptr_t address(unsigned rva) {return rva==0x241290?reinterpret_cast<uintptr_t>(menuLanguage):0;}
-bool copy(uintptr_t,void*,size_t) {return false;}
+std::array<uint8_t,100> configScans{};
+struct KeyboardConfig { uint8_t prefix[0x60]{}; std::array<unsigned,75> ids{}; } keyboardConfig;
+uintptr_t configAddress=reinterpret_cast<uintptr_t>(&keyboardConfig);
+uintptr_t address(unsigned rva) {
+    if(rva==0x241290) return reinterpret_cast<uintptr_t>(menuLanguage);
+    if(rva==0x1efb504) return reinterpret_cast<uintptr_t>(&configAddress);
+    if(rva==0x830e90) return reinterpret_cast<uintptr_t>(configScans.data());
+    return 0;
+}
+bool copy(uintptr_t source,void* target,size_t bytes) {
+    if(source==reinterpret_cast<uintptr_t>(&configAddress) && bytes==sizeof(configAddress)) {
+        std::memcpy(target,&configAddress,bytes);return true;
+    }
+    if(source==reinterpret_cast<uintptr_t>(keyboardConfig.ids.data()) && bytes==sizeof(keyboardConfig.ids)) {
+        std::memcpy(target,keyboardConfig.ids.data(),bytes);return true;
+    }
+    if(source==reinterpret_cast<uintptr_t>(configScans.data()) && bytes==configScans.size()) {
+        std::memcpy(target,configScans.data(),bytes);return true;
+    }
+    return false;
+}
 bool outputDialogue(const std::wstring& text,bool interrupt,const char* producer,bool) {return output(text,interrupt,producer);}
 void emitSelectionDetailOwned(std::wstring,SelectionDetailToken,bool,const speechq::Header&) {}
 void appendSelectionDetailOwned(std::wstring,SelectionDetailToken) {}
 bool output(const std::wstring& text,bool,const char*) { said.push_back(text); return true; }
 void hotkey(unsigned vk,void(*handler)(bool)) { keys[vk]=handler; }
 void hotkeyWhen(unsigned vk,void(*handler)(bool),bool(*available)()) {keys[vk]=handler;contexts[vk]=available;}
-void captureSpeech(bool value) { captured=value; }
+bool helpExclusive=false;
+void hotkeyChordWhen(unsigned vk,bool shift,void(*handler)(bool),bool(*available)(),bool exclusive) {
+    if(vk!=VK_OEM_2 || !shift) std::exit(1);
+    keys[vk|0x100]=handler;contexts[vk|0x100]=available;helpExclusive=exclusive;
+}
 bool namingContext=false; unsigned nameReads=0;
 bool namingReadbackAvailable() {return namingContext;}
 bool readEnteredName() { if(!namingContext) return false; ++nameReads; return true; }
@@ -71,7 +105,7 @@ void updateNavAudio(Point point,bool moving) {
 }
 void stopNavPreview() {}
 void previewNavAudio(bool) { ++previews; }
-bool inBattle() { return false; }
+bool inBattle() { return fixtureBattle; }
 std::wstring lightningDodgeControls() { return L"Dodge: fixture control."; }
 bool puzzleArmed() { return false; }
 std::wstring puzzleAction; bool trialPresent=false,viaPresent=false;
@@ -112,7 +146,7 @@ const TrialUtility* captureCurrentTrial(const UtilityScript& script) noexcept {r
 void utilityReply(const std::wstring& text) { said.push_back(text); }
 void consoleReplyReady(const wchar_t*,size_t) {}
 void resetSpherePlanner() {}
-bool spherePlannerActive() { return false; }
+bool spherePlannerActive() { return fixturePlanner; }
 bool fixtureWakka=false;
 bool fixtureAirshipContext=false;
 unsigned begunAirshipDestination=99;
@@ -121,11 +155,13 @@ bool hiddenAirshipMenuAvailable() { return setting(Setting::HiddenAirshipDestina
 bool beginHiddenAirshipSearch(unsigned destination) { if(!hiddenAirshipMenuAvailable()) return false; begunAirshipDestination=destination; airshipBeginAfterClose=!modMenuActive()&&!captured; return true; }
 unsigned wakkaKey=0,wakkaResets=0;
 bool wakkaMenuActive() { return fixtureWakka; }
-void wakkaMenuKey(unsigned vk) { wakkaKey=vk; }
+bool wakkaHelp=false,plannerHelp=false;
+void wakkaMenuKey(unsigned vk,bool shift) { wakkaKey=vk;wakkaHelp=vk==VK_OEM_2 && shift; }
 void resetWakka() { fixtureWakka=false; ++wakkaResets; }
-void spherePlannerKey(unsigned,bool) {}
+void spherePlannerKey(unsigned vk,bool shift) {plannerHelp=vk==VK_OEM_2 && shift;}
 }
 #include "test_speech_domains.hpp"
+namespace ffx {void captureSpeech(bool value) {captured=value;speechq::fixture::modal=value;}}
 using namespace ffx;
 void menuKeyForTest(unsigned key,bool shift=false) {ffx::modMenuKey(key,shift);drainSpeechDomainsForTest();}
 void openMenuForTest(const ModMenuState& state) {ffx::openModMenu(state);drainSpeechDomainsForTest();}
@@ -138,6 +174,41 @@ void selectRow(const std::wstring& label) {
         menuKeyForTest(VK_DOWN);
     }
     check(false,"requested row is accessible in the current menu");
+}
+void contextHelpChecks() {
+    constexpr unsigned chord=VK_OEM_2|0x100;
+    check(keys.count(chord) && contexts.count(chord) && helpExclusive,"contextual help registers only its exclusive shifted chord");
+    const auto scan=MapVirtualKeyW(VK_OEM_2,MAPVK_VK_TO_VSC_EX);
+    const bool supportedLayout=VkKeyScanW(L'?')==MAKEWORD(VK_OEM_2,1) && scan && scan<0x80;
+    check(contexts[chord]()==supportedLayout,"shortcut is available only on a keyboard layout that maps Shift+Slash to question mark");
+    if(!supportedLayout) return; // F8 Help is tested on every keyboard layout.
+    const auto help=[&]() {pressForTest(chord,true);return said.back();};
+    check(help().find(L"Field.")==0,"field help speaks");
+    configScans[0]=static_cast<uint8_t>(scan);
+    for(const unsigned slot:{0u,49u,74u}) {
+        keyboardConfig.ids[slot]=28;
+        check(!contexts[chord](),"primary, alternate, and secondary group native assignments retain the key");
+        keyboardConfig.ids[slot]=0;
+    }
+    const auto priorConfig=configAddress;configAddress=0;
+    check(!contexts[chord](),"missing keyboard configuration leaves the key native");configAddress=priorConfig;
+    namingContext=true;check(!contexts[chord](),"text entry retains the punctuation chord");namingContext=false;
+    fixtureLoading=true;check(!contexts[chord](),"loading cannot activate contextual help");fixtureLoading=false;
+    fixtureGrid=true;check(help().find(L"Sphere Grid.")==0,"Grid help speaks");
+    fixtureEsc=true;check(help().find(L"Game menu.")==0 && said.back().find(L"Shift+I")==std::wstring::npos,"frontmost Escape wins over Grid and omits unavailable footer keys");
+    fixtureEscFooter=true;check(help().find(L"Shift+I")!=std::wstring::npos,"Escape Special Features advertises its footer controls");
+    fixtureEscFooter=false;fixtureEsc=false;fixtureGrid=false;
+    scene=6;check(help().find(L"extra information")==std::wstring::npos && said.back().find(L"Comma")==std::wstring::npos,"generic menu omits unavailable shop and review keys");
+    fixtureShop=true;check(help().find(L"U reads extra information")!=std::wstring::npos,"active shop help advertises U");fixtureShop=false;
+    fixtureReview=fixtureFooter=true;check(help().find(L"Comma and period")!=std::wstring::npos && said.back().find(L"Shift+I")!=std::wstring::npos,"visible Help page advertises review and controls");
+    fixtureReview=fixtureFooter=false;scene=0;
+    fixtureBattle=true;check(help().find(L"Sensor")==std::wstring::npos,"ordinary battle help omits inactive Sensor keys");
+    fixtureSensor=true;check(help().find(L"Sensor information")!=std::wstring::npos,"active Sensor target advertises its review keys");fixtureSensor=fixtureBattle=false;
+    trialPresent=true;check(help().find(L"Cloister of Trials.")==0,"Cloister help speaks");trialPresent=false;
+    viaPresent=true;check(help().find(L"Via Purifico.")==0,"Via help names its own menu");viaPresent=false;
+    fixtureGagazet=true;check(help().find(L"Gagazet cave puzzles.")==0 && said.back().find(L"F9")==std::wstring::npos,"Gagazet omits the Cloister step commands");fixtureGagazet=false;
+    fixturePlanner=true;menuKeyForTest(VK_OEM_2,true);check(plannerHelp,"modal planner receives help on its own input route");fixturePlanner=false;
+    fixtureWakka=true;menuKeyForTest(VK_OEM_2,true);check(wakkaHelp,"modal reel picker receives help on its own input route");fixtureWakka=false;
 }
 int main() {
     installTextPlans();
@@ -180,9 +251,19 @@ int main() {
     scene=0;trialPresent=true;
     pressForTest(VK_F10,false); check(!modMenuActive() && said.back()==L"Fixture trial","path shortcut does not open settings");
     trialPresent=false;
+    contextHelpChecks();
     pressForTest(VK_F8,false);
     check(modMenuActive() && captured,"spoken menu captures game narration");
-    check(said.back()==L"Accessibility mod menu. Speech: On, 1 of 6","main menu keeps Speech, Speech options and existing grouped submenus plus Close");
+    check(said.back()==L"Accessibility mod menu. Speech: On, 1 of 7","main menu preserves the original row order and adds Help before Close");
+    fixtureMenuLanguage=2;selectRow(L"Aide");
+    menuKeyForTest(VK_RETURN);
+    check(said.back().find(L"Menu du mod.")==0 && said.back().find(L"Exploration.")!=std::wstring::npos && modMenuActive(),
+        "localized F8 Help speaks menu and field controls during modal speech capture");
+    fixtureMenuLanguage=1;
+    if(contexts[VK_OEM_2|0x100]()) {
+        menuKeyForTest(VK_OEM_2,true);
+        check(said.back().find(L"Mod menu.")==0 && said.back().find(L"Field.")==std::wstring::npos,"shortcut inside F8 speaks the frontmost menu's own keys");
+    }
     menuKeyForTest(VK_F6); menuKeyForTest(VK_F7);
     check(!setting(Setting::Beacon) && !setting(Setting::AutoDetail),"toggles remain available inside settings");
     check(navPaused,"F6 inside settings keeps route audio paused");

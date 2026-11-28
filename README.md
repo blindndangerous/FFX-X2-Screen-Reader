@@ -12,7 +12,7 @@ See the [player guide](https://github.com/bladestorm360/FFX-X2-Screen-Reader/blo
 
 After the opening notices, press the spoken keyboard advance key (B in the tested mapping) or controller Menu/Start to reach the title menu.
 
-- **F8:** open accessibility settings during play.
+- **F8:** open accessibility settings during play. Choose **Help** to hear the menu controls and shortcuts for the current game screen.
 - **F7:** toggle Autodetail.
 - **I:** read available native descriptions.
 

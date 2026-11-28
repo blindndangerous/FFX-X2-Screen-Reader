@@ -179,7 +179,7 @@ if not "%errorlevel%"=="0" goto failed
 if not "%errorlevel%"=="0" goto failed
 if /I "%~1"=="--startup" goto success
 :accessibility
-cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:accessibility_fixture.exe "%TEST_SRC%accessibility_fixture.cpp" "%TEST_SRC%..\mod_menu.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\controller_bindings.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\utility_text_plans.cpp" /link user32.lib
+cl /nologo /W4 /EHsc /std:c++17 /MT /DFFX_READER_TEST /Fe:accessibility_fixture.exe "%TEST_SRC%accessibility_fixture.cpp" "%TEST_SRC%..\mod_menu.cpp" "%TEST_SRC%..\game_binding_input.cpp" "%TEST_SRC%..\text_plan.cpp" "%TEST_SRC%..\settings.cpp" "%TEST_SRC%..\controller_bindings.cpp" "%TEST_SRC%..\utility_text.cpp" "%TEST_SRC%..\utility_text_plans.cpp" /link user32.lib
 if not "%errorlevel%"=="0" goto failed
 .\accessibility_fixture.exe
 if not "%errorlevel%"=="0" goto failed

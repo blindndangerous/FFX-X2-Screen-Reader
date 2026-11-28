@@ -117,7 +117,10 @@ int main() {
     button(pad::Menu,false); button(pad::Up,true); check(menuKeys==1 && !readGame(),"controller navigates mod menu exclusively");
     button(pad::Up,false);fixtureGuidance=true;button(pad::LB,true);
     check(lastMenuVk==VK_HOME && !readGame(),"F8 retains L1 Home even when a guide is available underneath");
-    button(pad::LB,false);fixtureGuidance=false;fixtureMenu=false;pumpController();pumpController();
+    button(pad::LB,false);fixtureGuidance=false;
+    button(pad::Down,true);check(lastMenuVk==VK_DOWN && !readGame(),"controller Down can select the F8 Help row");
+    button(pad::Down,false);button(pad::South,true);check(lastMenuVk==VK_RETURN && !readGame(),"controller A activates F8 Help through the same route as Enter");
+    button(pad::South,false);fixtureMenu=false;pumpController();pumpController();
     auto modCommand=[&](int control,unsigned vk) {
         button(pad::View,true); button(pad::View,false); button(control,true);
         check(lastVk==vk && !readGame(),"contextual mod command consumes native game action");

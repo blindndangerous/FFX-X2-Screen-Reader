@@ -318,8 +318,10 @@ void resetStatusReview() {
     TextPlan p;prepareCommand(p,Close,nativeView.serial);commitTextPlan(p);
 }
 bool statusReviewAvailable() {return available();}
+bool statusReviewLinesAvailable() {return reviewable();}
+bool helpControlsAvailable() {return nativeView.help && available();}
 bool readHelpControls() {
-    if(!nativeView.help || !available()) return false;
+    if(!helpControlsAvailable()) return false;
     TextPlan p;prepareCommand(p,ReadControls,nativeView.serial);commitTextPlan(p);return true;
 }
 void closeGridStatus(int page) {if(nativeView.grid && nativeView.page==page) resetStatusReview();}

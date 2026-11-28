@@ -45,7 +45,8 @@ void pumpController() { ++controllerPumps; }
 bool ownedPad=false;
 bool controllerOwned() { return ownedPad; }
 std::vector<unsigned> menuKeys;
-void modMenuKey(unsigned vk,bool) { menuKeys.push_back(vk); }
+bool menuShift=false;
+void modMenuKey(unsigned vk,bool shift) { menuKeys.push_back(vk);menuShift=shift; }
 void pumpUtilities() {}
 bool nativeGameThread() { return true; }
 bool tryNativeReaderAccess() noexcept {return nativeGameThread();}
@@ -79,6 +80,10 @@ bool output(const wchar_t*,bool,const char*) {++inputPressure;return true;}
 }
 using namespace ffx;
 static unsigned pressed=0, shifted=0;
+static unsigned helpPresses=0;
+static bool slashUnbound=true;
+static bool helpContext() {return slashUnbound;}
+static void helpKey(bool shift) {if(!shift) std::exit(1);++helpPresses;}
 static bool statusVisible=false;
 static bool statusContext() { return statusVisible; }
 static bool gridVisible=false;
@@ -257,6 +262,13 @@ int main() {
     check(keys[DIK_DOWN]==0x80,"fresh DirectInput arrow restores game after release");
     keys.fill(0); fire(0xfffe0001,state); keys[DIK_UP]=0x80; testModMenu=true; fire(0xfffe0001,state);
     check(!keys[DIK_UP],"settings takes exclusive DirectInput arrows");
+    if(MapVirtualKeyW(DIK_SLASH,MAPVK_VSC_TO_VK_EX)==VK_OEM_2) {
+        keys.fill(0);fire(0xfffe0001,state);
+        keys[DIK_LSHIFT]=keys[DIK_SLASH]=0x80;fire(0xfffe0001,state);drain();
+        check(!keys[DIK_SLASH] && !menuKeys.empty() && menuKeys.back()==VK_OEM_2 && menuShift,
+            "DirectInput Shift+Slash reaches the modal menu with its modifier");
+        keys.fill(0);fire(0xfffe0001,state);
+    }
     testModMenu=false;
     hotkeyWhen(VK_RIGHT,key,statusContext);
     check(!capturesKey(VK_RIGHT),"inactive status leaves game arrows intact");
@@ -340,6 +352,25 @@ int main() {
     testForeground=true;msg.message=WM_KEYDOWN;msg.lParam=0;fire(0xffff0000,message);
     check(msg.message==WM_KEYDOWN,"fresh plain Windows F1 stays native after console handoff");
     msg.message=WM_KEYUP;fire(0xffff0000,message);directKeyboard(true);
+    hotkeyChordWhen(VK_OEM_2,true,helpKey,helpContext,true);
+    check(!capturesKey(VK_OEM_2,false) && capturesKey(VK_OEM_2,true),"plain Slash stays native");
+    slashUnbound=false;
+    check(!consumeKey(VK_OEM_2,true),"a conflicting native binding retains Shift+Slash");
+    slashUnbound=true;consumeKey(VK_OEM_2,true);drain();
+    check(helpPresses==1,"available shifted chord dispatches one help request");
+    consumeKey(VK_OEM_2,true);slashUnbound=false;drain();
+    check(helpPresses==1,"queued help rechecks whether the native binding now owns the key");
+    slashUnbound=true;
+    for(unsigned i=0;i<64;++i) check(consumeKey('N',false),"fill the native command queue before help");
+    if(MapVirtualKeyW(DIK_SLASH,MAPVK_VSC_TO_VK_EX)==VK_OEM_2) {
+        keys.fill(0);fire(0xfffe0001,state);
+        keys[DIK_LSHIFT]=keys[DIK_SLASH]=0x80;fire(0xfffe0001,state);
+        check(!keys[DIK_SLASH],"exclusive Help press cannot reach DirectInput when the queue is full");
+        keys[DIK_LSHIFT]=0;keys[DIK_SLASH]=0x80;fire(0xfffe0001,state);
+        check(!keys[DIK_SLASH],"Help retains the held key after Shift release");
+    } else check(consumeKey(VK_OEM_2,true),"exclusive Help press is claimed even with a full queue");
+    keys.fill(0);fire(0xfffe0001,state);drain();
+    check(helpPresses==1,"a refused Help request cannot replay");
     keys.fill(0); fire(0xfffe0001,state); keys[DIK_LCONTROL]=0x80; keys[DIK_DOWN]=0x80;
     fire(0xfffe0001,state); drain(); check(!keys[DIK_DOWN] && blitzInputs==1,"Ctrl Down has one Blitzball buffer owner and never reaches game selection");
     keys.fill(0); fire(0xfffe0001,state); keys[DIK_DOWN]=0x80; fire(0xfffe0001,state); drain();

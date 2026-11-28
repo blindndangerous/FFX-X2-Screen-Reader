@@ -9,7 +9,7 @@ inline constexpr unsigned EffectId=0x388eb0,GlobalBegin=0x388e20,GlobalTable=0xd
 void installWakka();
 void resetWakka();
 bool wakkaMenuActive();
-void wakkaMenuKey(unsigned vk);
+void wakkaMenuKey(unsigned vk,bool shift=false);
 #ifdef FFX_READER_TEST
 void testWakkaModule(uintptr_t base,const wchar_t* path,int(*invoke)());
 int testWakkaControl();

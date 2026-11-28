@@ -1,5 +1,16 @@
 # Menus, dialogue, Help and Sphere Grid
 
+## Contextual mod help
+
+**Shift+Slash** reads the frontmost screen's shortcuts, and **F8 > Help** reads
+the mod menu controls followed by the game screen's list. Escape takes priority
+over the underlying Grid or battle. The Sphere Grid planner and Wakka's reel
+picker speak through their existing modal owners. The planner uses the UI
+language captured with its grid snapshot. Other help uses the current game UI
+language. Shop, line review, displayed controls and Sensor tips use the same
+availability checks as their commands. Cloister, Via Purifico and Gagazet
+guides have separate instructions.
+
 ## Field item focus and system popups
 
 Items, Key Items and Abilities keep the native two-column focus order. A

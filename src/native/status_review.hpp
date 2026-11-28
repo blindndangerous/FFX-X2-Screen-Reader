@@ -11,7 +11,9 @@ struct StatusBatch {
 enum HelpRowRole : unsigned {HelpContent,HelpControls,HelpPrompt,HelpCharacter};
 // Battle result row context[6] marks an earned total spoken even with Autodetail Off.
 bool readHelpControls();
+bool helpControlsAvailable();
 bool statusReviewAvailable();
+bool statusReviewLinesAvailable();
 void installStatusReview();
 void resetStatusReview();
 StatusBatch beginStatusRows(unsigned character,int page,bool grid,bool resetCursor,bool replaceContext=true);

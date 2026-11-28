@@ -25,6 +25,11 @@
 #include "esc_details.hpp"
 #include "menu_list_text.hpp"
 #include "sphere_ui_text.hpp"
+#include "context_help_text.hpp"
+#include "battle_sensor.hpp"
+#include "game_bindings.hpp"
+#include "shops.hpp"
+#include "status_review.hpp"
 #include <atomic>
 #include <stdexcept>
 #include <cstring>
@@ -38,9 +43,9 @@ unsigned row=0,epoch=0;
 struct MenuContext { bool supported=false,armed=false,via=false,zanarkand=false,gagazet=false,sin=false;unsigned epoch=0;UtilityText status;ZanarkandPatternSnapshot pattern; } context;
 SpeechBackendSnapshot speechSnapshot{};
 constexpr unsigned SettingsCount=static_cast<unsigned>(Setting::Count);
-enum Action : unsigned { AudioMenu=SettingsCount,NavigationMenu,MiscMenu,BindingsMenu,TrialMenu,BeaconPreview,WallPreview,SpeechBackendMenu,HiddenAirshipMenu,GagazetMenu,GagazetGuide,GagazetSelected,GagazetStatus,SinMenu,SinGuide,SinStatus,Back,Close,SpeechOptionsMenu };
+enum Action : unsigned { AudioMenu=SettingsCount,NavigationMenu,MiscMenu,BindingsMenu,TrialMenu,BeaconPreview,WallPreview,SpeechBackendMenu,HiddenAirshipMenu,GagazetMenu,GagazetGuide,GagazetSelected,GagazetStatus,SinMenu,SinGuide,SinStatus,Back,Close,SpeechOptionsMenu,Help };
 constexpr unsigned option(Setting id) { return static_cast<unsigned>(id); }
-constexpr unsigned mainItems[]={option(Setting::Speech),SpeechOptionsMenu,AudioMenu,NavigationMenu,MiscMenu,Close};
+constexpr unsigned mainItems[]={option(Setting::Speech),SpeechOptionsMenu,AudioMenu,NavigationMenu,MiscMenu,Help,Close};
 constexpr unsigned audioItems[]={option(Setting::Beacon),option(Setting::BeaconVolume),option(Setting::Walls),
     option(Setting::WallVolume),option(Setting::WallRange),option(Setting::Arrival),option(Setting::ArrivalVolume),
     option(Setting::RaceCues),option(Setting::ButterflyCues),option(Setting::LightningWarning),option(Setting::JechtCues),BeaconPreview,WallPreview,Back};
@@ -153,6 +158,7 @@ TextRef recipeRow(TextPlan& p) {
     case TrialMenu: return planLiteral(p,context.via?L"Via Purifico, submenu":L"Cloister of Trials, submenu");
     case BeaconPreview: return planLiteral(p,L"Preview beacon");
     case WallPreview: return planLiteral(p,L"Preview wall tones");
+    case Help: return planLiteral(p,contextHelpText(nativeMenuLanguage()).label);
     case Back: return planLiteral(p,L"Back");
     default: return planLiteral(p,L"Close mod menu");
     }
@@ -160,6 +166,7 @@ TextRef recipeRow(TextPlan& p) {
 void emitReady(const wchar_t* value,const char* producer="mod-menu") {
     TextPlan p;prepareTextPlan(p,producer);p.headline=planLiteral(p,value);commitTextPlan(p);
 }
+void speakHelp(bool includeMenu);
 void announce(bool opening=false) {
     TextPlan p;prepareTextPlan(p,"mod-menu");TextRef root=0;
     if(opening) root=planConcat(p,planLiteral(p,page==Page::Puzzle && context.via?L"Via Purifico":definition().title),planLiteral(p,L". "));
@@ -212,6 +219,7 @@ void description() {
         else if(item==AudioMenu) emitReady(L"Open beacon, wall and arrival sounds, volumes, wall range, race pickup cues, lightning warnings and sound previews.");
         else if(item==NavigationMenu) emitReady(L"Open Auto walk, path announcements, the unreachable destination filter and Partial steps.");
         else if(item==MiscMenu) emitReady(L"Open speech detail, voiced dialogue, menu indexing, translation text, timing assistance, Chocobo and Remiem races, butterfly hunts and Blitzball when available, controller bindings, trial controls, Gagazet cave puzzles and Sin object collection when available.");
+        else if(item==Help) speakHelp(true);
         else if(item==Back) emitReady(L"Return to the parent menu and its selected submenu entry. Settings remain open.");
         else emitReady(L"Up and Down select. Left and Right change a value. Right or Enter opens a submenu. Enter activates. I reads the description. Escape returns. Home and End go to the first and last row.");
     }
@@ -293,6 +301,7 @@ void activate(int delta,bool confirmed) {
         case GagazetStatus: if(confirmed && context.gagazet) { try { emitUtilityText(gagazetCommand(L"status"),"mod-menu"); } catch(const std::exception& e) { emitUtilityText(utilityError(L"",e.what(),L""),"mod-menu"); } } break;
         case BeaconPreview: if(confirmed) previewNavAudio(false); break;
         case WallPreview: if(confirmed) previewNavAudio(true); break;
+        case Help: if(confirmed) speakHelp(true); break;
         default: if(confirmed) close();
         }
     }
@@ -332,6 +341,45 @@ bool guideKeysAvailable() {
     UtilityScript script;
     return captureUtilityScript(script) && captureCurrentTrial(script)!=nullptr;
 }
+TextRef gameHelp(TextPlan& plan,const ContextHelpText& text) {
+    auto line=[&](const wchar_t* value) {return planLiteral(plan,value);};
+    auto append=[&](TextRef base,const wchar_t* value) {return planSuffix(plan,base,line(value),L" ");};
+    // The Escape overlay owns input even when the underlying Grid or battle is still open.
+    if(escMenuActive()) return escControlsAvailable()?append(line(text.menu),text.footer):line(text.menu);
+    if(namingReadbackAvailable()) return line(text.naming);
+    if(inBattle()) return battleSensorAvailable()?append(line(text.battle),text.sensor):line(text.battle);
+    const bool status=statusReviewAvailable();
+    if(sphereGridOpen() && !status) return line(text.grid);
+    if(scene || status) {
+        auto base=line(text.menu);
+        if(shopExtraAvailable()) base=append(base,text.shop);
+        if(statusReviewLinesAvailable()) base=append(base,text.review);
+        if(helpControlsAvailable()) base=append(base,text.footer);
+        return base;
+    }
+    if(gagazetActive()) return line(text.gagazet);
+    if(viaPurificoActive()) return line(text.via);
+    if(guideKeysAvailable()) return line(text.cloister);
+    return line(text.field);
+}
+void speakHelp(bool includeMenu) {
+    const auto& text=contextHelpText(nativeMenuLanguage());
+    TextPlan plan;prepareTextPlan(plan,"mod-context-help");
+    plan.headline=gameHelp(plan,text);
+    if(includeMenu) plan.headline=planSuffix(plan,planLiteral(plan,text.settings),plan.headline,L" ");
+    commitTextPlan(plan);
+}
+unsigned helpShortcutScan() {
+    // Some layouts place the question mark on a different key or use AltGr.
+    // Leave those keys native. The F8 Help row is independent of the layout.
+    if(VkKeyScanW(L'?')!=MAKEWORD(VK_OEM_2,1)) return 0;
+    const auto scan=MapVirtualKeyW(VK_OEM_2,MAPVK_VK_TO_VSC_EX);
+    return scan<0x80?scan:0;
+}
+bool helpShortcutAvailable() {
+    return !nativeResourceLoading() && !namingReadbackAvailable() && configuredKeyboardScanIsFree(helpShortcutScan());
+}
+void contextHelpKey(bool) {speakHelp(false);}
 bool readKeyAvailable() {
     // Keep contextual naming/puzzle readback and menu/battle repeat, but hand
     // unused field F11 back to native input (F6-F8 remain reserved globally).
@@ -373,8 +421,9 @@ void modMenuReply(const std::wstring&) {}
 bool modMenuActive() { return active.load() || spherePlannerActive() || wakkaMenuActive(); }
 bool puzzleGuidanceAvailable() { return nativeGameThread() && guideKeysAvailable(); }
 void modMenuKey(unsigned vk,bool shift) {
-    if(wakkaMenuActive()) { wakkaMenuKey(vk); return; }
-    if(spherePlannerActive()) { spherePlannerKey(vk,shift); return; }
+    const bool help=vk==VK_OEM_2 && shift && helpShortcutScan()!=0;
+    if(wakkaMenuActive()) { wakkaMenuKey(vk,help); return; }
+    if(spherePlannerActive()) { if(vk!=VK_OEM_2 || help) spherePlannerKey(vk,shift); return; }
     if(!active) return;
     if(epoch!=generation()) { close(); return; }
     if(page==Page::ZanarkandPattern) {
@@ -388,6 +437,7 @@ void modMenuKey(unsigned vk,bool shift) {
     }
     switch(vk) {
     case VK_F8: close(); break;
+    case VK_OEM_2: if(help) emitReady(contextHelpText(nativeMenuLanguage()).settings,"mod-context-help"); break;
     case VK_F6: beaconKey(false); break;
     case VK_F7: detailKey(false); break;
     case VK_ESCAPE: case VK_BACK:
@@ -408,5 +458,6 @@ void installModMenu() {
     hotkey(VK_F8,menuKey); hotkeyWhen(VK_F9,stepKey,guideKeysAvailable); hotkeyWhen(VK_F10,pathKey,guideKeysAvailable);
     hotkey(VK_F6,beaconKey); hotkey(VK_F7,detailKey);
     hotkeyWhen(VK_F11,readPuzzleKey,readKeyAvailable);
+    hotkeyChordWhen(VK_OEM_2,true,contextHelpKey,helpShortcutAvailable,true);
 }
 }

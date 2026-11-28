@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Shift+Slash** reads controls for the current screen when the layout supports it and the game leaves the key free. **F8 > Help** reads the mod menu and current game controls on keyboard or controller.
+
 - Sphere Grid Move prompts read the Sphere Level cost and the balance after moving. The Use list reads “Unavailable” with the sphere name and quantity. Autodetail skips empty-node descriptions, and **I** still reads them. **F8 > Miscellaneous > Sphere Grid node numbers** defaults On and always gives the required number when guidance calls for **F6**.
 
 - Retired the Frida runtime and old 0.5 setup scripts. Added a contributor guide and architecture notes for the current native build and GitHub setup.

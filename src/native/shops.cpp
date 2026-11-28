@@ -4,6 +4,7 @@
 // owned TextPlans attach descriptions to the matching selected context.
 // See Docs/features/menus/index.md#system-screens.
 #include "events.hpp"
+#include "shops.hpp"
 #include "settings.hpp"
 #include "ready_game_text.hpp"
 #include "process_storage.hpp"
@@ -150,11 +151,12 @@ void quantityAfter(Event& e) {
     commitTextPlan(p);
 }
 }
+bool shopExtraAvailable() {return extraAvailable();}
 void installShops() {
     extraStorage.prepare();registerTextPlanReceiver(Receiver,receive);registerTextPlanMaintenance(Receiver,retireExtra);
     // Qualified chords precede the ordinary U binding, retaining field filtering
     // and native input ownership outside an active equipment-shop selection.
-    hotkeyChordWhen('U',false,readExtra,extraAvailable);
+    hotkeyChordWhen('U',false,readExtra,shopExtraAvailable);
     for (auto rva : {0x4d77c0,0x4d7990,0x4d9d70,0x4d0e80}) hook(rva, before, after);
     hook(0x4d9ba0, quantityBefore, quantityAfter); hook(0x4d9df0, quantityBefore, quantityAfter);
 }

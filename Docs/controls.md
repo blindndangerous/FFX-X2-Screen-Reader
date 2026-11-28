@@ -60,11 +60,19 @@ Triangle or the configured menu key: open the field menu
 ### Mod Controls
 
 **F8** opens the spoken accessibility menu. Speech is the first row, followed by
-Navigation audio, Navigation, Miscellaneous and Close.
+Speech options, Navigation audio, Navigation, Miscellaneous, Help and Close.
 Up/Down select, Left/Right change settings, Right or Enter opens a submenu,
 Enter/Space activates, and I describes. Escape or Back returns to the same
 parent row; Escape in the main menu closes it. Home/End select the first/last
 row of the current menu. Settings save automatically in `FFXAccessibility.ini`.
+
+Choose **F8 > Help** with Enter or controller A to hear the mod menu controls
+followed by shortcuts for the game screen underneath. **Shift+Slash** (the
+question-mark key on a US layout) reads shortcuts for the frontmost screen,
+including the open F8 menu, Sphere Grid planners and Wakka's reel picker.
+The shortcut is available when the layout uses that chord for a question mark
+and Slash is free in both native keyboard binding slots. It leaves text entry
+to the game. Use the Help row with any keyboard layout or a controller.
 
 Overdrive auto-success, Lightning auto-dodge and Jecht Shot auto-success default
 **Off** for fresh/unset preferences. Installer updates preserve your settings

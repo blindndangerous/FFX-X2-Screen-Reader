@@ -10,6 +10,7 @@
 #include "settings.hpp"
 #include "controller.hpp"
 #include "nav_audio.hpp"
+#include "context_help_text.hpp"
 #include <atomic>
 #include <algorithm>
 namespace ffx {
@@ -205,6 +206,7 @@ void spherePlannerKey(unsigned vk,bool shift) {
     if(vk==VK_F2 && shift) { openSpherePathMenu(true); return; }
     if(epoch!=generation() || !sphereGridOpen()) { close(); return; }
     switch(vk) {
+    case VK_OEM_2: if(shift) sphereEmit(contextHelpText(menuGrid.uiLanguage).planner,true,"mod-context-help"); break;
     case VK_F2: case VK_F3: case VK_F8: case VK_ESCAPE: case VK_BACK: case VK_LEFT: close(); break;
     case VK_UP: row=(row+count()-1)%count(); announce(); break;
     case VK_DOWN: row=(row+1)%count(); announce(); break;

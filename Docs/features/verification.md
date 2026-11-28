@@ -1,5 +1,15 @@
 # Verification and remaining gameplay checks
 
+## Contextual mod help
+
+Press **Shift+Slash** in the field, then on the Sphere Grid and with Escape
+over the Grid. Expect a different list for each screen. Try the shortcut in
+the ability planner and Wakka's reel picker, and confirm that each stays open.
+In the field menu and a shop, expect **U** only when the shop can read extra
+information. Assign Slash to a native action and confirm the key stays with
+the game. **F8 > Help** should still read the available shortcuts using Enter
+or controller A. [Help behavior](menus/index.md#contextual-mod-help).
+
 ## Sphere Grid speech
 
 After deployment resumes, preview a legal move. Expect its cost and the

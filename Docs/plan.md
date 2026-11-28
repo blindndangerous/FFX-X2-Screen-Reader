@@ -208,6 +208,21 @@ the landing commits. PR #5 remains open for the deferred proposals.
   [PR #13](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/13),
   [Sphere Grid behavior and evidence](features/menus/index.md#sphere-grid),
   [remaining gameplay checks](features/verification.md#sphere-grid-speech).
+- **Contextual mod help.** The owner approved the PR #14 hand-merge with
+  context priority, localization and native binding protection. Shift+Slash
+  uses the native input return with the current keyboard layout and both
+  configured binding slots checked. The shortcut stays exclusive once claimed.
+  Escape takes priority over the underlying game screen. The Sphere Grid
+  planner and Wakka's reel picker speak through their existing menu owners.
+  Separate trial lists and command-specific availability checks keep the
+  spoken keys accurate. The F8 Help row works on keyboard or controller
+  independently of the shortcut. Bounded x86 checks passed for input pressure,
+  F8 Help, Sphere Grid planning, speech capture, 804 menu speech cases, both
+  176-hook reader profiles, all ten retained Wakka variants and the virtual
+  SDL controller. Local deployment and gameplay remain on hold.
+  [PR #14](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/14),
+  [help behavior](features/menus/index.md#contextual-mod-help),
+  [remaining gameplay checks](features/verification.md#contextual-mod-help).
 - **Enemy HP/MP display evidence unresolved.** The user recalls obtaining
   screenshots of an enemy HP bar. The retained Battle Mode screenshot shows
   party HP and MP and the turn order. Earlier notes document numeric party
