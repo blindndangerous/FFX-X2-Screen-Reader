@@ -1,8 +1,9 @@
 # Current feature index
 
 October20 maintenance inventory. The production root is `src/native`; the
-`src/proxy` x86 DLL and original `src/launcher` adapters deliver it. Historical
-JavaScript/Frida and the abandoned C# port are references, not alternate producers.
+`src/proxy` x86 DLL and original `src/launcher` adapters deliver it. The retired
+Frida runtime is available in Git history. The offline ATEL, navigation, puzzle
+and minigame tools remain in the checkout.
 Start with the subsystem topic below, then its linked native evidence and tests.
 Later corrections in these topics take precedence over historical session notes.
 

@@ -1,4 +1,4 @@
-// Generated from navigation/roomAreas.js; same verified ATEL evidence.
+// Generated from the former navigation/roomAreas.js at d632776; verified ATEL evidence.
 // Names come from the native getter; ambiguous rooms remain omitted.
 #pragma once
 namespace ffx {

@@ -38,8 +38,8 @@ Native Windows version metadata/startup stamp and installer version are1.0.0.0;
 
 `src/proxy/build_dinput8.bat` is the production x86 entry point; `src/build/build.bat`
 forwards to it. The default developer build enables developer utilities;
-`--release` excludes them, and `--no-deploy` stages without changing the game
-installation. The prototype flag validates historical JS offline only. The
+`--release` excludes them. Ordinary builds stage only, as does `--no-deploy`.
+The retired JavaScript runtime and prototype entry point are available in Git history. The
 native build includes the current `src/native/*.cpp`, resources, x86 MinHook,
 SDL and the original launcher adapters. It stages a proxy DLL, native launcher
 DLL, C++/CLI launcher adapter and locked dependencies. Inspect entry-point side

@@ -6,8 +6,10 @@ releases/
 Docs/Scripts/**/output/
 Docs/Scripts/**/__pycache__/
 
-# frida-compile build output + devDependencies
+# Native build output and staging
 install/
+
+# Local caches from the retired prototype build
 src/build/node_modules/
 src/build/package-lock.json
 src/package-lock.json
@@ -50,7 +52,7 @@ Thumbs.db
 # Archived / abandoned experiments — development reference only, not shipped
 archived/
 
-# Frida gadget — upstream dependency, not our code. See lib/README.md for how to obtain.
+# Local Frida Gadget binary from older workspaces
 lib/frida-gadget.dll
 
 # Local build inputs and output

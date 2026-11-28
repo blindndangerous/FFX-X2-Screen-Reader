@@ -102,6 +102,8 @@ Full local suites omit the public flags and require the
 external game-derived fixtures or locked PRISM runtime. See the
 [developer build and release procedure](https://github.com/bladestorm360/FFX-X2-Screen-Reader/blob/master/Docs/release.md#developer-build-and-ci).
 
+See the [contributor guide](CONTRIBUTING.md) for the source layout and test procedures.
+
 ## Credits
 
 - PRISM.

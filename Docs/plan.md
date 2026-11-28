@@ -181,6 +181,17 @@ the landing commits. PR #5 remains open for the deferred proposals.
   remain unmeasured. Both 176-hook offline reader profiles pass greyed and
   hidden rows, same-row availability changes, repeated names on distinct
   rows, stale window rejection and optional-cue regression checks.
+- **Retired runtime and contributor docs.** The owner approved removing
+  the old Frida runtime and 0.5 setup scripts from PR #12. The current native
+  build shortcut, offline research tools and full debugging record were
+  retained. The contributor guide and architecture records describe the
+  stage-only default, Windows CI, and GitHub updates with the mod safe list.
+  Offline checks covered the build shortcut, 21 documentation links, the
+  exact debug record, and the retained ATEL, navigation, minigame and
+  six-trial tools. All 200 public installer assertions and the x86 setup
+  build passed. Local deployment remains on hold.
+  [PR #12](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/12),
+  [contributor guide](../CONTRIBUTING.md).
 - **Enemy HP/MP display evidence unresolved.** The user recalls obtaining
   screenshots of an enemy HP bar. The retained Battle Mode screenshot shows
   party HP and MP and the turn order. Earlier notes document numeric party

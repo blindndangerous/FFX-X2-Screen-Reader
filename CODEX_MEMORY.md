@@ -43,7 +43,12 @@ ownership protect unrelated bits. Offline checks pass. Gameplay remains pending.
 [PR #11](Docs/plan.md#november24-pull-request-review-hold) adds localized
 greyed-out field labels and a saved, default-Off Unavailable cue for verified
 menu rejections. The follow-up reads greyed-out battle rows from the existing
-native draw result. Enemy HP/MP rendering awaits individual review.
+native draw result.
+[PR #12](Docs/plan.md#november24-pull-request-review-hold) retires the old
+Frida runtime and 0.5 setup scripts. The native build shortcut, retained
+offline tools and full debugging record remain available. The
+[contributor guide](CONTRIBUTING.md) links the current build and setup decisions.
+Enemy HP/MP rendering awaits individual review.
 
 [Airship Proceed? choices](Docs/plan.md#november24-airship-proceed-confirmation)
 are fixed in [PR #20](https://github.com/bladestorm360/FFX-X2-Screen-Reader/pull/20).

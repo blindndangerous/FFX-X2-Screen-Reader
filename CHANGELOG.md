@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retired the Frida runtime and old 0.5 setup scripts. Added a contributor guide and architecture notes for the current native build and GitHub setup.
+
 - Shift+F11 updates Cloister guidance when you undo a verified sphere transfer. This covers Besaid's pedestal and supported source recesses, and the opening sphere sequences in Kilika and Djose.
 - Battle targeting follows the selected action for HP or MP readouts, including after browsing equipment, Change, or Summon, and when a new turn reuses the same target.
 - A failed developer warp clears its temporary forced-jump flag when the original controller is still active and the flag can be read.
