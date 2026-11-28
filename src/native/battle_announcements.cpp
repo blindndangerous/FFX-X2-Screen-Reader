@@ -3,13 +3,14 @@
 #include "message_text.hpp"
 #include "process_storage.hpp"
 #include "nonblocking_snapshots.hpp"
+#include "wakka.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstring>
 namespace ffx {
 namespace {
 constexpr unsigned Receiver=3;
-enum Command : unsigned {Formation=1,Message};
+enum Command : unsigned {Formation=1,Message,GameOver};
 std::atomic<unsigned> revision{1},protectionCut{0};
 struct Confirmed {unsigned epoch=0,serial=0,cut=0,cancellation=0;};
 async::AtomicSnapshot<Confirmed> confirmed;
@@ -56,6 +57,10 @@ void receive(const speechq::Header& header,const TextPlan& p,std::wstring text,s
         s.opening.clear();s.characters=0;s.formationRead=false;s.epoch=p.epoch;s.serial=p.serial;
     }
     if(p.command==Formation) {form(header,p,s,p.flags!=0);return;}
+    if(p.command==GameOver) {
+        s.opening.clear();s.characters=0;
+        speechq::emitOwned(L"Game Over",header,"game-over",false,true);return;
+    }
     if(p.command!=Message || text.empty()) return;
     // An empty opening message did not trigger the old formation producer.
     // Capturing both operands lets preparation retain that exact decision.
@@ -99,8 +104,25 @@ bool captureFormation(TextPlan& p,uintptr_t monsters,bool complete) {
     p.batch=p.count;return true;
 }
 void prepareAnnouncement(TextPlan& p,unsigned command) {
-    prepareTextPlan(p,command==Formation?"battle-formation":"battle-message",false);
+    prepareTextPlan(p,command==Formation?"battle-formation":command==GameOver?"game-over":"battle-message",false);
     p.receiver=Receiver;p.command=command;p.serial=revision.load();p.ordinal=protectionCut.load();
+}
+bool gameOverEffect() {
+    // The global-effect loader stores its ID in battle state +0x2008.
+    // Effect 670 draws the Game Over artwork; ordinary defeat skips field 292.
+    return inBattle() && read<unsigned>(address(0xd2a8e0)+0x2008)==670;
+}
+void gameOverBefore(Event& e) {
+    e.before[0]=gameOverEffect() && read<uint8_t>(address(wakka_rva::GlobalTable)+4)==3;
+    e.before[1]=revision.load();
+}
+void gameOverAfter(Event& e) {
+    if(!e.before[0] || e.epoch!=generation() || static_cast<unsigned>(e.before[1])!=revision.load() ||
+        e.result!=4 || !gameOverEffect() || read<uint8_t>(address(wakka_rva::GlobalTable)+4)!=4) return;
+    // GlobalBegin changes ready (3) to playing (4) around the native init call.
+    // Copy only the event; all text and speech stay on the existing worker.
+    invalidateProtection();
+    TextPlan p;prepareAnnouncement(p,GameOver);commitTextPlan(p);
 }
 }
 void announceBattleFormation(bool complete) {
@@ -129,5 +151,6 @@ void installBattleAnnouncements() {
     speechq::registerDomainProtection(speechq::TextPlanDomain,protectedPhase,invalidateProtection);
     hook(0x3810f0,encounterStarted,nullptr);hook(0x38c800,deathBefore,deathAfter);
     hook(0x3982b0,nullptr,ready);hook(0x397090,nullptr,appeared);
+    hook(wakka_rva::GlobalBegin,gameOverBefore,gameOverAfter);
 }
 }

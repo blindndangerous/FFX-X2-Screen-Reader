@@ -375,6 +375,7 @@ when the initial enemies appear. Native opening banners follow in the speech
 queue. Battle speech clears when the battle ends or its resource context changes.
 Confirmed misses and KOs are spoken alongside damage. AP/Sphere Levels are
 read in the first results phase; gil and rewards in the second.
+The battle Game Over display announces "Game Over" once when its native effect starts; it adds no prompt or choices.
 Buffs and debuffs follow their actual native application events. Cheer, Aim,
 Focus, Reflex, Luck and Jinx announce each changed count when that character's
 qualified visual effect starts. Capped counts stay silent. Unrecognized

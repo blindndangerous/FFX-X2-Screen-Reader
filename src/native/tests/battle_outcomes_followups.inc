@@ -1,4 +1,38 @@
 namespace {
+void gameOverFixtures() {
+    constexpr unsigned begin=0x388e20;
+    auto& hooks=listeners[begin];
+    check(hooks.size()==1,"Game Over observes the existing global-effect begin event");
+    const auto phase=address(0xd33360)+4,effect=address(0xd2a8e0)+0x2008;
+    const auto oldBattle=read<uint8_t>(address(0xd2a8e0));
+    const auto oldPhase=read<uint8_t>(phase);
+    const auto oldEffect=read<unsigned>(effect);
+    const auto start=[&](unsigned id,uint8_t before,uint8_t after,bool drain=true) {
+        check(write<unsigned>(effect,id) && write<uint8_t>(phase,before),"global effect setup");
+        Event e;e.rva=begin;e.epoch=generation();
+        hooks[0].enter(e);check(write<uint8_t>(phase,after),"global effect begin");e.result=after;hooks[0].leave(e);
+        if(drain) drainSpeechDomainsForTest();
+    };
+    resetBattle();set<uint8_t>(0xd2a8e0,30);const auto n=said.size();
+    start(670,1,3);start(670,3,3);start(669,3,4);start(671,3,4);
+    check(said.size()==n,"loading, rejected begins and other global effects stay silent");
+    start(670,3,4);
+    check(said.size()==n+1 && said.back().first==L"Game Over" && said.back().second,
+        "accepted Game Over display starts exactly its visible label and interrupts old battle speech");
+    start(670,4,4);start(670,5,5);
+    check(said.size()==n+1,"ongoing and finished Game Over do not repeat");
+    set<uint8_t>(0xd2a8e0,0);start(670,3,4);
+    check(said.size()==n+1,"global effect state outside battle cannot announce Game Over");
+    set<uint8_t>(0xd2a8e0,30);start(670,3,4,false);resetBattle();drainSpeechDomainsForTest();
+    check(said.size()==n+1,"battle reset retires queued Game Over before worker speech");
+    start(670,3,4,false);++speechq::fixture::cancellation;drainSpeechDomainsForTest();
+    check(said.size()==n+1,"Stop cancellation retires queued Game Over");
+    start(670,3,4);
+    check(said.size()==n+2 && said.back().first==L"Game Over","a later defeat announces Game Over again");
+    set<uint8_t>(0xd2a8e0,oldBattle);
+    check(write<uint8_t>(phase,oldPhase) && write<unsigned>(effect,oldEffect),"restore global effect state");resetBattle();
+    std::puts("PASS: Game Over native presentation transition, exact label, repeat/other-effect guards, battle reset and Stop cancellation.");
+}
 void battleOutcomesFixtures() {
     constexpr unsigned monster=0x2120000+18*0xf90, formation=0x2320000;
     encoded(monster+0x540,"Larva"); set<uint8_t>(monster+0xdc8,1);
@@ -162,5 +196,6 @@ void battleOutcomesFixtures() {
         "two consumed native slots preserve both effect applications instead of merging their status text");
     set<uint8_t>(tidus+0x65e,0); resetBattle();
     set<uint8_t>(tidus+0xdc8,active);
+    gameOverFixtures();
 }
 }
